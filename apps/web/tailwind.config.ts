@@ -5,6 +5,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        "baykus-bg": "#f4f7fb",
+        "baykus-card": "#ffffff",
+        "baykus-line": "#d7dee8",
+        "baykus-text": "#111827",
+        "baykus-muted": "#6b7280",
+        "baykus-primary": "#2563eb",
+        "baykus-primary-dark": "#1d4ed8",
+        "baykus-success": "#16a34a",
+        "baykus-splash": "#111827",
+        "baykus-accent": "#93c5fd",
         baykus: {
           bg: "#f4f7fb",
           card: "#ffffff",

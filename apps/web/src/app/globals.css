@@ -10,32 +10,55 @@
   --baykus-text: #111827;
   --baykus-muted: #6b7280;
   --baykus-primary: #2563eb;
+  --baykus-primary-dark: #1d4ed8;
   --baykus-success: #16a34a;
   --baykus-splash: #111827;
   --baykus-accent: #93c5fd;
 }
 
 body {
-  @apply bg-baykus-bg text-baykus-text antialiased;
+  background-color: var(--baykus-bg);
+  color: var(--baykus-text);
+  @apply antialiased;
 }
 
 @layer components {
   .bk-card {
-    @apply rounded-xl border border-baykus-line bg-baykus-card shadow-card;
+    @apply rounded-xl border shadow-card;
+    border-color: var(--baykus-line);
+    background-color: var(--baykus-card);
   }
   .bk-input {
-    @apply w-full rounded-lg border border-baykus-line bg-white px-3 py-2 text-sm text-baykus-text
-      placeholder:text-baykus-muted focus:outline-none focus:ring-2 focus:ring-baykus-primary/30 focus:border-baykus-primary;
+    @apply w-full rounded-lg border bg-white px-3 py-2 text-sm
+      focus:outline-none focus:ring-2;
+    border-color: var(--baykus-line);
+    color: var(--baykus-text);
+  }
+  .bk-input::placeholder {
+    color: var(--baykus-muted);
+  }
+  .bk-input:focus {
+    border-color: var(--baykus-primary);
+    --tw-ring-color: color-mix(in srgb, var(--baykus-primary) 30%, transparent);
   }
   .bk-btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition
       disabled:opacity-60 disabled:cursor-not-allowed;
   }
   .bk-btn-primary {
-    @apply bk-btn bg-baykus-primary text-white hover:bg-baykus-primary-dark;
+    @apply bk-btn text-white;
+    background-color: var(--baykus-primary);
+  }
+  .bk-btn-primary:hover {
+    background-color: var(--baykus-primary-dark);
   }
   .bk-btn-ghost {
-    @apply bk-btn border border-baykus-line bg-white text-baykus-text hover:bg-baykus-bg;
+    @apply bk-btn border bg-white;
+    border-color: var(--baykus-line);
+    color: var(--baykus-text);
+  }
+  .bk-btn-ghost:hover {
+    background-color: var(--baykus-bg);
   }
   .bk-btn-danger {
     @apply bk-btn border border-red-200 text-red-700 hover:bg-red-50;
@@ -44,19 +67,23 @@ body {
     @apply min-w-full text-sm;
   }
   .bk-table thead {
-    @apply bg-baykus-bg text-left text-baykus-muted;
+    background-color: var(--baykus-bg);
+    color: var(--baykus-muted);
+    @apply text-left;
   }
   .bk-table th {
     @apply px-3 py-2 text-xs font-semibold uppercase tracking-wide whitespace-nowrap;
   }
   .bk-table td {
-    @apply px-3 py-1.5 border-t border-baykus-line align-middle;
+    @apply px-3 py-1.5 border-t align-middle;
+    border-color: var(--baykus-line);
   }
   .bk-table tbody tr:hover {
-    @apply bg-baykus-bg/70;
+    background-color: color-mix(in srgb, var(--baykus-bg) 70%, white);
   }
   .bk-sticky-header {
-    @apply sticky top-0 z-10 -mx-6 md:-mx-8 px-6 md:px-8 py-3 mb-4
-      bg-baykus-bg/95 backdrop-blur border-b border-baykus-line;
+    @apply sticky top-0 z-10 -mx-6 md:-mx-8 px-6 md:px-8 py-3 mb-4 backdrop-blur border-b;
+    background-color: color-mix(in srgb, var(--baykus-bg) 95%, transparent);
+    border-color: var(--baykus-line);
   }
 }
