@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
 from app.models.customer import CariMovement, Customer
+from app.models.supplier import Supplier, SupplierMovement
 from app.models.finance import (
     BANK_IN_TYPES,
     BANK_MOVEMENT_TYPES,
@@ -201,6 +202,94 @@ def _day_sum(db: Session, model, type_field, amount_field, types: tuple, day: da
 
 # ─── Summary ───────────────────────────────────────────────────────────────
 
+
+
+
+@router.get("/open-balances")
+def open_balances(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+) -> dict:
+    """Combine customer receivables + supplier payables summary."""
+    customers = db.query(Customer).filter(Customer.is_active.is_(True)).all()
+    cust_ids = [c.id for c in customers]
+    cari_map: dict[int, tuple[Decimal, Decimal]] = {}
+    if cust_ids:
+        for cid, d, c in (
+            db.query(
+                CariMovement.customer_id,
+                func.coalesce(func.sum(CariMovement.debit), 0),
+                func.coalesce(func.sum(CariMovement.credit), 0),
+            )
+            .filter(CariMovement.customer_id.in_(cust_ids))
+            .group_by(CariMovement.customer_id)
+            .all()
+        ):
+            cari_map[cid] = (_dec(d), _dec(c))
+
+    receivables = []
+    recv_total = Decimal("0")
+    for c in customers:
+        d, cr = cari_map.get(c.id, (Decimal("0"), Decimal("0")))
+        bal = _dec(c.opening_balance) + d - cr
+        if bal > 0:
+            recv_total += bal
+            receivables.append(
+                {
+                    "kind": "receivable",
+                    "party_id": c.id,
+                    "name": c.name,
+                    "code": c.code,
+                    "balance": float(bal),
+                    "href": f"/customers/{c.id}",
+                }
+            )
+    receivables.sort(key=lambda x: x["balance"], reverse=True)
+
+    suppliers = db.query(Supplier).filter(Supplier.is_active.is_(True)).all()
+    sup_ids = [s.id for s in suppliers]
+    sup_map: dict[int, tuple[Decimal, Decimal]] = {}
+    if sup_ids:
+        for sid, d, c in (
+            db.query(
+                SupplierMovement.supplier_id,
+                func.coalesce(func.sum(SupplierMovement.debit), 0),
+                func.coalesce(func.sum(SupplierMovement.credit), 0),
+            )
+            .filter(SupplierMovement.supplier_id.in_(sup_ids))
+            .group_by(SupplierMovement.supplier_id)
+            .all()
+        ):
+            sup_map[sid] = (_dec(d), _dec(c))
+
+    payables = []
+    pay_total = Decimal("0")
+    for s in suppliers:
+        d, cr = sup_map.get(s.id, (Decimal("0"), Decimal("0")))
+        bal = _dec(s.opening_balance) + d - cr
+        if bal > 0:
+            pay_total += bal
+            payables.append(
+                {
+                    "kind": "payable",
+                    "party_id": s.id,
+                    "name": s.name,
+                    "code": s.code,
+                    "balance": float(bal),
+                    "href": f"/suppliers/{s.id}",
+                }
+            )
+    payables.sort(key=lambda x: x["balance"], reverse=True)
+
+    return {
+        "receivables_total": float(recv_total),
+        "payables_total": float(pay_total),
+        "net": float(recv_total - pay_total),
+        "receivables_count": len(receivables),
+        "payables_count": len(payables),
+        "receivables": receivables,
+        "payables": payables,
+    }
 
 @router.get("/summary", response_model=FinanceSummary)
 def finance_summary(

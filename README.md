@@ -73,6 +73,36 @@ Ana Sayfa · Müşteri · Tedarik · Ürün & Stok · Satış/Sipariş · Üreti
 - Postgres: `alembic upgrade head` (rev **009**) · SQLite: `python -m app.bootstrap_sqlite`
 
 
+
+
+## Masaüstü parite (batch 4)
+
+Web’de tamamlanan masaüstü boşlukları:
+
+| Modül | Rota / API | Durum |
+|-------|------------|--------|
+| Depolar | `/stock/warehouses` · `/api/stock/warehouses` | CRUD + stok + transfer stub |
+| Fihrist | `/directory` · `/api/directory` | Müşteri+tedarikçi+manuel kişi |
+| İş Emirleri | `/production/work-orders` | Liste + mevcut iş emri PDF |
+| Yaşam Çizgisi | `/orders/[id]/timeline` · `/api/orders/{id}/timeline` | Durum + ödeme + tasarım |
+| Teslim Takibi | `/orders/delivery` | today/overdue/due/upcoming |
+| Perakende | `/sales/retail` | channel=mağaza,perakende |
+| Açık Bakiyeler | `/finance/open-balances` | Alacak + borç özeti |
+| Evrak Dolabı | `/documents` · `/api/documents` | Yükle / liste / indir |
+| Maliyet Yönetimi | `/tools/costs` | Kalem CRUD |
+| Excel stok | `/api/products/stock/export|import` · Stok sayfası | CSV/XLSX |
+| TCMB USD | `/api/dashboard/usd-rate` | Önbellekli, fail-soft |
+| Atölye paneli | `/production` | Durum sayıları + PDF + kanban |
+| Müşteri Takibi | `/customers/track` | Sipariş/ödeme zaman çizgisi |
+
+**Masaüstünde kalan (web’de yok — bilinçli):**
+
+- DPAPI şifreli yedek geri yükleme (Windows-only)
+- Selenium tabanlı harici scraper
+- Canlı BizimHesap HTTP senkron (anahtarlı ağ; stub `/settings/integrations`)
+
+Postgres: `alembic upgrade head` (rev **010**) · SQLite: `python -m app.bootstrap_sqlite`
+
 ## Windows (Docker yok)
 
 SQLite ile Docker / PostgreSQL olmadan çalıştırma:

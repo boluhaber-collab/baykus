@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
     assets,
+    costs,
+    directory,
+    documents,
     audit,
     auth,
     backups,
@@ -17,6 +20,7 @@ from app.api.routers import (
     orders,
     price_lists,
     products,
+    warehouses,
     purchases,
     quotes,
     reports,
@@ -43,6 +47,10 @@ for router in (
     dashboard.router,
     customers.router,
     products.router,
+    warehouses.router,
+    directory.router,
+    documents.router,
+    costs.router,
     quotes.router,
     orders.router,
     suppliers.router,

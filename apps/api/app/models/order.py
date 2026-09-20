@@ -21,6 +21,7 @@ CLOSED_STATUSES = frozenset({"Teslim Edildi", "Sipariş İptali"})
 
 ORDER_CHANNELS = [
     "mağaza",
+    "perakende",
     "internet",
     "Trendyol",
     "Hepsiburada",

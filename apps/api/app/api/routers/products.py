@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
@@ -311,6 +312,240 @@ def list_critical_stock(
             )
     return items
 
+
+
+
+@router.get("/stock/export")
+def export_stock_csv(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    fmt: str = Query(default="csv", pattern="^(csv|xlsx)$"),
+):
+    """Export products/variants stock as CSV or XLSX template."""
+    import csv
+    import io
+
+    products = (
+        db.query(Product)
+        .options(joinedload(Product.variants))
+        .order_by(Product.name)
+        .all()
+    )
+    headers = [
+        "sku", "name", "category", "product_type", "warehouse",
+        "stock_qty", "critical_stock_threshold", "base_price", "purchase_price",
+        "variant_sku", "variant_name", "color", "size", "variant_stock",
+    ]
+    rows: list[list] = []
+    for prod in products:
+        if prod.variants:
+            for v in prod.variants:
+                rows.append([
+                    prod.sku, prod.name, prod.category or "", prod.product_type,
+                    prod.warehouse or DEFAULT_WAREHOUSE,
+                    prod.stock_qty or 0, prod.critical_stock_threshold or 10,
+                    float(prod.base_price or 0), float(prod.purchase_price or 0),
+                    v.sku, v.name, v.color or "", v.size or "", v.stock_qty or 0,
+                ])
+        else:
+            rows.append([
+                prod.sku, prod.name, prod.category or "", prod.product_type,
+                prod.warehouse or DEFAULT_WAREHOUSE,
+                prod.stock_qty or 0, prod.critical_stock_threshold or 10,
+                float(prod.base_price or 0), float(prod.purchase_price or 0),
+                "", "", "", "", "",
+            ])
+
+    if fmt == "xlsx":
+        try:
+            from openpyxl import Workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Stok"
+        ws.append(headers)
+        for r in rows:
+            ws.append(r)
+        buf = io.BytesIO()
+        wb.save(buf)
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="stok-export.xlsx"'},
+        )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+    writer.writerows(rows)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="stok-export.csv"'},
+    )
+
+
+@router.get("/stock/import-template")
+def stock_import_template(
+    _: User = Depends(require_roles(*READ_ROLES)),
+    fmt: str = Query(default="csv", pattern="^(csv|xlsx)$"),
+):
+    """Empty template for stock import."""
+    import csv
+    import io
+
+    headers = [
+        "sku", "name", "category", "product_type", "warehouse",
+        "stock_qty", "critical_stock_threshold", "base_price", "purchase_price",
+    ]
+    sample = ["ORNK-001", "Örnek Ürün", "Tekstil", "stoklu", "Ana Depo", "10", "5", "100", "60"]
+    if fmt == "xlsx":
+        try:
+            from openpyxl import Workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Stok"
+        ws.append(headers)
+        ws.append(sample)
+        buf = io.BytesIO()
+        wb.save(buf)
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="stok-sablon.xlsx"'},
+        )
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(headers)
+    w.writerow(sample)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="stok-sablon.csv"'},
+    )
+
+
+@router.post("/stock/import")
+async def import_stock_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*STOCK_ROLES)),
+) -> dict:
+    """Import/update products from CSV (sku key). Creates missing SKUs; updates stock/prices."""
+    import csv
+    import io
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Boş dosya")
+    name = (file.filename or "").lower()
+    rows: list[dict] = []
+    if name.endswith(".xlsx") or name.endswith(".xlsm"):
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb.active
+        it = ws.iter_rows(values_only=True)
+        headers = [str(h or "").strip() for h in next(it)]
+        for vals in it:
+            if not vals or all(v is None or str(v).strip() == "" for v in vals):
+                continue
+            rows.append({headers[i]: vals[i] for i in range(min(len(headers), len(vals)))})
+    else:
+        text_data = raw.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text_data))
+        rows = list(reader)
+
+    created = updated = skipped = 0
+    errors: list[str] = []
+    for i, row in enumerate(rows, start=2):
+        sku = str(row.get("sku") or "").strip()
+        if not sku:
+            skipped += 1
+            continue
+        try:
+            prod = db.query(Product).filter(Product.sku == sku).first()
+            stock_qty = int(float(row.get("stock_qty") or 0))
+            thr = int(float(row.get("critical_stock_threshold") or 10))
+            base = Decimal(str(row.get("base_price") or 0))
+            purchase = Decimal(str(row.get("purchase_price") or 0))
+            warehouse = str(row.get("warehouse") or DEFAULT_WAREHOUSE).strip() or DEFAULT_WAREHOUSE
+            pname = str(row.get("name") or sku).strip()
+            category = str(row.get("category") or "").strip() or None
+            ptype = str(row.get("product_type") or "stoklu").strip() or "stoklu"
+            if prod:
+                before = int(prod.stock_qty or 0)
+                prod.name = pname
+                prod.category = category
+                prod.product_type = ptype
+                prod.warehouse = warehouse
+                prod.critical_stock_threshold = thr
+                prod.base_price = base
+                prod.purchase_price = purchase
+                if not prod.variants:
+                    prod.stock_qty = stock_qty
+                    if stock_qty != before:
+                        direction = "increase" if stock_qty > before else "decrease"
+                        db.add(
+                            StockMovement(
+                                product_id=prod.id,
+                                direction=direction,
+                                quantity=abs(stock_qty - before),
+                                qty_before=before,
+                                qty_after=stock_qty,
+                                reason="import",
+                                note="CSV/XLSX stok içe aktarma",
+                                warehouse=warehouse,
+                                created_by_user_id=user.id,
+                            )
+                        )
+                updated += 1
+            else:
+                prod = Product(
+                    sku=sku,
+                    name=pname,
+                    category=category,
+                    product_type=ptype,
+                    warehouse=warehouse,
+                    stock_qty=stock_qty,
+                    critical_stock_threshold=thr,
+                    base_price=base,
+                    purchase_price=purchase,
+                    cost=purchase,
+                    is_active=True,
+                )
+                db.add(prod)
+                db.flush()
+                if stock_qty:
+                    db.add(
+                        StockMovement(
+                            product_id=prod.id,
+                            direction="increase",
+                            quantity=stock_qty,
+                            qty_before=0,
+                            qty_after=stock_qty,
+                            reason="import",
+                            note="CSV/XLSX stok içe aktarma (yeni)",
+                            warehouse=warehouse,
+                            created_by_user_id=user.id,
+                        )
+                    )
+                created += 1
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"Satır {i} ({sku}): {exc}")
+    db.commit()
+    return {
+        "ok": True,
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors[:20],
+    }
 
 @router.post("", response_model=ProductDetail, status_code=status.HTTP_201_CREATED)
 def create_product(

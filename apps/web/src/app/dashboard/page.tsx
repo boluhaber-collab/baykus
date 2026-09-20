@@ -34,14 +34,19 @@ export default function DashboardPage() {
 
   const loadUsd = useCallback(async () => {
     try {
-      const res = await fetch("https://api.frankfurter.app/latest?from=USD&to=TRY", {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("fx");
-      const json = (await res.json()) as { rates?: { TRY?: number } };
-      const mid = json.rates?.TRY;
-      if (!mid || !Number.isFinite(mid)) throw new Error("fx");
-      setUsd({ buy: Math.round((mid - 0.05) * 100) / 100, sell: Math.round((mid + 0.05) * 100) / 100 });
+      const json = await apiFetch<{
+        ok: boolean;
+        buy: number | null;
+        sell: number | null;
+        mid: number | null;
+      }>("/api/dashboard/usd-rate");
+      const buy = json.buy ?? json.mid;
+      const sell = json.sell ?? json.mid;
+      if (buy == null || sell == null || !Number.isFinite(buy) || !Number.isFinite(sell)) {
+        setUsd(null);
+        return;
+      }
+      setUsd({ buy, sell });
     } catch {
       setUsd(null);
     }

@@ -189,7 +189,7 @@ function CreateSaleInner() {
         saleType === "internet"
           ? channel || "internet"
           : saleType === "perakende"
-            ? "mağaza"
+            ? "perakende"
             : "mağaza";
 
       const created = await apiFetch<{ id: number }>("/api/orders", {

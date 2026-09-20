@@ -208,6 +208,12 @@ export default function OrderDetailPage() {
           >
             İş Emri PDF
           </button>
+          <Link
+            href={`/orders/${id}/timeline`}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+          >
+            Yaşam Çizgisi
+          </Link>
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}

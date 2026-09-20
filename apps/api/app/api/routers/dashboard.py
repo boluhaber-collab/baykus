@@ -361,6 +361,15 @@ def _collections_today(db: Session, today_start: datetime, tomorrow: datetime) -
     return _f(total)
 
 
+
+
+@router.get("/usd-rate")
+def usd_rate(_: CurrentUser) -> dict:
+    """TCMB USD/TRY — cached, fail soft."""
+    from app.services.tcmb import get_usd_rate
+
+    return get_usd_rate()
+
 @router.get("/kpis", response_model=KPIStats)
 def get_kpis(user: CurrentUser, db: Session = Depends(get_db)) -> KPIStats:
     """Legacy thin KPIs — real numbers, no placeholders."""

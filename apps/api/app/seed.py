@@ -16,7 +16,10 @@ from app.models import (
     CariMovement,
     CashMovement,
     CashRegister,
+    CostItem,
     Customer,
+    DirectoryContact,
+    Document,
     DtfScenario,
     Expense,
     ExpenseCategory,
@@ -39,6 +42,7 @@ from app.models import (
     Supplier,
     SupplierMovement,
     User,
+    Warehouse,
     WhatsAppTemplate,
 )
 # StockMovement imported lazily in product seed block when needed
@@ -1413,6 +1417,75 @@ def seed(db: Session) -> None:
                 ),
             ]
         )
+        db.commit()
+
+
+    if db.query(Warehouse).count() == 0:
+        db.add_all(
+            [
+                Warehouse(name="Ana Depo", code="ANA", is_default=True, is_active=True, address="Atölye — zemin kat"),
+                Warehouse(name="Mağaza Depo", code="MGZ", is_default=False, is_active=True, address="Satış alanı"),
+                Warehouse(name="Sevkiyat", code="SVK", is_default=False, is_active=True, notes="Kargo bekleyen"),
+            ]
+        )
+        db.commit()
+
+    if db.query(DirectoryContact).count() == 0:
+        db.add_all(
+            [
+                DirectoryContact(
+                    name="Kargo — Yurtiçi Temsilci",
+                    company="Yurtiçi Kargo",
+                    phone="444 0 999",
+                    city="İstanbul",
+                    notes="Mağaza toplama hattı",
+                ),
+                DirectoryContact(
+                    name="Grafiker — Serkan",
+                    company="Serbest",
+                    phone="0532 111 2233",
+                    email="serkan@ornek.local",
+                    notes="Dış tasarım desteği",
+                ),
+            ]
+        )
+        db.commit()
+
+    if db.query(CostItem).count() == 0:
+        db.add_all(
+            [
+                CostItem(category="Baskı", name="Serigrafi setup", unit="iş", unit_cost=Decimal("150.00"), active=True),
+                CostItem(category="Baskı", name="Nakış dakika", unit="dk", unit_cost=Decimal("2.50"), active=True),
+                CostItem(category="Malzeme", name="Transfer kağıdı A3", unit="adet", unit_cost=Decimal("3.75"), active=True),
+                CostItem(category="İşçilik", name="Paketleme", unit="adet", unit_cost=Decimal("1.00"), active=True),
+            ]
+        )
+        db.commit()
+
+    if db.query(Document).count() == 0:
+        from app.services import documents_store as doc_store
+
+        doc_store.ensure_uploads_dir()
+        samples = [
+            ("Sözleşme Şablonu", "hukuk", "sozlesme-sablon.txt", "Baykuş Baskı müşteri sözleşme şablonu (demo).\n"),
+            ("Kargo Anlaşması", "lojistik", "kargo-anlasma.txt", "Yurtiçi kargo anlaşma özeti (demo).\n"),
+            ("Fiyat Politikası", "fiyat", "fiyat-politikasi.txt", "2026 fiyatlandırma notları (demo).\n"),
+        ]
+        for title, cat, fname, body in samples:
+            stored = doc_store.make_stored_name(fname)
+            path = doc_store.absolute_path(stored)
+            path.write_text(body, encoding="utf-8")
+            db.add(
+                Document(
+                    title=title,
+                    category=cat,
+                    original_filename=fname,
+                    stored_filename=stored,
+                    content_type="text/plain",
+                    size_bytes=len(body.encode("utf-8")),
+                    notes="Seed evrak",
+                )
+            )
         db.commit()
 
 

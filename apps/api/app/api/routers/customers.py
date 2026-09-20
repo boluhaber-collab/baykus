@@ -7,12 +7,12 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
 from app.services.audit import write_audit
 from app.models.customer import CARI_MOVEMENT_TYPES, CariMovement, Customer
-from app.models.order import Order
+from app.models.order import Order, Payment
 from app.models.quote import Quote
 from app.models.user import User
 from app.schemas.customer import (
@@ -162,6 +162,60 @@ def list_customers(
         result.append(_customer_out(c, balance))
     return result
 
+
+
+
+@router.get("/track")
+def customer_track(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[dict]:
+    """Timeline of recent orders and cari payments across customers."""
+    events: list[dict] = []
+    orders = (
+        db.query(Order)
+        .options(joinedload(Order.customer))
+        .order_by(Order.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    for o in orders:
+        events.append(
+            {
+                "type": "order",
+                "at": o.created_at.isoformat() if o.created_at else None,
+                "customer_id": o.customer_id,
+                "customer_name": o.customer.name if o.customer else None,
+                "label": f"Sipariş {o.order_number}",
+                "detail": o.status,
+                "amount": float(o.total_amount or 0),
+                "href": f"/orders/{o.id}",
+            }
+        )
+    payments = (
+        db.query(CariMovement)
+        .options(joinedload(CariMovement.customer))
+        .filter(CariMovement.movement_type == "payment")
+        .order_by(CariMovement.movement_date.desc(), CariMovement.id.desc())
+        .limit(limit)
+        .all()
+    )
+    for m in payments:
+        events.append(
+            {
+                "type": "payment",
+                "at": m.movement_date.isoformat() if m.movement_date else None,
+                "customer_id": m.customer_id,
+                "customer_name": m.customer.name if m.customer else None,
+                "label": "Cari ödeme",
+                "detail": m.note,
+                "amount": float(m.credit or 0),
+                "href": f"/customers/{m.customer_id}",
+            }
+        )
+    events.sort(key=lambda e: e.get("at") or "", reverse=True)
+    return events[:limit]
 
 @router.get("/receivables", response_model=list[ReceivableItem])
 def open_receivables(

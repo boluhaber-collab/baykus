@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -250,6 +250,14 @@ def list_orders(
     status_filter: str | None = Query(default=None, alias="status"),
     channel: str | None = Query(default=None),
     design_status: str | None = Query(default=None),
+    delivery: str | None = Query(
+        default=None,
+        description="today|overdue|due|upcoming — filters by delivery_date or due_date",
+    ),
+    channels: str | None = Query(
+        default=None,
+        description="Comma-separated channels (e.g. mağaza,perakende)",
+    ),
     q: str | None = Query(default=None),
     skip: int = 0,
     limit: int = 100,
@@ -263,10 +271,36 @@ def list_orders(
         if channel not in ORDER_CHANNELS:
             raise HTTPException(status_code=400, detail="Geçersiz kanal filtresi")
         query = query.filter(Order.channel == channel)
+    if channels:
+        ch_list = [c.strip() for c in channels.split(",") if c.strip()]
+        bad = [c for c in ch_list if c not in ORDER_CHANNELS]
+        if bad:
+            raise HTTPException(status_code=400, detail=f"Geçersiz kanal: {', '.join(bad)}")
+        query = query.filter(Order.channel.in_(ch_list))
     if design_status:
         if design_status not in DESIGN_STATUSES:
             raise HTTPException(status_code=400, detail="Geçersiz tasarım durumu")
         query = query.filter(Order.design_status == design_status)
+    if delivery:
+        today = date.today()
+        # Prefer delivery_date, fall back to due_date in Python filter after fetch for SQLite safety
+        candidates = query.order_by(Order.id.desc()).all()
+        filtered: list[Order] = []
+        for o in candidates:
+            d = o.delivery_date or o.due_date
+            if d is None:
+                continue
+            if delivery == "today" and d == today:
+                filtered.append(o)
+            elif delivery == "overdue" and d < today and o.status not in ("Teslim Edildi", "Sipariş İptali"):
+                filtered.append(o)
+            elif delivery == "due" and d >= today and o.status not in ("Teslim Edildi", "Sipariş İptali"):
+                filtered.append(o)
+            elif delivery == "upcoming" and today <= d <= (today + timedelta(days=7)) and o.status not in ("Teslim Edildi", "Sipariş İptali"):
+                filtered.append(o)
+            elif delivery == "all" and d is not None:
+                filtered.append(o)
+        return [_to_list_item(o) for o in filtered[skip : skip + limit]]
     if q:
         like = f"%{q}%"
         query = query.outerjoin(Customer).filter(
@@ -459,6 +493,80 @@ def delete_order(
         detail={"soft": False, "order_number": number},
     )
 
+
+
+
+@router.get("/{order_id}/timeline")
+def order_timeline(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "üretim", "muhasebe")),
+) -> dict:
+    """Status history + payments + design file events for yaşam çizgisi."""
+    order = _load_order(db, order_id)
+    events: list[dict] = []
+    events.append(
+        {
+            "type": "created",
+            "at": order.created_at.isoformat() if order.created_at else None,
+            "label": "Sipariş oluşturuldu",
+            "detail": order.order_number,
+        }
+    )
+    for h in order.status_history or []:
+        events.append(
+            {
+                "type": "status",
+                "at": h.created_at.isoformat() if h.created_at else None,
+                "label": f"{h.from_status or '—'} → {h.to_status}",
+                "detail": h.note,
+                "from_status": h.from_status,
+                "to_status": h.to_status,
+            }
+        )
+    for p in order.payments or []:
+        events.append(
+            {
+                "type": "payment",
+                "at": p.paid_at.isoformat() if p.paid_at else None,
+                "label": f"Ödeme {p.amount} ({p.method})",
+                "detail": p.notes,
+                "amount": float(p.amount or 0),
+                "method": p.method,
+            }
+        )
+    files = (
+        db.query(OrderDesignFile)
+        .filter(OrderDesignFile.order_id == order_id)
+        .order_by(OrderDesignFile.id.asc())
+        .all()
+    )
+    for f in files:
+        events.append(
+            {
+                "type": "design",
+                "at": f.created_at.isoformat() if getattr(f, "created_at", None) else None,
+                "label": f"Tasarım: {f.original_filename}",
+                "detail": f.content_type,
+                "file_id": f.id,
+            }
+        )
+    if order.design_status:
+        events.append(
+            {
+                "type": "design_status",
+                "at": order.updated_at.isoformat() if order.updated_at else None,
+                "label": f"Tasarım durumu: {order.design_status}",
+                "detail": order.design_notes,
+            }
+        )
+    events.sort(key=lambda e: e.get("at") or "")
+    return {
+        "order_id": order.id,
+        "order_number": order.order_number,
+        "status": order.status,
+        "events": events,
+    }
 
 @router.get("/{order_id}/work-order-pdf")
 def work_order_pdf(
