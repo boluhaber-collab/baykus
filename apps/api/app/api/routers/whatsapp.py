@@ -215,7 +215,14 @@ def track_center(
         rem = float(o.total_amount or 0) - paid
         if rem > 0.01:
             pay_due.append({**item, "remaining": rem})
-        if (o.design_status or "").lower() in ("bekliyor", "revizyon", "bekliyor"):
+        ds = (o.design_status or "").strip()
+        if ds.casefold() in (
+            "bekliyor",
+            "revizyon",
+            "revizyon istendi",
+            "onay istendi",
+            "revize edildi",
+        ) or ds in ("Bekliyor", "Revizyon İstendi", "Onay İstendi", "Revize Edildi"):
             design.append(item)
     return {
         "ready_orders": ready[:100],

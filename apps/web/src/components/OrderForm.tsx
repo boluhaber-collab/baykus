@@ -111,7 +111,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
   const [dueDate, setDueDate] = useState(initial?.due_date ? initial.due_date.slice(0, 10) : "");
   const [deliveryDate, setDeliveryDate] = useState(initial?.delivery_date ? initial.delivery_date.slice(0, 10) : "");
   const [channel, setChannel] = useState(initial?.channel || "mağaza");
-  const [designStatus, setDesignStatus] = useState(initial?.design_status || "bekliyor");
+  const [designStatus, setDesignStatus] = useState(initial?.design_status || "Bekliyor");
   const [designNotes, setDesignNotes] = useState(initial?.design_notes || "");
   const [deposit, setDeposit] = useState(String(initial?.deposit_amount ?? 0));
   const [discount, setDiscount] = useState(String(initial?.discount_amount ?? 0));

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.deps import get_db, require_roles
 from app.models.customer import Customer
 from app.models.order import (
+    DEFAULT_DESIGN_STATUS,
     DEFAULT_ORDER_STATUS,
     ORDER_STATUSES,
     DESIGN_STATUSES,
@@ -17,12 +18,16 @@ from app.models.order import (
     OrderLine,
     OrderStatusHistory,
     Payment,
+    normalize_design_status,
 )
 from app.models.user import User
 from app.schemas.design_file import OrderDesignFileOut
 from app.services.audit import write_audit
 from app.services import design_files as design_store
 from app.schemas.order import (
+    BulkStatusChange,
+    BulkStatusResult,
+    DesignApprovalUpdate,
     KanbanBoard,
     KanbanCard,
     KanbanColumn,
@@ -70,11 +75,16 @@ def _customer_name(order: Order) -> str | None:
 def _to_list_item(order: Order) -> OrderListItem:
     paid = _paid_amount(order)
     effective_paid = paid if paid > 0 else _dec(order.deposit_amount)
+    phone = None
+    if order.customer is not None:
+        phone = getattr(order.customer, "phone", None)
+    raw_design = getattr(order, "design_status", None)
     return OrderListItem(
         id=order.id,
         order_number=order.order_number,
         customer_id=order.customer_id,
         customer_name=_customer_name(order),
+        customer_phone=phone,
         status=order.status,
         total_amount=_dec(order.total_amount),
         deposit_amount=_dec(order.deposit_amount),
@@ -83,8 +93,10 @@ def _to_list_item(order: Order) -> OrderListItem:
         due_date=order.due_date,
         delivery_date=getattr(order, "delivery_date", None),
         channel=getattr(order, "channel", None),
-        design_status=getattr(order, "design_status", None),
+        design_status=normalize_design_status(raw_design) if raw_design else raw_design,
         design_notes=getattr(order, "design_notes", None),
+        design_approved_at=getattr(order, "design_approved_at", None),
+        design_whatsapp_at=getattr(order, "design_whatsapp_at", None),
         notes=order.notes,
         created_at=order.created_at,
         updated_at=order.updated_at,
@@ -211,6 +223,38 @@ def list_statuses(
     return list(ORDER_STATUSES)
 
 
+@router.post("/bulk-status", response_model=BulkStatusResult)
+def bulk_change_status(
+    payload: BulkStatusChange,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin", "satış", "üretim")),
+) -> BulkStatusResult:
+    """Sipariş Merkezi toplu durum güncelleme (masaüstü siparis_durumunu_toplu_guncelle)."""
+    updated = 0
+    failed: list[dict] = []
+    for oid in payload.ids:
+        order = db.get(Order, oid)
+        if not order:
+            failed.append({"id": oid, "error": "bulunamadı"})
+            continue
+        if order.status == payload.status:
+            continue
+        old = order.status
+        order.status = payload.status
+        order.updated_at = datetime.utcnow()
+        _record_status(db, order, old, payload.status, user, note=payload.note or "Toplu durum")
+        updated += 1
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="order_bulk_status",
+        entity_id=None,
+        detail={"status": payload.status, "updated": updated, "ids": payload.ids},
+    )
+    return BulkStatusResult(updated=updated, failed=failed)
+
+
 @router.get("/kanban", response_model=KanbanBoard)
 def kanban_board(
     db: Session = Depends(get_db),
@@ -278,9 +322,18 @@ def list_orders(
             raise HTTPException(status_code=400, detail=f"Geçersiz kanal: {', '.join(bad)}")
         query = query.filter(Order.channel.in_(ch_list))
     if design_status:
-        if design_status not in DESIGN_STATUSES:
-            raise HTTPException(status_code=400, detail="Geçersiz tasarım durumu")
-        query = query.filter(Order.design_status == design_status)
+        normalized = normalize_design_status(design_status)
+        # Match both canonical and legacy stored values
+        legacy = {
+            "Bekliyor": ["bekliyor", "Bekliyor"],
+            "Onaylandı": ["onaylandı", "onaylandi", "Onaylandı"],
+            "Revizyon İstendi": ["revizyon", "Revizyon İstendi"],
+            "Onay İstendi": ["Onay İstendi"],
+            "Revize Edildi": ["Revize Edildi"],
+            "İptal": ["İptal", "iptal"],
+        }
+        vals = legacy.get(normalized, [normalized])
+        query = query.filter(Order.design_status.in_(vals))
     if delivery:
         today = date.today()
         # Prefer delivery_date, fall back to due_date in Python filter after fetch for SQLite safety
@@ -406,8 +459,10 @@ def create_order(
         due_date=payload.due_date,
         delivery_date=getattr(payload, "delivery_date", None),
         channel=getattr(payload, "channel", None) or "mağaza",
-        design_status=getattr(payload, "design_status", None) or "bekliyor",
+        design_status=normalize_design_status(getattr(payload, "design_status", None) or DEFAULT_DESIGN_STATUS),
         design_notes=getattr(payload, "design_notes", None),
+        design_approved_at=getattr(payload, "design_approved_at", None),
+        design_whatsapp_at=getattr(payload, "design_whatsapp_at", None),
         deposit_amount=_dec(payload.deposit_amount),
         discount_amount=_dec(payload.discount_amount),
         total_amount=Decimal("0"),
@@ -802,6 +857,44 @@ def create_payment(
     )
     return _to_out(_load_order(db, order.id))
 
+
+
+@router.patch("/{order_id}/design", response_model=OrderOut)
+def update_design_approval(
+    order_id: int,
+    payload: DesignApprovalUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin", "satış", "üretim")),
+) -> OrderOut:
+    """Tasarım Onay Akışı — status / notes / dates / WhatsApp timestamp."""
+    order = _load_order(db, order_id)
+    data = payload.model_dump(exclude_unset=True)
+    mark_wa = data.pop("mark_whatsapp_sent", False)
+    if "design_status" in data and data["design_status"] is not None:
+        order.design_status = data["design_status"]
+        if data["design_status"] == "Onaylandı" and not data.get("design_approved_at") and not order.design_approved_at:
+            order.design_approved_at = datetime.utcnow()
+    if "design_notes" in data:
+        order.design_notes = data["design_notes"]
+    if "design_approved_at" in data:
+        order.design_approved_at = data["design_approved_at"]
+    if "design_whatsapp_at" in data:
+        order.design_whatsapp_at = data["design_whatsapp_at"]
+    if mark_wa:
+        order.design_whatsapp_at = datetime.utcnow()
+        # Auto-advance Bekliyor/Revize Edildi → Onay İstendi (desktop behaviour)
+        if normalize_design_status(order.design_status) in ("Bekliyor", "Revize Edildi", ""):
+            order.design_status = "Onay İstendi"
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="order_design",
+        entity_id=order.id,
+        detail={"design_status": order.design_status},
+    )
+    return _to_out(_load_order(db, order.id))
 
 
 @router.get("/{order_id}/design-files", response_model=list[OrderDesignFileOut])

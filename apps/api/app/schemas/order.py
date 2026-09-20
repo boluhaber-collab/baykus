@@ -4,10 +4,12 @@ from decimal import Decimal
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.order import (
+    DEFAULT_DESIGN_STATUS,
     DEFAULT_ORDER_STATUS,
     DESIGN_STATUSES,
     ORDER_CHANNELS,
     ORDER_STATUSES,
+    normalize_design_status,
 )
 
 
@@ -65,8 +67,10 @@ class OrderCreate(BaseModel):
     due_date: date | None = None
     delivery_date: date | None = None
     channel: str = "mağaza"
-    design_status: str = "bekliyor"
+    design_status: str = DEFAULT_DESIGN_STATUS
     design_notes: str | None = None
+    design_approved_at: datetime | None = None
+    design_whatsapp_at: datetime | None = None
     deposit_amount: Decimal = Field(default=Decimal("0"), ge=0)
     discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
     lines: list[OrderLineCreate] = Field(default_factory=list, min_length=1)
@@ -77,6 +81,14 @@ class OrderCreate(BaseModel):
         if v not in ORDER_STATUSES:
             raise ValueError(f"Geçersiz durum. İzin verilen: {', '.join(ORDER_STATUSES)}")
         return v
+
+    @field_validator("design_status")
+    @classmethod
+    def validate_design_status(cls, v: str) -> str:
+        normalized = normalize_design_status(v)
+        if normalized not in DESIGN_STATUSES:
+            raise ValueError(f"Geçersiz tasarım durumu. İzin verilen: {', '.join(DESIGN_STATUSES)}")
+        return normalized
 
 
 class OrderUpdate(BaseModel):
@@ -89,6 +101,8 @@ class OrderUpdate(BaseModel):
     channel: str | None = None
     design_status: str | None = None
     design_notes: str | None = None
+    design_approved_at: datetime | None = None
+    design_whatsapp_at: datetime | None = None
     deposit_amount: Decimal | None = Field(default=None, ge=0)
     discount_amount: Decimal | None = Field(default=None, ge=0)
     lines: list[OrderLineCreate] | None = None
@@ -99,6 +113,16 @@ class OrderUpdate(BaseModel):
         if v is not None and v not in ORDER_STATUSES:
             raise ValueError(f"Geçersiz durum. İzin verilen: {', '.join(ORDER_STATUSES)}")
         return v
+
+    @field_validator("design_status")
+    @classmethod
+    def validate_design_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        normalized = normalize_design_status(v)
+        if normalized not in DESIGN_STATUSES:
+            raise ValueError(f"Geçersiz tasarım durumu. İzin verilen: {', '.join(DESIGN_STATUSES)}")
+        return normalized
 
 
 class OrderStatusChange(BaseModel):
@@ -118,6 +142,7 @@ class OrderListItem(BaseModel):
     order_number: str
     customer_id: int | None
     customer_name: str | None = None
+    customer_phone: str | None = None
     status: str
     total_amount: Decimal
     deposit_amount: Decimal
@@ -128,6 +153,8 @@ class OrderListItem(BaseModel):
     channel: str | None = None
     design_status: str | None = None
     design_notes: str | None = None
+    design_approved_at: datetime | None = None
+    design_whatsapp_at: datetime | None = None
     notes: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -175,3 +202,39 @@ class PaymentCreate(BaseModel):
     bank_account_id: int | None = None
 
 
+class BulkStatusChange(BaseModel):
+    ids: list[int] = Field(min_length=1)
+    status: str
+    note: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        if v not in ORDER_STATUSES:
+            raise ValueError(f"Geçersiz durum. İzin verilen: {', '.join(ORDER_STATUSES)}")
+        return v
+
+
+class DesignApprovalUpdate(BaseModel):
+    """Tasarım Onay Akışı — masaüstü siparis_detay paneli."""
+
+    design_status: str | None = None
+    design_notes: str | None = None
+    design_approved_at: datetime | None = None
+    design_whatsapp_at: datetime | None = None
+    mark_whatsapp_sent: bool = False
+
+    @field_validator("design_status")
+    @classmethod
+    def validate_design_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        normalized = normalize_design_status(v)
+        if normalized not in DESIGN_STATUSES:
+            raise ValueError(f"Geçersiz tasarım durumu. İzin verilen: {', '.join(DESIGN_STATUSES)}")
+        return normalized
+
+
+class BulkStatusResult(BaseModel):
+    updated: int
+    failed: list[dict] = []

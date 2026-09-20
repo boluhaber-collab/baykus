@@ -2,26 +2,42 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import OrderForm, { OrderFormPayload } from "@/components/OrderForm";
-import { PageHeader, StatusBadge, Card } from "@/components/ui";
 import {
+  DESIGN_STATUSES,
   ORDER_STATUSES,
   OrderDesignFile,
   OrderDetail,
+  WhatsAppTemplate,
   apiFetch,
   downloadAuthFile,
   downloadPdf,
   formatMoney,
   statusBadgeClass,
+  designStatusBadgeClass,
   BankAccount,
 } from "@/lib/api";
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function fmtDt(v?: string | null): string {
+  if (!v) return "";
+  try {
+    return new Date(v).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return String(v);
+  }
+}
 
 export default function OrderDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState("");
+  const [okMsg, setOkMsg] = useState("");
   const [editing, setEditing] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [designFiles, setDesignFiles] = useState<OrderDesignFile[]>([]);
@@ -30,11 +46,19 @@ export default function OrderDetailPage() {
   const [payMethod, setPayMethod] = useState("nakit");
   const [payNotes, setPayNotes] = useState("");
   const [postCari, setPostCari] = useState(true);
-  const [postFinance, setPostFinance] = useState(false);
+  const [postFinance, setPostFinance] = useState(true);
   const [financeMethod, setFinanceMethod] = useState<"cash" | "bank">("cash");
   const [bankId, setBankId] = useState("");
   const [banks, setBanks] = useState<BankAccount[]>([]);
   const [payBusy, setPayBusy] = useState(false);
+
+  // Design approval block
+  const [designStatus, setDesignStatus] = useState("Bekliyor");
+  const [designNotes, setDesignNotes] = useState("");
+  const [designApprovedDate, setDesignApprovedDate] = useState(todayISO());
+  const [designBusy, setDesignBusy] = useState(false);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [waBusy, setWaBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
@@ -42,6 +66,13 @@ export default function OrderDetailPage() {
       const data = await apiFetch<OrderDetail>(`/api/orders/${id}`);
       setOrder(data);
       setPayAmount(data.remaining_amount ? String(data.remaining_amount) : "");
+      setDesignStatus(data.design_status || "Bekliyor");
+      setDesignNotes(data.design_notes || "");
+      setDesignApprovedDate(
+        data.design_approved_at
+          ? String(data.design_approved_at).slice(0, 10)
+          : todayISO(),
+      );
       try {
         const files = await apiFetch<OrderDesignFile[]>(`/api/orders/${id}/design-files`);
         setDesignFiles(files);
@@ -57,7 +88,26 @@ export default function OrderDetailPage() {
     apiFetch<BankAccount[]>("/api/finance/banks?active=true")
       .then(setBanks)
       .catch(() => setBanks([]));
+    apiFetch<WhatsAppTemplate[]>("/api/whatsapp/templates")
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
   }, []);
+
+  useEffect(() => {
+    if (!Number.isFinite(id)) return;
+    load();
+  }, [id, load]);
+
+  const designTemplates = useMemo(() => {
+    return templates.filter(
+      (t) =>
+        t.category.toLocaleLowerCase("tr").includes("tasarım") ||
+        t.name.toLocaleLowerCase("tr").includes("tasarim") ||
+        t.name.toLocaleLowerCase("tr").includes("hazir") ||
+        t.category.toLocaleLowerCase("tr").includes("ödeme") ||
+        t.category.toLocaleLowerCase("tr").includes("teslim"),
+    );
+  }, [templates]);
 
   async function uploadDesign(file: File) {
     setUploading(true);
@@ -75,11 +125,6 @@ export default function OrderDetailPage() {
     }
   }
 
-  useEffect(() => {
-    if (!Number.isFinite(id)) return;
-    load();
-  }, [id, load]);
-
   async function changeStatus(status: string) {
     if (!order || status === order.status) return;
     setStatusBusy(true);
@@ -90,10 +135,108 @@ export default function OrderDetailPage() {
         body: JSON.stringify({ status }),
       });
       setOrder(updated);
+      setOkMsg(`Durum: ${status}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Durum güncellenemedi");
     } finally {
       setStatusBusy(false);
+    }
+  }
+
+  async function saveDesign(opts?: { markWhatsapp?: boolean; nextStatus?: string }) {
+    setDesignBusy(true);
+    setError("");
+    setOkMsg("");
+    try {
+      const body: Record<string, unknown> = {
+        design_status: opts?.nextStatus || designStatus,
+        design_notes: designNotes || null,
+        design_approved_at:
+          (opts?.nextStatus || designStatus) === "Onaylandı" && designApprovedDate
+            ? `${designApprovedDate}T12:00:00`
+            : null,
+        mark_whatsapp_sent: Boolean(opts?.markWhatsapp),
+      };
+      const updated = await apiFetch<OrderDetail>(`/api/orders/${id}/design`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      setOrder(updated);
+      setDesignStatus(updated.design_status || "Bekliyor");
+      setDesignNotes(updated.design_notes || "");
+      if (updated.design_approved_at) {
+        setDesignApprovedDate(String(updated.design_approved_at).slice(0, 10));
+      }
+      setOkMsg(opts?.markWhatsapp ? "WhatsApp zaman damgası kaydedildi" : "Tasarım onay bilgileri kaydedildi");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Tasarım kaydı başarısız");
+    } finally {
+      setDesignBusy(false);
+    }
+  }
+
+  async function openWhatsApp(tpl: WhatsAppTemplate) {
+    if (!order) return;
+    const phone = order.customer_phone;
+    if (!phone) {
+      setError("Müşteri telefonu yok — WhatsApp açılamaz");
+      return;
+    }
+    setWaBusy(true);
+    setError("");
+    try {
+      // Auto-advance design status like desktop when using design templates
+      const isDesignTpl =
+        tpl.category.toLocaleLowerCase("tr").includes("tasarım") ||
+        tpl.name.toLocaleLowerCase("tr").includes("tasarim");
+      if (isDesignTpl && (designStatus === "Bekliyor" || designStatus === "Revize Edildi")) {
+        setDesignStatus("Onay İstendi");
+      }
+      await saveDesign({
+        markWhatsapp: isDesignTpl,
+        nextStatus: isDesignTpl && (designStatus === "Bekliyor" || designStatus === "Revize Edildi")
+          ? "Onay İstendi"
+          : undefined,
+      });
+
+      const preview = await apiFetch<{ rendered_body: string; wa_link: string }>(
+        "/api/whatsapp/preview",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            template_id: tpl.id,
+            phone,
+            placeholders: {
+              ad: order.customer_name || "Müşteri",
+              siparis_no: order.order_number,
+              tutar: String(order.remaining_amount ?? order.total_amount ?? ""),
+              tarih: order.due_date ? String(order.due_date).slice(0, 10) : todayISO(),
+              not: designNotes || "",
+            },
+          }),
+        },
+      );
+      // Log history (best-effort)
+      try {
+        await apiFetch("/api/whatsapp/logs", {
+          method: "POST",
+          body: JSON.stringify({
+            template_id: tpl.id,
+            phone,
+            rendered_body: preview.rendered_body,
+            wa_link: preview.wa_link,
+            customer_name: order.customer_name || null,
+          }),
+        });
+      } catch {
+        /* ignore */
+      }
+      window.open(preview.wa_link, "_blank", "noopener,noreferrer");
+      setOkMsg(`WhatsApp: ${tpl.name}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "WhatsApp önizleme hatası");
+    } finally {
+      setWaBusy(false);
     }
   }
 
@@ -117,21 +260,28 @@ export default function OrderDetailPage() {
     setPayBusy(true);
     setError("");
     try {
+      const method = payMethod;
+      const useFinance = postFinance && method !== "veresiye";
+      const finMethod: "cash" | "bank" =
+        method === "nakit" ? "cash" : method === "havale" || method === "eft" || method === "kredi_karti" || method === "kart"
+          ? "bank"
+          : financeMethod;
       const updated = await apiFetch<OrderDetail>(`/api/orders/${id}/payments`, {
         method: "POST",
         body: JSON.stringify({
           amount: Number(payAmount),
-          method: payMethod,
+          method,
           notes: payNotes.trim() || null,
           post_to_cari: postCari,
-          post_to_finance: postFinance,
-          finance_method: postFinance ? financeMethod : null,
-          bank_account_id: postFinance && financeMethod === "bank" && bankId ? Number(bankId) : null,
+          post_to_finance: useFinance,
+          finance_method: useFinance ? finMethod : null,
+          bank_account_id: useFinance && finMethod === "bank" && bankId ? Number(bankId) : null,
         }),
       });
       setOrder(updated);
       setPayAmount(updated.remaining_amount ? String(updated.remaining_amount) : "");
       setPayNotes("");
+      setOkMsg("Tahsilat kaydedildi");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Tahsilat kaydı başarısız");
     } finally {
@@ -155,34 +305,39 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="text-xs text-baykus-muted mb-1">
-            <Link href="/orders" className="text-baykus-primary hover:underline">Siparişler</Link>
+            <Link href="/orders" className="text-baykus-primary hover:underline">
+              Sipariş Merkezi
+            </Link>
             <span className="mx-1">/</span>
             <span className="font-medium text-baykus-text">{order.order_number}</span>
           </div>
-          <h1 className="text-2xl font-bold text-baykus-text mt-1">{order.order_number}</h1>
-          <p className="text-slate-500 text-sm">
+          <h1 className="text-xl font-bold text-baykus-text mt-1">
+            {order.order_number}
+            {order.customer_name ? ` | ${order.customer_name}` : ""}
+          </h1>
+          <p className="text-slate-500 text-sm mt-0.5">
             {order.customer_id ? (
               <Link href={`/customers/${order.customer_id}`} className="text-baykus-primary hover:underline">
                 {order.customer_name || `Müşteri #${order.customer_id}`}
               </Link>
             ) : (
               "Müşteri yok"
-            )} ·{" "}
-            <span
-              className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass(order.status)}`}
-            >
+            )}
+            {order.customer_phone ? ` · ${order.customer_phone}` : ""}
+            {" · "}
+            <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass(order.status)}`}>
               {order.status}
             </span>
             {order.channel ? ` · ${order.channel}` : ""}
-            {order.design_status ? ` · Tasarım: ${order.design_status}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          <label className="text-xs text-slate-500">Durum değiştir</label>
+          <label className="text-xs text-slate-500">Durum</label>
           <select
             disabled={statusBusy}
             value={order.status}
@@ -204,7 +359,7 @@ export default function OrderDetailPage() {
                 setError(e instanceof Error ? e.message : "PDF hatası");
               }
             }}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+            className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm font-medium"
           >
             İş Emri PDF
           </button>
@@ -233,35 +388,148 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
-      )}
+      {error && <div className="rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
+      {okMsg && <div className="rounded-lg bg-emerald-50 text-emerald-800 px-4 py-2 text-sm">{okMsg}</div>}
 
       {!editing && (
-        <div className="space-y-6">
-          <div className="grid md:grid-cols-4 gap-4">
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Toplam</div>
-              <div className="text-lg font-semibold">{formatMoney(Number(order.total_amount))}</div>
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-xl bg-[#2563eb] text-white p-3 shadow-sm">
+              <div className="text-[11px] font-semibold opacity-90">Toplam</div>
+              <div className="text-lg font-bold tabular-nums">{formatMoney(Number(order.total_amount))}</div>
             </div>
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Ödenen / Kapora</div>
-              <div className="text-lg font-semibold">{formatMoney(Number(order.paid_amount))}</div>
+            <div className="rounded-xl bg-[#16a34a] text-white p-3 shadow-sm">
+              <div className="text-[11px] font-semibold opacity-90">Kapora / Ödenen</div>
+              <div className="text-lg font-bold tabular-nums">{formatMoney(Number(order.paid_amount))}</div>
             </div>
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Kalan</div>
-              <div className="text-lg font-semibold">
-                {formatMoney(Number(order.remaining_amount))}
-              </div>
+            <div
+              className="rounded-xl text-white p-3 shadow-sm"
+              style={{ backgroundColor: Number(order.remaining_amount) > 0 ? "#dc2626" : "#64748b" }}
+            >
+              <div className="text-[11px] font-semibold opacity-90">Kalan</div>
+              <div className="text-lg font-bold tabular-nums">{formatMoney(Number(order.remaining_amount))}</div>
             </div>
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Teslim Tarihi</div>
-              <div className="text-lg font-semibold">
+            <div className="rounded-xl border bg-white p-3 shadow-sm">
+              <div className="text-[11px] text-slate-500 font-semibold">Teslim Tarihi</div>
+              <div className="text-lg font-bold text-baykus-text">
                 {order.due_date ? String(order.due_date).slice(0, 10) : "—"}
               </div>
             </div>
           </div>
 
+          {/* Design approval + WhatsApp — one screen block */}
+          <div className="rounded-xl border border-violet-200 bg-[#faf5ff] p-4 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold text-sm text-violet-950">Tasarım Onay Akışı</h2>
+              <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${designStatusBadgeClass(designStatus)}`}>
+                {designStatus}
+              </span>
+            </div>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] text-baykus-muted mb-1">Onay Durumu</label>
+                <select
+                  className="bk-input"
+                  value={designStatus}
+                  onChange={(e) => setDesignStatus(e.target.value)}
+                >
+                  {DESIGN_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] text-baykus-muted mb-1">Onay Tarihi</label>
+                <input
+                  type="date"
+                  className="bk-input"
+                  value={designApprovedDate}
+                  onChange={(e) => setDesignApprovedDate(e.target.value)}
+                />
+              </div>
+              <div className="text-xs text-baykus-muted flex flex-col justify-end pb-1">
+                <div>WhatsApp: {order.design_whatsapp_at ? fmtDt(order.design_whatsapp_at) : "Henüz gönderilmedi"}</div>
+                <div className="mt-0.5">Dosya: {designFiles.length} adet</div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] text-baykus-muted mb-1">Revizyon / Tasarım Notu</label>
+              <textarea
+                className="bk-input min-h-[72px]"
+                value={designNotes}
+                onChange={(e) => setDesignNotes(e.target.value)}
+                placeholder="Revizyon notu…"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <button
+                type="button"
+                disabled={designBusy}
+                onClick={() => saveDesign()}
+                className="bk-btn text-xs text-white"
+                style={{ backgroundColor: "#198754" }}
+              >
+                {designBusy ? "Kaydediliyor…" : "Tasarımı Kaydet"}
+              </button>
+              <label className="rounded-lg border px-3 py-1.5 text-xs cursor-pointer hover:bg-white bg-white/70">
+                {uploading ? "Yükleniyor…" : "+ Dosya yükle"}
+                <input
+                  type="file"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadDesign(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {designFiles.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className="text-xs text-baykus-primary hover:underline"
+                  onClick={() =>
+                    downloadAuthFile(
+                      `/api/orders/${id}/design-files/${f.id}/download`,
+                      f.original_filename,
+                    ).catch((e) => setError(e instanceof Error ? e.message : "İndirme hatası"))
+                  }
+                >
+                  {f.original_filename}
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-violet-200 pt-3">
+              <div className="text-[11px] font-semibold text-baykus-muted mb-2">WhatsApp hızlı aksiyonlar</div>
+              <div className="flex flex-wrap gap-2">
+                {(designTemplates.length ? designTemplates : templates.slice(0, 4)).map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    disabled={waBusy || !order.customer_phone}
+                    onClick={() => openWhatsApp(tpl)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                    style={{ backgroundColor: "#15803d" }}
+                    title={tpl.body}
+                  >
+                    {tpl.name.replace(/_/g, " ")}
+                  </button>
+                ))}
+                {!order.customer_phone && (
+                  <span className="text-xs text-amber-700">Telefon yok — müşteri kartına ekleyin</span>
+                )}
+                <Link href="/whatsapp" className="text-xs text-baykus-primary hover:underline self-center ml-auto">
+                  Tüm taslaklar →
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Payment */}
           {Number(order.remaining_amount) > 0 && (
             <form onSubmit={submitPayment} className="rounded-xl border border-baykus-line bg-white p-4 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
@@ -285,7 +553,15 @@ export default function OrderDetailPage() {
                 </div>
                 <div>
                   <label className="block text-[11px] text-baykus-muted mb-1">Yöntem</label>
-                  <select className="bk-input" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                  <select
+                    className="bk-input"
+                    value={payMethod}
+                    onChange={(e) => {
+                      setPayMethod(e.target.value);
+                      if (e.target.value === "nakit") setFinanceMethod("cash");
+                      if (e.target.value === "havale" || e.target.value === "kredi_karti") setFinanceMethod("bank");
+                    }}
+                  >
                     <option value="nakit">Nakit</option>
                     <option value="havale">Havale / EFT</option>
                     <option value="kredi_karti">Kredi kartı</option>
@@ -307,32 +583,19 @@ export default function OrderDetailPage() {
                   <input type="checkbox" checked={postFinance} onChange={(e) => setPostFinance(e.target.checked)} />
                   Kasa / bankaya işle
                 </label>
-                {postFinance && (
-                  <>
-                    <select
-                      className="bk-input w-auto py-1"
-                      value={financeMethod}
-                      onChange={(e) => setFinanceMethod(e.target.value as "cash" | "bank")}
-                    >
-                      <option value="cash">Kasa</option>
-                      <option value="bank">Banka</option>
-                    </select>
-                    {financeMethod === "bank" && (
-                      <select
-                        className="bk-input w-auto py-1 min-w-[160px]"
-                        value={bankId}
-                        onChange={(e) => setBankId(e.target.value)}
-                        required
-                      >
-                        <option value="">Banka seçin</option>
-                        {banks.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </>
+                {postFinance && financeMethod === "bank" && (
+                  <select
+                    className="bk-input w-auto py-1 min-w-[160px]"
+                    value={bankId}
+                    onChange={(e) => setBankId(e.target.value)}
+                  >
+                    <option value="">Varsayılan banka</option>
+                    {banks.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
                 )}
                 <button type="submit" disabled={payBusy} className="bk-btn-primary ml-auto">
                   {payBusy ? "Kaydediliyor…" : "Tahsilat Kaydet"}
@@ -398,58 +661,16 @@ export default function OrderDetailPage() {
             </table>
           </div>
 
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <h2 className="font-semibold text-sm">Tasarım Dosyaları</h2>
-              <label className="rounded-lg border px-3 py-1.5 text-xs cursor-pointer hover:bg-slate-50">
-                {uploading ? "Yükleniyor…" : "+ Dosya yükle"}
-                <input
-                  type="file"
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void uploadDesign(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-            </div>
-            {designFiles.length === 0 ? (
-              <p className="text-sm text-slate-400">Henüz dosya yok</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {designFiles.map((f) => (
-                  <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
-                    <span className="text-slate-700">
-                      {f.original_filename}{" "}
-                      <span className="text-xs text-slate-400">
-                        ({Math.round((f.size_bytes || 0) / 1024)} KB)
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      className="text-baykus-600 hover:underline text-xs"
-                      onClick={() =>
-                        downloadAuthFile(
-                          `/api/orders/${id}/design-files/${f.id}/download`,
-                          f.original_filename,
-                        ).catch((e) => setError(e instanceof Error ? e.message : "İndirme hatası"))
-                      }
-                    >
-                      İndir
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
           {order.status_history?.length > 0 && (
             <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <h2 className="font-semibold text-sm mb-3">Durum Geçmişi</h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-sm">Durum Geçmişi</h2>
+                <Link href={`/orders/${id}/timeline`} className="text-xs text-baykus-primary hover:underline">
+                  Tam yaşam çizgisi →
+                </Link>
+              </div>
               <ul className="space-y-2 text-sm text-slate-600">
-                {order.status_history.map((h) => (
+                {order.status_history.slice(-8).map((h) => (
                   <li key={h.id} className="flex flex-wrap gap-2">
                     <span className="text-slate-400 whitespace-nowrap">
                       {new Date(h.created_at).toLocaleString("tr-TR")}
@@ -464,7 +685,7 @@ export default function OrderDetailPage() {
               </ul>
             </div>
           )}
-        </div>
+        </>
       )}
 
       {editing && (

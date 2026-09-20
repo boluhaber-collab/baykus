@@ -329,7 +329,7 @@ def convert_to_order(
         discount_amount=_d(quote.discount_amount),
         total_amount=Decimal("0"),
         channel="mağaza",
-        design_status="bekliyor",
+        design_status="Bekliyor",
     )
     db.add(order)
     db.flush()

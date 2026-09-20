@@ -8,8 +8,18 @@ import {
   apiFetch,
   downloadPdf,
   formatMoney,
+  orderRowTag,
+  orderRowTagClass,
   statusBadgeClass,
 } from "@/lib/api";
+
+const FLOW = ["Sipariş Alındı", "Hazırlanıyor", "Baskıda", "Hazır", "Teslim Edildi"] as const;
+
+function nextStatus(current: string): string | null {
+  const i = FLOW.indexOf(current as (typeof FLOW)[number]);
+  if (i < 0 || i >= FLOW.length - 1) return null;
+  return FLOW[i + 1];
+}
 
 const OPEN = ORDER_STATUSES.filter((s) => s !== "Teslim Edildi" && s !== "Sipariş İptali");
 
@@ -48,6 +58,24 @@ export default function ProductionHubPage() {
       await downloadPdf(`/api/orders/${o.id}/work-order-pdf`, `${o.order_number}-is-emri.pdf`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "PDF hatası");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function advance(o: OrderListItem) {
+    const nxt = nextStatus(o.status);
+    if (!nxt) return;
+    setBusy(o.id);
+    setError("");
+    try {
+      await apiFetch(`/api/orders/${o.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: nxt, note: "Atölye ilerlet" }),
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Durum hatası");
     } finally {
       setBusy(null);
     }
@@ -109,8 +137,11 @@ export default function ProductionHubPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((o) => (
-              <tr key={o.id}>
+            {filtered.map((o) => {
+              const nxt = nextStatus(o.status);
+              const tag = orderRowTag(o);
+              return (
+              <tr key={o.id} className={orderRowTagClass(tag)}>
                 <td>
                   <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline font-medium">
                     {o.order_number}
@@ -129,6 +160,17 @@ export default function ProductionHubPage() {
                   {o.due_date ? new Date(o.due_date).toLocaleDateString("tr-TR") : "—"}
                 </td>
                 <td className="text-right space-x-2 text-xs whitespace-nowrap">
+                  {nxt && (
+                    <button
+                      type="button"
+                      className="text-emerald-700 font-semibold hover:underline disabled:opacity-50"
+                      disabled={busy === o.id}
+                      onClick={() => advance(o)}
+                      title={`→ ${nxt}`}
+                    >
+                      → {nxt}
+                    </button>
+                  )}
                   <Link href={`/orders/${o.id}/timeline`} className="text-baykus-primary hover:underline">
                     Çizgi
                   </Link>
@@ -142,7 +184,7 @@ export default function ProductionHubPage() {
                   </button>
                 </td>
               </tr>
-            ))}
+            );})}
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={8} className="text-center text-baykus-muted py-8">

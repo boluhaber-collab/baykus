@@ -397,7 +397,7 @@ def seed(db: Session) -> None:
             order_discount = Decimal("0")
             total = line_total - order_discount
             channels = ["mağaza", "internet", "Trendyol", "Hepsiburada", "N11", "diğer"]
-            designs = ["bekliyor", "onaylandı", "revizyon"]
+            designs = ["Bekliyor", "Onaylandı", "Revizyon İstendi"]
             order = Order(
                 order_number=num,
                 customer_id=cust.id,
@@ -409,7 +409,7 @@ def seed(db: Session) -> None:
                 delivery_date=due,
                 channel=channels[hash(num) % len(channels)],
                 design_status=designs[hash(num) % len(designs)],
-                design_notes=("Demo tasarım notu" if designs[hash(num) % len(designs)] == "revizyon" else None),
+                design_notes=("Demo tasarım notu" if designs[hash(num) % len(designs)] == "Revizyon İstendi" else None),
                 notes=notes or "Demo sipariş",
             )
             db.add(order)
@@ -1096,6 +1096,11 @@ def seed(db: Session) -> None:
                     name="tasarim_onayi",
                     category="tasarım onayı",
                     body="Merhaba {ad}, {siparis_no} tasarımı onayınızı bekliyor. Lütfen {tarih} öncesi dönüş yapın.",
+                ),
+                WhatsAppTemplate(
+                    name="tasarim_revizyon",
+                    category="tasarım onayı",
+                    body="Merhaba {ad}, {siparis_no} için revizyon notumuz: {not}. Güncellenmiş tasarımı onayınıza sunuyoruz.",
                 ),
                 WhatsAppTemplate(
                     name="teslimat_bildirim",

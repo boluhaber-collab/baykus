@@ -60,6 +60,25 @@ def bootstrap() -> None:
             if "archive_tag" not in dcols:
                 conn.execute(text("ALTER TABLE documents ADD COLUMN archive_tag VARCHAR(100)"))
                 print("  + documents.archive_tag")
+        if "orders" in insp.get_table_names():
+            ocols = {c["name"] for c in insp.get_columns("orders")}
+            if "design_approved_at" not in ocols:
+                conn.execute(text("ALTER TABLE orders ADD COLUMN design_approved_at DATETIME"))
+                print("  + orders.design_approved_at")
+            if "design_whatsapp_at" not in ocols:
+                conn.execute(text("ALTER TABLE orders ADD COLUMN design_whatsapp_at DATETIME"))
+                print("  + orders.design_whatsapp_at")
+            # Remap legacy design_status labels
+            for old_v, new_v in (
+                ("bekliyor", "Bekliyor"),
+                ("onaylandı", "Onaylandı"),
+                ("onaylandi", "Onaylandı"),
+                ("revizyon", "Revizyon İstendi"),
+            ):
+                conn.execute(
+                    text("UPDATE orders SET design_status = :n WHERE lower(design_status) = :o"),
+                    {"n": new_v, "o": old_v},
+                )
     if tables_missing():
         print("Uyarı: users tablosu hâlâ yok.")
     else:

@@ -301,6 +301,7 @@ export type OrderListItem = {
   order_number: string;
   customer_id: number | null;
   customer_name?: string | null;
+  customer_phone?: string | null;
   status: string;
   total_amount: number;
   deposit_amount: number;
@@ -311,6 +312,8 @@ export type OrderListItem = {
   channel?: string | null;
   design_status?: string | null;
   design_notes?: string | null;
+  design_approved_at?: string | null;
+  design_whatsapp_at?: string | null;
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -753,8 +756,15 @@ export async function downloadReportCsv(path: string, filename: string): Promise
 }
 
 
-export const ORDER_CHANNELS = ["mağaza", "internet", "Trendyol", "Hepsiburada", "N11", "diğer"] as const;
-export const DESIGN_STATUSES = ["bekliyor", "onaylandı", "revizyon"] as const;
+export const ORDER_CHANNELS = ["mağaza", "perakende", "internet", "Trendyol", "Hepsiburada", "N11", "diğer"] as const;
+export const DESIGN_STATUSES = [
+  "Bekliyor",
+  "Onay İstendi",
+  "Onaylandı",
+  "Revizyon İstendi",
+  "Revize Edildi",
+  "İptal",
+] as const;
 
 export const QUOTE_STATUSES = [
   "Taslak",
@@ -997,14 +1007,64 @@ export type AuditLog = {
 
 export function designStatusBadgeClass(status: string): string {
   switch (status) {
+    case "Bekliyor":
     case "bekliyor":
       return "bg-amber-100 text-amber-800";
+    case "Onay İstendi":
+      return "bg-sky-100 text-sky-800";
+    case "Onaylandı":
     case "onaylandı":
       return "bg-emerald-100 text-emerald-800";
+    case "Revizyon İstendi":
     case "revizyon":
       return "bg-orange-100 text-orange-800";
+    case "Revize Edildi":
+      return "bg-violet-100 text-violet-800";
+    case "İptal":
+      return "bg-red-100 text-red-800";
     default:
       return "bg-slate-100 text-slate-700";
+  }
+}
+
+/** Masaüstü siparis_merkezi kayit_tag satır renkleri */
+export type OrderRowTag = "teklif" | "acik" | "geciken" | "hazir" | "teslim" | "iptal";
+
+export function orderRowTag(o: {
+  status: string;
+  due_date?: string | null;
+  is_quote?: boolean;
+}): OrderRowTag {
+  if (o.is_quote) return "teklif";
+  if (o.status === "Teslim Edildi") return "teslim";
+  if (o.status === "Sipariş İptali") return "iptal";
+  if (o.status === "Hazır") return "hazir";
+  if (o.due_date) {
+    const d = String(o.due_date).slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    if (d < today && o.status !== "Teslim Edildi" && o.status !== "Sipariş İptali") {
+      return "geciken";
+    }
+  }
+  return "acik";
+}
+
+export function orderRowTagClass(tag: OrderRowTag): string {
+  switch (tag) {
+    case "teklif":
+      return "bg-[#f5f3ff]";
+    case "acik":
+      return "bg-[#eff6ff]";
+    case "geciken":
+      return "bg-[#fee2e2]";
+    case "hazir":
+      return "bg-[#dcfce7]";
+    case "teslim":
+      return "bg-[#e5e7eb]";
+    case "iptal":
+      return "bg-[#fef2f2] opacity-70";
+    default:
+      return "";
   }
 }
 

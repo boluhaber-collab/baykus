@@ -23,6 +23,7 @@ const SALE_TYPES: { id: SaleType; label: string }[] = [
 
 const PAY_TYPES = ["Nakit", "EFT", "Kart", "Veresiye"] as const;
 const NET_CHANNELS = ["internet", "Trendyol", "Hepsiburada", "N11"] as const;
+const PRINT_TYPES = ["", "DTF", "Sublimasyon", "Serigrafi", "Nakış", "Transfer", "UV"] as const;
 
 type Line = {
   key: string;
@@ -78,6 +79,7 @@ function CreateSaleInner() {
   const [newCompany, setNewCompany] = useState("");
   const [channel, setChannel] = useState<string>("internet");
   const [notes, setNotes] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [payType, setPayType] = useState<(typeof PAY_TYPES)[number]>("Nakit");
   const [payAmount, setPayAmount] = useState("");
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
@@ -177,6 +179,7 @@ function CreateSaleInner() {
             customer_id: cid,
             status: "Taslak",
             notes: notes || null,
+            valid_until: dueDate || null,
             discount_amount: 0,
             lines: payloadLines,
           }),
@@ -199,7 +202,8 @@ function CreateSaleInner() {
           status: "Sipariş Alındı",
           notes: notes || null,
           channel: orderChannel,
-          design_status: "bekliyor",
+          design_status: "Bekliyor",
+          due_date: dueDate || null,
           deposit_amount: 0,
           discount_amount: 0,
           lines: payloadLines,
@@ -340,7 +344,18 @@ function CreateSaleInner() {
             </div>
           )}
 
-          <div className={saleType === "internet" ? "" : "md:col-span-2"}>
+          <div>
+            <label className="block text-[11px] text-baykus-muted mb-0.5">
+              {saleType === "teklif" ? "Geçerlilik" : "Teslim tarihi"}
+            </label>
+            <input
+              type="date"
+              className="bk-input"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+          </div>
+          <div className={saleType === "internet" ? "" : ""}>
             <label className="block text-[11px] text-baykus-muted mb-0.5">Not</label>
             <input className="bk-input" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
@@ -354,7 +369,7 @@ function CreateSaleInner() {
               className="bk-btn bk-btn-ghost text-xs"
               onClick={() => setLines((p) => [...p, emptyLine()])}
             >
-              + Satır
+              Ürün ekle
             </button>
           </div>
           <div className="bk-table-wrap">
@@ -434,11 +449,17 @@ function CreateSaleInner() {
                       />
                     </td>
                     <td>
-                      <input
-                        className="bk-input w-24"
+                      <select
+                        className="bk-input w-28"
                         value={line.print_type}
                         onChange={(e) => updateLine(line.key, { print_type: e.target.value })}
-                      />
+                      >
+                        {PRINT_TYPES.map((pt) => (
+                          <option key={pt || "empty"} value={pt}>
+                            {pt || "—"}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td>
                       <input
@@ -497,7 +518,7 @@ function CreateSaleInner() {
               </select>
             </div>
             <div>
-              <label className="block text-[11px] text-baykus-muted mb-0.5">Ödeme tutarı (₺)</label>
+              <label className="block text-[11px] text-baykus-muted mb-0.5">Kapora / ödeme (₺)</label>
               <input
                 className="bk-input"
                 type="number"
@@ -508,10 +529,29 @@ function CreateSaleInner() {
                 disabled={payType === "Veresiye"}
               />
             </div>
-            <div className="text-xs text-baykus-muted pb-2">
-              {payType === "Veresiye"
-                ? "Veresiye: kapora yok, cariye satış borcu yazılır (stok düşer)."
-                : `Kapora / tahsilat: ${payAmount || "0"} ₺ · Kalan tutar: ${(Math.max(0, linesTotal - (Number(payAmount) || 0))).toFixed(2)} ₺`}
+            <div className="text-xs text-baykus-muted pb-2 space-y-0.5">
+              {payType === "Veresiye" ? (
+                <span>Veresiye: kapora yok, cariye satış borcu yazılır (stok düşer).</span>
+              ) : (
+                <>
+                  <div>
+                    Kapora: <strong className="tabular-nums text-emerald-700">{payAmount || "0"} ₺</strong>
+                  </div>
+                  <div>
+                    Kalan:{" "}
+                    <strong className="tabular-nums text-red-700">
+                      {Math.max(0, linesTotal - (Number(payAmount) || 0)).toFixed(2)} ₺
+                    </strong>
+                  </div>
+                  <div className="text-[10px]">
+                    {payType === "Nakit"
+                      ? "Nakit → kasa tahsilat"
+                      : payType === "EFT" || payType === "Kart"
+                        ? "EFT/Kart → varsayılan banka"
+                        : ""}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

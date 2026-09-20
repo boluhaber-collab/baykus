@@ -30,9 +30,9 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Satış / Sipariş
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Sipariş Merkezi | `/orders` | done |
+| Sipariş Merkezi | `/orders` | done (sekmeler: Teklifler/Siparişler/Açık/Hazırlanıyor/Baskıda/Hazır/Teslim + Kanban; satır renkleri; toplu durum; teklif→sipariş) |
 | Satışlar | `/sales` | done |
-| Satış / Teklif Oluştur | `/sales/create` | done (Nakit/EFT/Kart/Veresiye, kapora/kalan, stok↓ + cari satış) |
+| Satış / Teklif Oluştur | `/sales/create` | done (beden/renk/baskı, ürün ekle, teslim tarihi, kapora/kalan, Nakit→kasa / EFT·Kart→banka, stok↓) |
 | Perakende Satışlar | `/sales/retail` | done |
 | Teklifler | `/quotes` | done |
 | Sipariş Listesi | `/orders` | done |
@@ -43,7 +43,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Üretim / Atölye
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Üretim Akış Paneli | `/production` | done |
+| Üretim Akış Paneli | `/production` | done (atölye ilerlet → sonraki durum, satır renkleri, iş emri PDF) |
 | İş Emirleri | `/production/work-orders` | done |
 | Sublimasyon Baskı Süreleri | `/production/sublimation` | done |
 | Teslim Alarmı | `/orders/delivery-alarm` | done |
@@ -128,4 +128,20 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 | Merkezi DB’ye SQLite aktarım / canlı Postgres şifresi | Şifre saklanmaz; host alanları ayarda |
 | OneDrive / Windows yerel yollar | Web sunucu yedek zip |
 
-Revizyon: Alembic **011** (`sublimation_print_times`, `documents.archive_tag`). SQLite: `python -m app.bootstrap_sqlite`.
+
+## Derinleştirme — Satış/Teklif & Sipariş Merkezi (masaüstü `siparis_merkezi` / `siparis_detay` / `satis_teklif`)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Sipariş Merkezi notebook sekmeleri | `/orders` Teklifler · Siparişler · Açık · Hazırlanıyor · Baskıda · Hazır · Teslim | done |
+| Satır renk etiketleri (teklif/acik/geciken/hazir/teslim) | `orderRowTag` / `orderRowTagClass` | done |
+| Toplu durum güncelleme | `POST /api/orders/bulk-status` + çoklu seçim | done |
+| Teklif → Sipariş (merkez sekmesi) | Teklifler sekmesi «Siparişe Çevir» → `POST /api/quotes/{id}/convert` | done |
+| Tasarım Onay Akışı (durum/tarih/not) | Sipariş detay paneli + `PATCH /api/orders/{id}/design` | done |
+| Tasarım durumları (masaüstü) | Bekliyor · Onay İstendi · Onaylandı · Revizyon İstendi · Revize Edildi · İptal | done |
+| WhatsApp hızlı link (taslak) | Detayda şablon butonları → `/api/whatsapp/preview` + `wa.me` (Selenium yok) | done |
+| İş emri PDF + tahsilat + yaşam çizgisi | Aynı detay ekranı | done |
+| Kapora / kalan / ödeme tipi → finans | Satış oluştur + detay tahsilat (kasa/varsayılan banka) | done |
+
+Revizyon: Alembic **012** (`design_approved_at`, `design_whatsapp_at`, design_status etiket remap). SQLite: `python -m app.bootstrap_sqlite`.
+

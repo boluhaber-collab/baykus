@@ -30,8 +30,44 @@ ORDER_CHANNELS = [
 ]
 DEFAULT_ORDER_CHANNEL = "mağaza"
 
-DESIGN_STATUSES = ["bekliyor", "onaylandı", "revizyon"]
-DEFAULT_DESIGN_STATUS = "bekliyor"
+# Desktop Tasarım Onay Akışı labels (siparis_detay_penceresi_ac)
+DESIGN_STATUSES = [
+    "Bekliyor",
+    "Onay İstendi",
+    "Onaylandı",
+    "Revizyon İstendi",
+    "Revize Edildi",
+    "İptal",
+]
+DEFAULT_DESIGN_STATUS = "Bekliyor"
+
+# Legacy lowercase values from earlier web seeds / migrations
+DESIGN_STATUS_ALIASES = {
+    "bekliyor": "Bekliyor",
+    "onaylandı": "Onaylandı",
+    "onaylandi": "Onaylandı",
+    "revizyon": "Revizyon İstendi",
+    "onay istendi": "Onay İstendi",
+    "revizyon istendi": "Revizyon İstendi",
+    "revize edildi": "Revize Edildi",
+    "iptal": "İptal",
+}
+
+
+def normalize_design_status(value: str | None) -> str:
+    if value is None:
+        return DEFAULT_DESIGN_STATUS
+    raw = str(value).strip()
+    if not raw:
+        return DEFAULT_DESIGN_STATUS
+    if raw in DESIGN_STATUSES:
+        return raw
+    mapped = DESIGN_STATUS_ALIASES.get(raw.casefold())
+    if mapped:
+        return mapped
+    # Case-insensitive match against canonical labels
+    lower_map = {s.casefold(): s for s in DESIGN_STATUSES}
+    return lower_map.get(raw.casefold(), DEFAULT_DESIGN_STATUS)
 
 
 class Order(Base):
@@ -47,8 +83,10 @@ class Order(Base):
     due_date: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
     channel: Mapped[str] = mapped_column(String(50), default="mağaza", index=True)
-    design_status: Mapped[str] = mapped_column(String(50), default="bekliyor", index=True)
+    design_status: Mapped[str] = mapped_column(String(50), default=DEFAULT_DESIGN_STATUS, index=True)
     design_notes: Mapped[str | None] = mapped_column(Text)
+    design_approved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    design_whatsapp_at: Mapped[datetime | None] = mapped_column(DateTime)
     delivery_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
