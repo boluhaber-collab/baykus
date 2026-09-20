@@ -2,12 +2,14 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { openGlobalSearch } from "@/components/GlobalSearchOverlay";
 
 /**
  * Global Baykuş shortcuts (desktop parity: F1/Ctrl+S kaydet, F2 perakende, Escape geri).
  * Ctrl+S / F1 → click first visible `[data-baykus-save]` (or button/input marked save).
  * F2 → /sales/retail/new
  * Escape → history.back() when not in an open dialog/input that needs Escape.
+ * Ctrl+K or / → Akıllı Arama (command palette).
  */
 export function useBaykusHotkeys(enabled = true) {
   const router = useRouter();
@@ -92,9 +94,19 @@ export function useBaykusHotkeys(enabled = true) {
       const key = e.key;
       const isSaveCombo =
         (e.ctrlKey || e.metaKey) && (key === "s" || key === "S");
+      const isSearchCombo =
+        (e.ctrlKey || e.metaKey) && (key === "k" || key === "K");
+      const isSlashSearch =
+        key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey && !isTypingTarget(e.target);
       const isF1 = key === "F1";
       const isF2 = key === "F2";
       const isEsc = key === "Escape";
+
+      if (isSearchCombo || isSlashSearch) {
+        e.preventDefault();
+        openGlobalSearch();
+        return;
+      }
 
       if (isSaveCombo || isF1) {
         triggerSave(e);

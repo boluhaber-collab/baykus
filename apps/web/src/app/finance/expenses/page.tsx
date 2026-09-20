@@ -14,6 +14,8 @@ const PERIODS = [
 
 const STATUS_CHIPS = ["Tümü", "Ödenmiş", "Ödenecek", "Gecikmiş"] as const;
 
+const MASRAF_GRUPLARI = ["Araç Giderleri", "İşletme Giderleri", "Mali Giderler", "Personel Giderleri", "Diğer Giderler"] as const;
+
 function periodFrom(key: string): string | "" {
   const today = new Date();
   if (key === "all") return "";
@@ -35,6 +37,9 @@ export default function ExpensesPage() {
   const [q, setQ] = useState("");
   const [showCat, setShowCat] = useState(false);
   const [catName, setCatName] = useState("");
+  const [catGroup, setCatGroup] = useState<string>("İşletme Giderleri");
+  const [catDesc, setCatDesc] = useState("");
+  const [editCatId, setEditCatId] = useState<number | null>(null);
   const [form, setForm] = useState({
     category_id: "",
     amount: "",
@@ -75,15 +80,57 @@ export default function ExpensesPage() {
   async function addCategory(e: FormEvent) {
     e.preventDefault();
     try {
-      await apiFetch("/api/finance/expenses/categories", {
-        method: "POST",
-        body: JSON.stringify({ name: catName }),
-      });
+      if (editCatId) {
+        await apiFetch(`/api/finance/expenses/categories/${editCatId}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            name: catName,
+            group_name: catGroup,
+            description: catDesc || null,
+          }),
+        });
+        setMsg("Masraf kalemi güncellendi");
+      } else {
+        await apiFetch("/api/finance/expenses/categories", {
+          method: "POST",
+          body: JSON.stringify({
+            name: catName,
+            group_name: catGroup,
+            description: catDesc || null,
+          }),
+        });
+        setMsg("Masraf kalemi eklendi");
+      }
       setCatName("");
-      setMsg("Masraf kalemi eklendi");
+      setCatDesc("");
+      setCatGroup("İşletme Giderleri");
+      setEditCatId(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kategori hatası");
+    }
+  }
+
+  async function removeCategory(id: number) {
+    if (!confirm("Kalem silinsin mi?")) return;
+    try {
+      await apiFetch(`/api/finance/expenses/categories/${id}`, { method: "DELETE" });
+      setMsg("Kalem silindi");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Silme hatası");
+    }
+  }
+
+  async function toggleCategoryActive(c: ExpenseCategory) {
+    try {
+      await apiFetch(`/api/finance/expenses/categories/${c.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ is_active: !c.is_active }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Güncelleme hatası");
     }
   }
 
@@ -161,21 +208,124 @@ export default function ExpensesPage() {
       {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
       {showCat && (
-        <form onSubmit={addCategory} className="bk-card p-3 flex flex-wrap gap-2 text-sm">
-          <input
-            required
-            className="bk-input max-w-xs"
-            placeholder="Yeni kalem adı"
-            value={catName}
-            onChange={(e) => setCatName(e.target.value)}
-          />
-          <button type="submit" className="bk-btn bk-btn-primary text-xs">
-            Kalem ekle
-          </button>
-          <span className="text-xs text-baykus-muted self-center">
-            {categories.length} kalem: {categories.map((c) => c.name).join(", ") || "—"}
-          </span>
-        </form>
+        <div className="bk-card p-3 space-y-3 text-sm">
+          <div className="font-semibold text-sm">Ana Grup / Alt Masraf Kalemi</div>
+          <form onSubmit={addCategory} className="flex flex-wrap gap-2 items-end">
+            <div>
+              <label className="block text-[11px] text-slate-500 mb-1">Ana Grup</label>
+              <select className="bk-input" value={catGroup} onChange={(e) => setCatGroup(e.target.value)}>
+                {MASRAF_GRUPLARI.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-500 mb-1">Alt Kalem</label>
+              <input
+                required
+                className="bk-input min-w-[12rem]"
+                placeholder="Kalem adı"
+                value={catName}
+                onChange={(e) => setCatName(e.target.value)}
+              />
+            </div>
+            <div className="flex-1 min-w-[12rem]">
+              <label className="block text-[11px] text-slate-500 mb-1">Açıklama</label>
+              <input
+                className="bk-input w-full"
+                placeholder="Opsiyonel"
+                value={catDesc}
+                onChange={(e) => setCatDesc(e.target.value)}
+              />
+            </div>
+            <button type="submit" className="bk-btn bk-btn-primary text-xs">
+              {editCatId ? "Kaydet / Güncelle" : "Kalem ekle"}
+            </button>
+            {editCatId && (
+              <button
+                type="button"
+                className="bk-btn bk-btn-ghost text-xs"
+                onClick={() => {
+                  setEditCatId(null);
+                  setCatName("");
+                  setCatDesc("");
+                }}
+              >
+                Temizle
+              </button>
+            )}
+          </form>
+          <div className="bk-table-wrap max-h-64 overflow-auto">
+            <table className="bk-table text-xs">
+              <thead>
+                <tr>
+                  <th>Ana Masraf Grubu / Alt Kalem</th>
+                  <th>Açıklama</th>
+                  <th>Aktif</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {MASRAF_GRUPLARI.flatMap((g) => {
+                  const items = categories.filter((c) => (c.group_name || "İşletme Giderleri") === g);
+                  return [
+                    <tr key={`g-${g}`} className="bg-slate-100">
+                      <td colSpan={4} className="font-bold text-slate-700">
+                        {g} ({items.length})
+                      </td>
+                    </tr>,
+                    ...items.map((c) => (
+                      <tr key={c.id} className={!c.is_active ? "opacity-50" : undefined}>
+                        <td className="pl-6">{c.name}</td>
+                        <td className="text-slate-500">{c.description || "—"}</td>
+                        <td>{c.is_active ? "Evet" : "Hayır"}</td>
+                        <td className="whitespace-nowrap space-x-1">
+                          <button
+                            type="button"
+                            className="text-baykus-primary hover:underline"
+                            onClick={() => {
+                              setEditCatId(c.id);
+                              setCatName(c.name);
+                              setCatGroup(c.group_name || "İşletme Giderleri");
+                              setCatDesc(c.description || "");
+                            }}
+                          >
+                            Düzenle
+                          </button>
+                          <button type="button" className="text-slate-500 hover:underline" onClick={() => void toggleCategoryActive(c)}>
+                            {c.is_active ? "Pasif" : "Aktif"}
+                          </button>
+                          <button type="button" className="text-red-600 hover:underline" onClick={() => void removeCategory(c.id)}>
+                            Sil
+                          </button>
+                        </td>
+                      </tr>
+                    )),
+                  ];
+                })}
+                {categories
+                  .filter((c) => !MASRAF_GRUPLARI.includes((c.group_name || "İşletme Giderleri") as (typeof MASRAF_GRUPLARI)[number]))
+                  .map((c) => (
+                    <tr key={c.id}>
+                      <td>
+                        <span className="text-slate-400">{c.group_name || "—"} / </span>
+                        {c.name}
+                      </td>
+                      <td>{c.description || "—"}</td>
+                      <td>{c.is_active ? "Evet" : "Hayır"}</td>
+                      <td>
+                        <button type="button" className="text-red-600" onClick={() => void removeCategory(c.id)}>
+                          Sil
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       <form onSubmit={addExpense} className="bk-card p-3 grid md:grid-cols-4 gap-2 text-sm">
@@ -194,9 +344,9 @@ export default function ExpensesPage() {
           required
         >
           <option value="">Masraf kalemi</option>
-          {categories.map((c) => (
+          {categories.filter((c) => c.is_active !== false).map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {(c.group_name || "İşletme Giderleri") + " / " + c.name}
             </option>
           ))}
         </select>

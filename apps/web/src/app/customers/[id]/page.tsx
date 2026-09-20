@@ -14,6 +14,8 @@ import {
   statusBadgeClass,
   quoteStatusBadgeClass,
 } from "@/lib/api";
+import CustomerTahsilatModal from "@/components/CustomerTahsilatModal";
+import CustomerDevirModal from "@/components/CustomerDevirModal";
 
 type TabKey = "bilgi" | "hareketler" | "siparisler" | "notlar" | "whatsapp";
 
@@ -29,6 +31,8 @@ export default function CustomerDetailPage() {
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<TabKey>("bilgi");
   const [showPay, setShowPay] = useState(false);
+  const [showTahsilat, setShowTahsilat] = useState(false);
+  const [showDevir, setShowDevir] = useState(false);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
 
   const [payType, setPayType] = useState<"payment" | "deposit" | "adjustment" | "sale">("payment");
@@ -325,11 +329,7 @@ export default function CustomerDetailPage() {
         </Link>
         <button
           type="button"
-          onClick={() => {
-            setShowPay(true);
-            setTab("hareketler");
-            setPayType("payment");
-          }}
+          onClick={() => setShowTahsilat(true)}
           className="rounded-lg px-3 py-2 text-sm font-medium text-white"
           style={{ background: "#198754" }}
         >
@@ -350,23 +350,13 @@ export default function CustomerDetailPage() {
         >
           Cari Döküm PDF
         </button>
-        <a
-          href={`/api/reports/cari-statements?customer_id=${id}&format=html`}
-          target="_blank"
-          rel="noreferrer"
+        <Link
+          href={`/customers/${id}/mutabakat`}
           className="rounded-lg px-3 py-2 text-sm font-medium text-white"
           style={{ background: "#7c3aed" }}
-          onClick={(e) => {
-            // open printable mutabakat-style HTML
-            e.preventDefault();
-            window.open(
-              `/reports/cari-statements?customer_id=${id}`,
-              "_blank",
-            );
-          }}
         >
-          Mutabakat / Ekstre
-        </a>
+          Mutabakat Mektubu
+        </Link>
         <Link
           href={`/customers/track?customer_id=${id}`}
           className="rounded-lg px-3 py-2 text-sm font-medium text-white"
@@ -376,14 +366,21 @@ export default function CustomerDetailPage() {
         </Link>
         <button
           type="button"
+          onClick={() => setShowDevir(true)}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
+          style={{ background: "#0f766e" }}
+        >
+          Devir Bakiye
+        </button>
+        <button
+          type="button"
           onClick={() => {
             setEditing(true);
             setTab("bilgi");
           }}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ background: "#0f766e" }}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
         >
-          Devir Bakiye / Düzenle
+          Kartı Düzenle
         </button>
         <button
           type="button"
@@ -854,6 +851,29 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       )}
+
+      <CustomerTahsilatModal
+        customerId={id}
+        customerName={customer.name}
+        defaultAmount={ozet.acik > 0 ? ozet.acik : 0}
+        open={showTahsilat}
+        onClose={() => setShowTahsilat(false)}
+        onSaved={(msg) => {
+          setOkMsg(msg);
+          void load();
+        }}
+      />
+      <CustomerDevirModal
+        customerId={id}
+        customerName={customer.name}
+        currentOpening={Number(customer.opening_balance ?? 0)}
+        open={showDevir}
+        onClose={() => setShowDevir(false)}
+        onSaved={() => {
+          setOkMsg("Cari devir bakiyesi kaydedildi.");
+          void load();
+        }}
+      />
     </div>
   );
 }

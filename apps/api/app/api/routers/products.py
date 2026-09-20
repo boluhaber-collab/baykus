@@ -1014,3 +1014,126 @@ def product_price_lists(
         )
     return out
 
+
+@router.get("/{product_id}/history")
+def product_history(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict:
+    """Stok ekstresi + önceki satış/alış/teklif fiyatları (desktop onceki_fiyatlar_penceresi)."""
+    from app.models.order import Order, OrderLine
+    from app.models.quote import Quote, QuoteLine
+    from app.models.supplier import Purchase, PurchaseLine
+
+    product = _get_product(db, product_id)
+    movements = (
+        db.query(StockMovement)
+        .filter(StockMovement.product_id == product_id)
+        .order_by(StockMovement.created_at.desc(), StockMovement.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    sale_rows = (
+        db.query(OrderLine, Order)
+        .join(Order, Order.id == OrderLine.order_id)
+        .options(joinedload(Order.customer))
+        .filter(OrderLine.product_id == product_id)
+        .order_by(Order.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    satislar = []
+    for line, order in sale_rows:
+        cust = order.customer.name if order.customer else "Perakende"
+        parts = [x for x in (line.size, line.color, line.print_type) if x]
+        variant = " / ".join(parts) if parts else (line.description or "Standart")
+        satislar.append(
+            {
+                "tarih": order.created_at.date().isoformat() if order.created_at else None,
+                "cari": cust,
+                "varyant": variant,
+                "miktar": float(line.quantity or 0),
+                "birim_fiyat": float(line.unit_price or 0),
+                "belge_no": order.order_number,
+                "durum": order.status,
+                "href": f"/orders/{order.id}",
+            }
+        )
+
+    purch_rows = (
+        db.query(PurchaseLine, Purchase)
+        .join(Purchase, Purchase.id == PurchaseLine.purchase_id)
+        .options(joinedload(Purchase.supplier))
+        .filter(PurchaseLine.product_id == product_id)
+        .order_by(Purchase.purchase_date.desc(), Purchase.id.desc())
+        .limit(limit)
+        .all()
+    )
+    alislar = []
+    for line, purch in purch_rows:
+        supplier_name = purch.supplier.name if purch.supplier else ""
+        alislar.append(
+            {
+                "tarih": purch.purchase_date.isoformat() if purch.purchase_date else None,
+                "cari": supplier_name,
+                "varyant": line.description or "Standart",
+                "miktar": float(line.quantity or 0),
+                "birim_fiyat": float(line.unit_cost or 0),
+                "belge_no": f"AL-{purch.id}",
+                "durum": purch.status or "",
+                "href": f"/purchases/{purch.id}",
+            }
+        )
+
+    quote_rows = (
+        db.query(QuoteLine, Quote)
+        .join(Quote, Quote.id == QuoteLine.quote_id)
+        .options(joinedload(Quote.customer))
+        .filter(QuoteLine.product_id == product_id)
+        .order_by(Quote.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    teklifler = []
+    for line, quote in quote_rows:
+        cust = quote.customer.name if quote.customer else "—"
+        teklifler.append(
+            {
+                "tarih": quote.created_at.date().isoformat() if quote.created_at else None,
+                "cari": cust,
+                "varyant": (line.description or "Standart")[:80],
+                "miktar": float(line.quantity or 0),
+                "birim_fiyat": float(line.unit_price or 0),
+                "belge_no": quote.quote_number,
+                "durum": quote.status,
+                "href": f"/quotes/{quote.id}",
+            }
+        )
+
+    return {
+        "product_id": product.id,
+        "product_name": product.name,
+        "sku": product.sku,
+        "stock_movements": [
+            {
+                "id": m.id,
+                "direction": m.direction,
+                "quantity": m.quantity,
+                "qty_before": m.qty_before,
+                "qty_after": m.qty_after,
+                "reason": m.reason,
+                "note": m.note,
+                "warehouse": m.warehouse,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+                "variant_id": m.variant_id,
+            }
+            for m in movements
+        ],
+        "satislar": satislar,
+        "alislar": alislar,
+        "teklifler": teklifler,
+    }
+

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppSettings, DashboardNote, DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
+import { openGlobalSearch } from "@/components/GlobalSearchOverlay";
 import { QUICK_ACTION_CATALOG, QUICK_ACTIONS } from "@/lib/nav";
 
 type UsdRates = { buy: number; sell: number } | null;
@@ -166,15 +167,15 @@ export default function DashboardPage() {
 
   function runSmartSearch() {
     const q = smartQ.trim();
-    if (!q) return;
-    const enc = encodeURIComponent(q);
-    if (/^\d+$/.test(q) || q.toUpperCase().startsWith("SIP") || q.toUpperCase().startsWith("ORD")) {
-      router.push(`/orders?q=${enc}`);
-    } else if (q.startsWith("05") || q.replace(/\s/g, "").length >= 10) {
-      router.push(`/customers?q=${enc}`);
-    } else {
-      router.push(`/products?q=${enc}`);
+    if (!q) {
+      openGlobalSearch();
+      return;
     }
+    if (q.length < 2 && q.replace(/\D/g, "").length < 3) {
+      openGlobalSearch(q);
+      return;
+    }
+    openGlobalSearch(q);
   }
 
   async function persistNotes(next: DashboardNote[]) {

@@ -336,3 +336,20 @@ API: `GET /api/products/{id}/warehouse-stocks`. Alembic yok.
 `data-baykus-save`: ProductForm, OrderForm, customers/new, sales/create, retail/new, müşteri/tedarikçi/sipariş kaydet formları.
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.
+
+## Batch 16 — Akıllı Arama / Tahsilat / Mutabakat / Devir / Stok ekstresi / Masraf / Sağlık (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Global Akıllı Arama (`global_arama_penceresi`) | Ctrl+K / `/` / TopBar Ara → `GlobalSearchOverlay` · `GET /api/search` (müşteri/sipariş/teklif/ürün/tedarikçi) · seçince navigate | done |
+| Dashboard Akıllı Arama | Ara → aynı command-palette overlay | done |
+| Müşteri Tahsilat Al | `/customers/[id]` modal · Nakit/EFT/KK · kasa/banka · açık sipariş FIFO · `POST /api/customers/{id}/tahsilat` | done |
+| Mutabakat Mektubu | `/customers/[id]/mutabakat` — dönem filtre · yazdırılabilir mektup · PDF/CSV | done |
+| Devir bakiyesi | müşteri modal `PUT /api/customers/{id}/devir` · kasa devir (Hesaplarım, önceki) | done |
+| Stok ekstresi / Önceki fiyatlar | `/products/[id]/history` · stok hareket + satış/alış/teklif · `GET /api/products/{id}/history` | done |
+| Masraf kalemleri | `/finance/expenses` — Ana Grup/Alt Kalem CRUD · `group_name` · Alembic **018** | done |
+| Veri/Sistem sağlık | `/settings/health` — kayıt sayıları · orphan · veri uyarıları · checklist (salt okunur) | done |
+
+API: Alembic **018** (`expense_categories.group_name`). SQLite: `python -m app.bootstrap_sqlite` kolon yaması.
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password.

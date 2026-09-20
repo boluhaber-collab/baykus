@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { crumbsForPath, titleForPath } from "@/lib/nav";
+import { openGlobalSearch } from "./GlobalSearchOverlay";
 
 export default function TopBar() {
   const pathname = usePathname();
@@ -27,6 +28,16 @@ export default function TopBar() {
         <span aria-hidden>🏠</span>
         Ana Sayfa
       </Link>
+      <button
+        type="button"
+        onClick={() => openGlobalSearch()}
+        className="inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 hover:bg-white shadow-sm"
+        title="Akıllı Arama (Ctrl+K)"
+      >
+        <span aria-hidden>⌕</span>
+        Ara
+        <kbd className="ml-1 rounded bg-white border border-slate-200 px-1 text-[10px] text-slate-400">Ctrl+K</kbd>
+      </button>
       <div className="min-w-0 flex-1 pl-1">
         <div className="text-base font-bold text-baykus-text leading-tight truncate">{title}</div>
         <div className="text-xs text-baykus-muted truncate">

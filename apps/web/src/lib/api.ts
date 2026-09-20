@@ -967,6 +967,7 @@ export type DashboardNote = { id: string; text: string; at: string };
 export type ExpenseCategory = {
   id: number;
   name: string;
+  group_name?: string | null;
   description?: string | null;
   is_active: boolean;
   created_at: string;

@@ -157,6 +157,13 @@ export default function ProductDetailPage() {
             Barkod / Etiket Yazdır
           </Link>
           <Link
+            href={`/products/${id}/history`}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ background: "#61cda5" }}
+          >
+            Stok Ekstresi / Önceki Fiyatlar
+          </Link>
+          <Link
             href="/products?tab=variants"
             className="rounded-lg px-4 py-2 text-sm font-medium text-white"
             style={{ background: "#334155" }}

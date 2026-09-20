@@ -125,3 +125,33 @@ class CustomerDetailOut(CustomerOut):
     recent_quotes: list[CustomerQuoteBrief] = []
     recent_movements: list[CariMovementOut] = []
     timeline: list[dict] = []
+
+
+class CustomerTahsilatIn(BaseModel):
+    """Desktop tahsilat_penceresi — tutar + ödeme türü + kasa/banka + açık siparişlere işle."""
+
+    amount: Decimal = Field(gt=0)
+    payment_type: str = Field(default="Nakit")  # Nakit | EFT | Kredi Kartı | Diğer
+    bank_account_id: int | None = None
+    note: str | None = None
+    movement_date: date | None = None
+    apply_to_open_orders: bool = True
+    # Optional second payment line (desktop ikinci ödeme)
+    amount2: Decimal | None = Field(default=None, gt=0)
+    payment_type2: str | None = None
+    bank_account_id2: int | None = None
+
+
+class CustomerTahsilatOut(BaseModel):
+    cari_movement_ids: list[int]
+    total_amount: Decimal
+    applied_to_orders: Decimal
+    finance_posted: bool
+    message: str
+
+
+class CustomerDevirIn(BaseModel):
+    """Desktop devir_bakiye_duzenle — signed opening balance."""
+
+    amount: Decimal = Field(ge=0)
+    direction: str = Field(pattern="^(borclu|alacakli)$")  # Müşteri Borçlu | Alacaklı

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.deps import get_db, require_roles
 from app.services.audit import write_audit
 from app.models.customer import CARI_MOVEMENT_TYPES, CariMovement, Customer
-from app.models.order import Order, Payment
+from app.models.order import CLOSED_STATUSES, Order, Payment
 from app.models.quote import Quote
 from app.models.user import User
 from app.schemas.customer import (
@@ -21,9 +21,12 @@ from app.schemas.customer import (
     CariMovementOut,
     CustomerCreate,
     CustomerDetailOut,
+    CustomerDevirIn,
     CustomerOrderBrief,
     CustomerQuoteBrief,
     CustomerOut,
+    CustomerTahsilatIn,
+    CustomerTahsilatOut,
     CustomerUpdate,
     ReceivableItem,
     StatementOut,
@@ -849,4 +852,244 @@ def customer_statement(
         closing_balance=running,
         movements=out_rows,
     )
+
+
+def _finance_method_from_payment_type(payment_type: str) -> tuple[str, str]:
+    """Return (finance_method, method_label). finance_method: cash|bank."""
+    pt = (payment_type or "Nakit").strip()
+    if pt in ("EFT", "Kredi Kartı", "Kredi Karti"):
+        return "bank", pt
+    return "cash", pt or "Nakit"
+
+
+def _post_finance_for_tahsilat(
+    db: Session,
+    *,
+    customer_id: int,
+    amount: Decimal,
+    mov_date: date,
+    note: str,
+    finance_method: str,
+    bank_account_id: int | None,
+    cari_movement_id: int | None,
+) -> bool:
+    from app.models.finance import BankAccount, BankMovement, CashMovement, CashRegister
+
+    if finance_method == "cash":
+        reg = (
+            db.query(CashRegister)
+            .filter(CashRegister.is_active.is_(True))
+            .order_by(CashRegister.id.asc())
+            .first()
+        )
+        if not reg:
+            return False
+        db.add(
+            CashMovement(
+                cash_register_id=reg.id,
+                movement_type="tahsilat",
+                amount=amount,
+                movement_date=mov_date,
+                note=note,
+                customer_id=customer_id,
+                cari_movement_id=cari_movement_id,
+            )
+        )
+        return True
+    if finance_method == "bank":
+        acc = None
+        if bank_account_id:
+            acc = db.get(BankAccount, bank_account_id)
+        if acc is None:
+            acc = (
+                db.query(BankAccount)
+                .filter(BankAccount.is_active.is_(True))
+                .order_by(BankAccount.id.asc())
+                .first()
+            )
+        if not acc or not acc.is_active:
+            raise HTTPException(status_code=400, detail="Aktif banka hesabı bulunamadı")
+        db.add(
+            BankMovement(
+                bank_account_id=acc.id,
+                movement_type="deposit",
+                amount=amount,
+                movement_date=mov_date,
+                note=note,
+                customer_id=customer_id,
+                cari_movement_id=cari_movement_id,
+            )
+        )
+        return True
+    return False
+
+
+def _apply_tahsilat_to_open_orders(
+    db: Session,
+    customer_id: int,
+    amount: Decimal,
+    *,
+    method: str,
+    note: str,
+    mov_date: date,
+) -> Decimal:
+    """Desktop musteri_tahsilatini_acik_siparislere_isle — FIFO open remaining."""
+    remaining = amount
+    applied = Decimal("0")
+    if remaining <= 0:
+        return applied
+    orders = (
+        db.query(Order)
+        .options(joinedload(Order.payments))
+        .filter(
+            Order.customer_id == customer_id,
+            ~Order.status.in_(tuple(CLOSED_STATUSES)),
+        )
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+    for order in orders:
+        if remaining <= 0:
+            break
+        paid = _paid_for_order(order)
+        deposit = order.deposit_amount or Decimal("0")
+        effective = paid if paid > 0 else deposit
+        due = (order.total_amount or Decimal("0")) - effective
+        if due <= 0:
+            continue
+        take = min(remaining, due)
+        db.add(
+            Payment(
+                order_id=order.id,
+                amount=take,
+                method=method,
+                status="tamamlandi",
+                paid_at=datetime.combine(mov_date, datetime.min.time()),
+                notes=note or f"Müşteri tahsilatı → {order.order_number}",
+            )
+        )
+        remaining -= take
+        applied += take
+    return applied
+
+
+@router.post("/{customer_id}/tahsilat", response_model=CustomerTahsilatOut, status_code=status.HTTP_201_CREATED)
+def customer_tahsilat(
+    customer_id: int,
+    payload: CustomerTahsilatIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*CARI_WRITE_ROLES)),
+) -> CustomerTahsilatOut:
+    """Dedicated Tahsilat Al flow — cari + kasa/banka + açık siparişlere işle."""
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Müşteri bulunamadı")
+
+    lines: list[dict] = [
+        {
+            "amount": payload.amount,
+            "payment_type": payload.payment_type or "Nakit",
+            "bank_account_id": payload.bank_account_id,
+        }
+    ]
+    if payload.amount2 and payload.amount2 > 0:
+        lines.append(
+            {
+                "amount": payload.amount2,
+                "payment_type": payload.payment_type2 or "Nakit",
+                "bank_account_id": payload.bank_account_id2,
+            }
+        )
+
+    mov_date = payload.movement_date or date.today()
+    base_note = (payload.note or "").strip() or "Müşteri tahsilatı"
+    movement_ids: list[int] = []
+    total = Decimal("0")
+    finance_ok = False
+
+    for idx, line in enumerate(lines, start=1):
+        amt = Decimal(str(line["amount"]))
+        total += amt
+        finance_method, method_label = _finance_method_from_payment_type(line["payment_type"])
+        note = base_note if len(lines) == 1 else f"{base_note} ({idx}/{len(lines)} · {method_label})"
+        movement = CariMovement(
+            customer_id=customer_id,
+            movement_type="payment",
+            debit=Decimal("0"),
+            credit=amt,
+            movement_date=mov_date,
+            note=note,
+        )
+        db.add(movement)
+        db.flush()
+        movement_ids.append(movement.id)
+        posted = _post_finance_for_tahsilat(
+            db,
+            customer_id=customer_id,
+            amount=amt,
+            mov_date=mov_date,
+            note=note,
+            finance_method=finance_method,
+            bank_account_id=line.get("bank_account_id"),
+            cari_movement_id=movement.id,
+        )
+        finance_ok = finance_ok or posted
+
+    applied = Decimal("0")
+    if payload.apply_to_open_orders and total > 0:
+        primary_method = (payload.payment_type or "Nakit").lower()
+        applied = _apply_tahsilat_to_open_orders(
+            db,
+            customer_id,
+            total,
+            method=primary_method,
+            note=base_note,
+            mov_date=mov_date,
+        )
+
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="create",
+        entity_type="customer_tahsilat",
+        entity_id=customer_id,
+        detail={"amount": float(total), "applied_orders": float(applied)},
+    )
+    msg = "Tahsilat kaydedildi."
+    if applied > 0:
+        msg += f" Açık sipariş kalan ödemesine işlenen: {float(applied):,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", ".")
+    return CustomerTahsilatOut(
+        cari_movement_ids=movement_ids,
+        total_amount=total,
+        applied_to_orders=applied,
+        finance_posted=finance_ok,
+        message=msg,
+    )
+
+
+@router.put("/{customer_id}/devir", response_model=CustomerOut)
+def customer_devir(
+    customer_id: int,
+    payload: CustomerDevirIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*CARI_WRITE_ROLES)),
+) -> CustomerOut:
+    """Desktop Devir Bakiye — only opening_balance; does not alter ledger history."""
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Müşteri bulunamadı")
+    amt = abs(Decimal(str(payload.amount)))
+    signed = amt if payload.direction == "borclu" else -amt
+    customer.opening_balance = signed
+    customer.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(customer)
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="customer_devir",
+        entity_id=customer.id,
+        detail={"opening_balance": float(signed)},
+    )
+    return _customer_out(customer, _balance_for(db, customer))
 

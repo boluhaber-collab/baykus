@@ -76,6 +76,11 @@ def bootstrap() -> None:
             if "institution" not in bcols:
                 conn.execute(text("ALTER TABLE bank_accounts ADD COLUMN institution VARCHAR(150)"))
                 print("  + bank_accounts.institution")
+        if "expense_categories" in insp.get_table_names():
+            eccols = {c["name"] for c in insp.get_columns("expense_categories")}
+            if "group_name" not in eccols:
+                conn.execute(text("ALTER TABLE expense_categories ADD COLUMN group_name VARCHAR(100) DEFAULT 'İşletme Giderleri'"))
+                print("  + expense_categories.group_name")
         if "expenses" in insp.get_table_names():
             ecols = {c["name"] for c in insp.get_columns("expenses")}
             if "due_date" not in ecols:

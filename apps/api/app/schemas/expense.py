@@ -8,17 +8,27 @@ from app.models.expense import EXPENSE_PAYMENT_METHODS
 
 class ExpenseCategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+    group_name: str | None = Field(default="İşletme Giderleri", max_length=100)
     description: str | None = None
+    is_active: bool = True
 
 
 class ExpenseCategoryOut(BaseModel):
     id: int
     name: str
+    group_name: str | None = None
     description: str | None
     is_active: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ExpenseCategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    group_name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
 
 
 class ExpenseCreate(BaseModel):

@@ -14,6 +14,7 @@ from app.models.user import User
 from app.schemas.expense import (
     ExpenseCategoryCreate,
     ExpenseCategoryOut,
+    ExpenseCategoryUpdate,
     ExpenseCreate,
     ExpenseOut,
 )
@@ -120,11 +121,62 @@ def create_category(
 ) -> ExpenseCategoryOut:
     if db.query(ExpenseCategory).filter(ExpenseCategory.name == payload.name).first():
         raise HTTPException(status_code=400, detail="Kategori zaten var")
-    row = ExpenseCategory(name=payload.name, description=payload.description)
+    row = ExpenseCategory(
+        name=payload.name,
+        group_name=payload.group_name or "İşletme Giderleri",
+        description=payload.description,
+        is_active=payload.is_active if payload.is_active is not None else True,
+    )
     db.add(row)
     db.commit()
     db.refresh(row)
     return ExpenseCategoryOut.model_validate(row)
+
+
+@router.put("/categories/{category_id}", response_model=ExpenseCategoryOut)
+def update_category(
+    category_id: int,
+    payload: ExpenseCategoryUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*WRITE)),
+) -> ExpenseCategoryOut:
+    row = db.get(ExpenseCategory, category_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Kalem bulunamadı")
+    if payload.name is not None:
+        dup = (
+            db.query(ExpenseCategory)
+            .filter(ExpenseCategory.name == payload.name, ExpenseCategory.id != category_id)
+            .first()
+        )
+        if dup:
+            raise HTTPException(status_code=400, detail="Aynı isimde kalem var")
+        row.name = payload.name
+    if payload.group_name is not None:
+        row.group_name = payload.group_name
+    if payload.description is not None:
+        row.description = payload.description
+    if payload.is_active is not None:
+        row.is_active = payload.is_active
+    db.commit()
+    db.refresh(row)
+    return ExpenseCategoryOut.model_validate(row)
+
+
+@router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*WRITE)),
+) -> None:
+    row = db.get(ExpenseCategory, category_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Kalem bulunamadı")
+    used = db.query(Expense).filter(Expense.category_id == category_id).count()
+    if used:
+        raise HTTPException(status_code=400, detail=f"Kalem kullanımda ({used} masraf) — pasifleştirin")
+    db.delete(row)
+    db.commit()
 
 
 @router.get("", response_model=list[ExpenseOut])
