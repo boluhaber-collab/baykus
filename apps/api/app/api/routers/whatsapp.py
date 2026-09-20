@@ -181,22 +181,38 @@ def track_center(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış")),
 ) -> dict:
-    """WhatsApp Takip Merkezi kuyrukları: hazır / ödeme / tasarım onayı."""
-    from datetime import date as date_cls
+    """WhatsApp Takip Merkezi — aday listesi + şablonlar (Selenium yok; wa.me)."""
     from app.models.order import Order
 
-    today = date_cls.today()
     orders = (
         db.query(Order)
-        .options(joinedload(Order.customer))
-        .filter(Order.status.notin_(["Teslim Edildi", "Sipariş İptali"]))
+        .options(
+            joinedload(Order.customer),
+            joinedload(Order.payments),
+            joinedload(Order.lines),
+        )
+        .filter(Order.status.notin_(["Teslim Edildi", "Sipariş İptali", "İptal", "İptal Edildi"]))
         .order_by(Order.id.desc())
         .limit(500)
         .all()
     )
     ready, pay_due, design = [], [], []
+    candidates = []
+
+    def _products(o) -> str:
+        parts = []
+        for ln in o.lines or []:
+            name = (ln.description or "Ürün").strip()
+            qty = int(ln.quantity or 0)
+            parts.append(f"{name}×{qty}" if qty else name)
+        return " | ".join(parts[:6])
+
     for o in orders:
-        item = {
+        paid = sum(float(p.amount or 0) for p in (o.payments or []))
+        if paid <= 0:
+            paid = float(o.deposit_amount or 0)
+        rem = max(float(o.total_amount or 0) - paid, 0.0)
+        base = {
             "id": o.id,
             "order_number": o.order_number,
             "customer_id": o.customer_id,
@@ -205,16 +221,33 @@ def track_center(
             "status": o.status,
             "design_status": o.design_status,
             "total_amount": float(o.total_amount or 0),
-            "deposit_amount": float(o.deposit_amount or 0),
+            "deposit_amount": paid,
+            "remaining": rem,
             "delivery_date": o.delivery_date.isoformat() if o.delivery_date else None,
+            "products": _products(o),
         }
         if o.status in ("Hazır", "Baskıda"):
-            ready.append(item)
-        paid = float(o.deposit_amount or 0)
-        # rough remaining
-        rem = float(o.total_amount or 0) - paid
+            ready.append(base)
+            candidates.append(
+                {
+                    **base,
+                    "takip_turu": "Hazır Sipariş",
+                    "template_hint": "Hazır Sipariş",
+                    "neden": "Hazır durumdaki sipariş müşteriye bildirilebilir.",
+                    "priority": 3,
+                }
+            )
         if rem > 0.01:
-            pay_due.append({**item, "remaining": rem})
+            pay_due.append(base)
+            candidates.append(
+                {
+                    **base,
+                    "takip_turu": "Ödeme Hatırlatma",
+                    "template_hint": "Ödeme Hatırlatma",
+                    "neden": "Kalan ödeme hatırlatılabilir.",
+                    "priority": 2,
+                }
+            )
         ds = (o.design_status or "").strip()
         if ds.casefold() in (
             "bekliyor",
@@ -223,14 +256,40 @@ def track_center(
             "onay istendi",
             "revize edildi",
         ) or ds in ("Bekliyor", "Revizyon İstendi", "Onay İstendi", "Revize Edildi"):
-            design.append(item)
+            design.append(base)
+            candidates.append(
+                {
+                    **base,
+                    "takip_turu": "Tasarım Onayı",
+                    "template_hint": "Tasarım Onayı",
+                    "neden": "Tasarım onayı bekleniyor.",
+                    "priority": 1,
+                }
+            )
+
+    candidates.sort(
+        key=lambda r: (-r.get("priority", 0), r.get("takip_turu", ""), r.get("delivery_date") or "", r.get("order_number") or "")
+    )
+    templates = [
+        {
+            "id": t.id,
+            "name": t.name,
+            "category": t.category,
+            "body": t.body,
+        }
+        for t in db.query(WhatsAppTemplate).order_by(WhatsAppTemplate.id.asc()).all()
+    ]
     return {
         "ready_orders": ready[:100],
         "payment_due": pay_due[:100],
         "design_approval": design[:100],
+        "candidates": candidates[:200],
+        "templates": templates,
         "counts": {
             "ready": len(ready),
             "payment_due": len(pay_due),
             "design_approval": len(design),
+            "candidates": len(candidates),
         },
+        "note": "Selenium / WhatsApp Desktop yok — wa.me + şablon önizleme.",
     }

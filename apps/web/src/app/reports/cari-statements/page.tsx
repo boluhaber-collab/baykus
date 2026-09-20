@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
+import { apiFetch, downloadReportCsv, formatMoney, getApiBase, getToken } from "@/lib/api";
 
 type CustomerOpt = { id: number; name: string; company: string | null; balance: number };
 type Move = { id: number; date: string | null; type: string; debit: number; credit: number; balance: number; note: string | null };
@@ -14,6 +14,7 @@ export default function CariStatementsPage() {
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const [csvBusy, setCsvBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   useEffect(() => {
     // Support deep link ?customer_id=
@@ -66,11 +67,53 @@ export default function CariStatementsPage() {
     }
   }
 
+  async function exportPdf() {
+    if (!customerId) return;
+    setPdfBusy(true);
+    try {
+      const res = await fetch(
+        `${getApiBase()}/api/reports/cari-statements?customer_id=${customerId}&format=pdf`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      );
+      if (!res.ok) throw new Error(`PDF ${res.status}`);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `cari-dokum-${customerId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "PDF hatası");
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
+  function openPrintable() {
+    if (!customerId) return;
+    const url = `${getApiBase()}/api/reports/cari-statements?customer_id=${customerId}&format=html`;
+    // open with token via blob fetch
+    void (async () => {
+      try {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+        if (!res.ok) throw new Error(`HTML ${res.status}`);
+        const html = await res.text();
+        const w = window.open("", "_blank");
+        if (w) {
+          w.document.write(html);
+          w.document.close();
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Yazdır sayfası hatası");
+      }
+    })();
+  }
+
   return (
     <div className="space-y-3">
       <div>
         <h2 className="text-base font-bold">Cari Dökümler</h2>
-        <p className="text-xs text-baykus-muted">Raporlar › Cari Döküm · ekstre + CSV (PDF masaüstü-native)</p>
+        <p className="text-xs text-baykus-muted">Raporlar › Cari Döküm · CSV + basit PDF + yazdırılabilir HTML (masaüstü ReportLab twin değil)</p>
       </div>
       <div className="bk-filter-bar">
         <input
@@ -93,6 +136,12 @@ export default function CariStatementsPage() {
         </button>
         <button type="button" className="bk-btn bk-btn-ghost text-xs" disabled={!customerId || csvBusy} onClick={exportCsv}>
           {csvBusy ? "…" : "CSV indir"}
+        </button>
+        <button type="button" className="bk-btn bk-btn-ghost text-xs" disabled={!customerId || pdfBusy} onClick={exportPdf}>
+          {pdfBusy ? "…" : "PDF indir"}
+        </button>
+        <button type="button" className="bk-btn bk-btn-ghost text-xs" disabled={!customerId} onClick={openPrintable}>
+          Yazdır / HTML
         </button>
       </div>
 

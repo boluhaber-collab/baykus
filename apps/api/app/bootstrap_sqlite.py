@@ -84,6 +84,20 @@ def bootstrap() -> None:
             if "document_no" not in ecols:
                 conn.execute(text("ALTER TABLE expenses ADD COLUMN document_no VARCHAR(50)"))
                 print("  + expenses.document_no")
+        if "assets" in insp.get_table_names():
+            acols = {c["name"] for c in insp.get_columns("assets")}
+            if "serial_no" not in acols:
+                conn.execute(text("ALTER TABLE assets ADD COLUMN serial_no VARCHAR(100)"))
+                print("  + assets.serial_no")
+            if "current_value" not in acols:
+                conn.execute(text("ALTER TABLE assets ADD COLUMN current_value NUMERIC(12,2)"))
+                print("  + assets.current_value")
+            if "status" not in acols:
+                conn.execute(text("ALTER TABLE assets ADD COLUMN status VARCHAR(40) DEFAULT 'Aktif'"))
+                print("  + assets.status")
+            if "maintenance_date" not in acols:
+                conn.execute(text("ALTER TABLE assets ADD COLUMN maintenance_date DATE"))
+                print("  + assets.maintenance_date")
             # Remap legacy design_status labels
             for old_v, new_v in (
                 ("bekliyor", "Bekliyor"),

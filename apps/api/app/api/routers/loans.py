@@ -53,6 +53,22 @@ def _stats(loan: Loan) -> tuple[int, int, Decimal, Decimal]:
 
 def _to_list(loan: Loan) -> LoanListItem:
     paid_c, unpaid_c, paid_a, remaining = _stats(loan)
+    today = date.today()
+    this_month = Decimal("0")
+    next_due = None
+    overdue = 0
+    for inst in loan.installments or []:
+        if inst.is_paid:
+            continue
+        due = inst.due_date
+        amt = _d(inst.amount)
+        if due:
+            if due.year == today.year and due.month == today.month:
+                this_month += amt
+            if due < today:
+                overdue += 1
+            if next_due is None or due < next_due:
+                next_due = due
     return LoanListItem(
         id=loan.id,
         title=loan.title,
@@ -67,6 +83,9 @@ def _to_list(loan: Loan) -> LoanListItem:
         unpaid_count=unpaid_c,
         paid_amount=paid_a,
         remaining_amount=remaining,
+        this_month_due=this_month,
+        next_due_date=next_due,
+        overdue_count=overdue,
         created_at=loan.created_at,
         updated_at=loan.updated_at,
     )

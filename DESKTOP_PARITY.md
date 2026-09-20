@@ -61,12 +61,12 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Finans
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Günlük Kasa | `/finance/cash` | done (bugün varsayılan + açılış bakiyesi) |
+| Günlük Kasa | `/finance/cash` | done (batch 10 maliyet/kâr gerçek maliyet) |
 | Açık Bakiyeler | `/finance/open-balances` | done |
 | Hesaplarım | `/finance/banks` | done |
-| Krediler | `/finance/loans` | done |
+| Krediler | `/finance/loans` + detay | done (batch 10 ödeme planı/alarm/Ödeme Yap) |
 | Masraflar | `/finance/expenses` | done |
-| Demirbaşlar | `/finance/assets` | done |
+| Demirbaşlar | `/finance/assets` | done (batch 10 demirbaş alanları + PDF) |
 
 ## Fiyat / Maliyet
 | Masaüstü | Web | Durum |
@@ -82,7 +82,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 | Belge Arşiv Merkezi | `/reports/archive` | done |
 | Kâr Analizi | `/reports/profit` | done (masaüstü panel dili) |
 | Masraflar (rapor) | `/reports/expenses` | done |
-| Cari Dökümler | `/reports/cari-statements` | done (CSV; PDF masaüstü-native) |
+| Cari Dökümler | `/reports/cari-statements` | done (CSV + basit PDF + HTML yazdır) |
 | Satış Raporu | `/reports/sales` | done |
 | Alış Raporu | `/reports/purchases` | done |
 
@@ -90,11 +90,11 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
 | İletişim Merkezi | `/communication` | done |
-| WhatsApp Takip | `/whatsapp/track` | done |
+| WhatsApp Takip | `/whatsapp/track` | done (batch 10 aday+şablon+wa.me) |
 | Özel Gün / Kampanya | `/crm/special-days` (+ `/crm/campaigns`) | done |
 | WhatsApp Taslakları | `/whatsapp` | done |
 | WhatsApp Geçmişi | `/whatsapp?tab=history` | done (hub) |
-| Fihrist | `/directory` | done |
+| Fihrist | `/directory` | done (batch 10 sekmeler/senkron/düzenle) |
 
 ## Evrak Dolabı
 | Masaüstü | Web | Durum |
@@ -128,7 +128,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 |-----|-------|
 | BizimHesap canlı sırlar / DPAPI | Yasak — sadece iskelet ayar JSON |
 | Selenium / WhatsApp Desktop otomasyonu | Yasak — `wa.me` link + taslak |
-| Cari Döküm PDF (ReportLab masaüstü aynısı) | Web CSV/ekstre; PDF iskeleti sipariş iş emrinde var |
+| Cari Döküm PDF (ReportLab masaüstü aynısı) | Basit web PDF + yazdırılabilir HTML + CSV var; masaüstü ReportLab twin değil |
 | Merkezi DB’ye SQLite aktarım / canlı Postgres şifresi | Şifre saklanmaz; host alanları ayarda |
 | OneDrive / Windows yerel yollar | Web sunucu yedek zip |
 
@@ -224,4 +224,21 @@ API: Alembic **014** (`bank_accounts.account_type/institution`, `expenses.due_da
 
 Spec: `docs/FINANCE_PROD_SPEC_SNIPPETS.md`
 
-Bilinçli boşluklar (karşılaştırmalı kontrol için): BizimHesap canlı sync, Selenium WA Desktop, DPAPI, cari PDF (ReportLab), sipariş maliyeti alanı (Kasa Özeti Maliyet=0 iskelet).
+Bilinçli boşluklar (karşılaştırmalı kontrol için): BizimHesap canlı sync, Selenium WA Desktop, DPAPI, cari PDF masaüstü ReportLab twin (web basit PDF/HTML/CSV var).
+
+
+## Batch 10 — kalan kullanılabilir boşluklar (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Kasa Özeti Maliyet | `GET /api/finance/cash/daily` — satır maliyeti = ürün `cost` veya `purchase_price` × adet; Brüt/Net + sipariş satırı Maliyet/Kâr | done |
+| Krediler ödeme planı | `/finance/loans` kart listesi (KALAN / BU AY / geciken) + detay ÖDEME TARİHLERİ · **Ödeme Yap** → kasa/banka · son ödeme alarmı | done |
+| Demirbaşlar | `/finance/assets` — Seri No · Güncel Değer · Durum · Bakım · filtre · **PDF Rapor** (`/api/finance/assets/report/pdf`) | done |
+| Fihrist | `/directory` — Müşteri / Tedarikçi / Kişi sekmeleri · Yenile/Senkron · arama · düzenle | done |
+| WhatsApp Takip | `/whatsapp/track` — aday listesi · tür filtresi · şablon · önizleme · **wa.me** (Selenium yok) | done |
+| Cari PDF | `/reports/cari-statements` — CSV + basit ReportLab PDF + yazdırılabilir HTML (`format=pdf|html`) | done (not twin) |
+| Sistem derinleştirme | Kilit Modu yardım metinleri · Sağlık Merkezi sekmeler/SQLite satır · Merkezi DB checklist · İşlem Geçmişi etiketi | done |
+
+API: Alembic **015** (`assets.serial_no/current_value/status/maintenance_date`). SQLite: `python -m app.bootstrap_sqlite` kolon yamaları.
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, masaüstü ReportLab Cari/Demirbaş twin stil.

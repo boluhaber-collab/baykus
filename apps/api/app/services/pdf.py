@@ -178,3 +178,106 @@ def build_work_order_pdf(order: Any, settings: dict[str, str]) -> bytes:
     body.append(Paragraph("Üretim imza: ________________    Kontrol: ________________", styles["Normal"]))
     doc.build(body)
     return buf.getvalue()
+
+
+def build_assets_report_pdf(rows: list[dict[str, Any]], settings: dict[str, str] | None = None) -> bytes:
+    """Simple demirbaş list PDF (not desktop twin styling)."""
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=12 * mm
+    )
+    styles = getSampleStyleSheet()
+    h2 = ParagraphStyle("H2a", parent=styles["Heading2"], fontSize=13, spaceBefore=4, spaceAfter=8)
+    body = []
+    body.extend(_company_header(settings or {}))
+    body.append(Paragraph("Demirbaş Raporu", h2))
+    total = sum(Decimal(str(r.get("current_value") or 0)) for r in rows)
+    body.append(Paragraph(f"Toplam kayıt: {len(rows)} · Güncel değer: {_money(total)}", styles["Normal"]))
+    body.append(Spacer(1, 8))
+    table_rows = [["Demirbaş", "Kategori", "Durum", "Değer", "Bakım"]]
+    for r in rows[:200]:
+        table_rows.append(
+            [
+                str(r.get("name") or "")[:36],
+                str(r.get("category") or "")[:18],
+                str(r.get("status") or "")[:12],
+                _money(r.get("current_value")),
+                str(r.get("maintenance_date") or "")[:12],
+            ]
+        )
+    t = Table(table_rows, colWidths=[55 * mm, 30 * mm, 25 * mm, 30 * mm, 28 * mm])
+    t.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                ("ALIGN", (3, 1), (3, -1), "RIGHT"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
+    body.append(t)
+    doc.build(body)
+    return buf.getvalue()
+
+
+def build_cari_statement_pdf(
+    customer_name: str,
+    rows: list[dict[str, Any]],
+    closing_balance: Any,
+    settings: dict[str, str] | None = None,
+) -> bytes:
+    """Simple cari ekstre PDF — not desktop ReportLab twin."""
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=12 * mm
+    )
+    styles = getSampleStyleSheet()
+    h2 = ParagraphStyle("H2c", parent=styles["Heading2"], fontSize=13, spaceBefore=4, spaceAfter=8)
+    body = []
+    body.extend(_company_header(settings or {}))
+    body.append(Paragraph("Cari Döküm / Ekstre", h2))
+    body.append(Paragraph(f"Müşteri: <b>{customer_name}</b>", styles["Normal"]))
+    body.append(Paragraph(f"Kapanış bakiyesi: <b>{_money(closing_balance)}</b>", styles["Normal"]))
+    body.append(Spacer(1, 8))
+    table_rows = [["Tarih", "Tip", "Borç", "Alacak", "Bakiye", "Not"]]
+    for r in rows[:400]:
+        table_rows.append(
+            [
+                str(r.get("date") or "")[:10],
+                str(r.get("type") or "")[:14],
+                _money(r.get("debit")),
+                _money(r.get("credit")),
+                _money(r.get("balance")),
+                str(r.get("note") or "")[:28],
+            ]
+        )
+    t = Table(table_rows, colWidths=[22 * mm, 28 * mm, 26 * mm, 26 * mm, 26 * mm, 42 * mm])
+    t.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e3a5f")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cbd5e1")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                ("ALIGN", (2, 1), (4, -1), "RIGHT"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
+    body.append(t)
+    body.append(Spacer(1, 10))
+    body.append(
+        Paragraph(
+            "Not: Bu PDF web basit ekstridir; masaüstü ReportLab Cari Döküm şablonu değildir.",
+            styles["Normal"],
+        )
+    )
+    doc.build(body)
+    return buf.getvalue()

@@ -7,8 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field
 class AssetBase(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     category: str | None = None
+    serial_no: str | None = None
     purchase_date: date | None = None
     cost: Decimal = Decimal("0")
+    current_value: Decimal | None = None
+    status: str = "Aktif"
+    maintenance_date: date | None = None
     depreciation_method: str = "none"
     useful_life_months: int | None = None
     note: str | None = None
@@ -22,8 +26,12 @@ class AssetCreate(AssetBase):
 class AssetUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     category: str | None = None
+    serial_no: str | None = None
     purchase_date: date | None = None
     cost: Decimal | None = None
+    current_value: Decimal | None = None
+    status: str | None = None
+    maintenance_date: date | None = None
     depreciation_method: str | None = None
     useful_life_months: int | None = None
     note: str | None = None
@@ -36,5 +44,6 @@ class AssetOut(AssetBase):
     id: int
     book_value: Decimal | None = None
     monthly_depreciation: Decimal | None = None
+    maintenance_due_soon: bool = False
     created_at: datetime
     updated_at: datetime

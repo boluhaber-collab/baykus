@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Loan, apiFetch, formatMoney } from "@/lib/api";
 
 export default function LoansPage() {
   const [items, setItems] = useState<Loan[]>([]);
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
+  const [showClosed, setShowClosed] = useState(false);
   const [form, setForm] = useState({
     title: "",
     lender: "",
@@ -21,16 +21,35 @@ export default function LoansPage() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const qs = status ? `?status=${encodeURIComponent(status)}` : "";
-      setItems(await apiFetch<Loan[]>(`/api/loans${qs}`));
+      setItems(await apiFetch<Loan[]>("/api/loans"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
-  }, [status]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const visible = useMemo(() => {
+    return items.filter((l) => {
+      const rem = Number(l.remaining_amount || 0);
+      if (!showClosed && (rem <= 0.009 || l.status === "kapandı")) return false;
+      return true;
+    });
+  }, [items, showClosed]);
+
+  const totals = useMemo(() => {
+    let remaining = 0;
+    let thisMonth = 0;
+    let overdue = 0;
+    for (const l of items) {
+      remaining += Number(l.remaining_amount || 0);
+      thisMonth += Number(l.this_month_due || 0);
+      overdue += Number(l.overdue_count || 0);
+    }
+    return { remaining, thisMonth, overdue };
+  }, [items]);
 
   async function createLoan(e: FormEvent) {
     e.preventDefault();
@@ -55,139 +74,100 @@ export default function LoansPage() {
   }
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Kredi / Taksit</h1>
-          <p className="text-sm text-slate-500">Finans — taksit ödeme ve kasa/banka kaydı</p>
+          <h2 className="text-base font-bold">Krediler</h2>
+          <p className="text-xs text-baykus-muted">Finans › Krediler · ödeme planı + kasa/banka</p>
         </div>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="rounded-lg border px-3 py-2 text-sm"
-        >
-          <option value="">Tüm durumlar</option>
-          <option value="aktif">aktif</option>
-          <option value="kapandı">kapandı</option>
-          <option value="iptal">iptal</option>
-        </select>
+        <label className="text-xs flex items-center gap-2">
+          <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
+          Borcu bitenleri de göster
+        </label>
       </div>
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
+      {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <form onSubmit={createLoan} className="mb-6 rounded-xl border bg-white p-4 shadow-sm grid md:grid-cols-3 gap-3">
-        <label className="text-sm md:col-span-2">
-          <span className="text-slate-500">Başlık</span>
-          <input
-            required
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
+      <div className="flex flex-wrap gap-2 justify-end">
+        <div className="rounded border bg-white px-4 py-2 text-center min-w-[160px]">
+          <div className="text-[10px] text-emerald-700 font-semibold">KALAN ÖDEMELER</div>
+          <div className="text-lg font-bold text-emerald-600 tabular-nums">{formatMoney(totals.remaining)}</div>
+        </div>
+        <div className="rounded border bg-white px-4 py-2 text-center min-w-[160px]">
+          <div className="text-[10px] text-red-700 font-semibold">BU AYKİ ÖDEMELER</div>
+          <div className="text-lg font-bold text-red-600 tabular-nums">{formatMoney(totals.thisMonth)}</div>
+        </div>
+        {totals.overdue > 0 && (
+          <div className="rounded border border-amber-300 bg-amber-50 px-4 py-2 text-center min-w-[120px]">
+            <div className="text-[10px] text-amber-800 font-semibold">GECİKEN TAKSİT</div>
+            <div className="text-lg font-bold text-amber-900">{totals.overdue}</div>
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={createLoan} className="bk-card p-3 grid md:grid-cols-3 gap-2 text-sm">
+        <div className="md:col-span-3 text-xs font-semibold text-baykus-muted">+ Yeni Kredi Ekle</div>
+        <label>
+          Başlık *
+          <input required className="bk-input mt-0.5" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         </label>
-        <label className="text-sm">
-          <span className="text-slate-500">Kredi veren</span>
-          <input
-            value={form.lender}
-            onChange={(e) => setForm({ ...form, lender: e.target.value })}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
+        <label>
+          Kredi veren / Ödeme hesabı
+          <input className="bk-input mt-0.5" value={form.lender} onChange={(e) => setForm({ ...form, lender: e.target.value })} />
         </label>
-        <label className="text-sm">
-          <span className="text-slate-500">Anapara</span>
-          <input
-            required
-            type="number"
-            step="0.01"
-            value={form.principal_amount}
-            onChange={(e) => setForm({ ...form, principal_amount: e.target.value })}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
+        <label>
+          Anapara *
+          <input required type="number" step="0.01" className="bk-input mt-0.5" value={form.principal_amount} onChange={(e) => setForm({ ...form, principal_amount: e.target.value })} />
         </label>
-        <label className="text-sm">
-          <span className="text-slate-500">Faiz % (opsiyonel)</span>
-          <input
-            type="number"
-            step="0.01"
-            value={form.interest_rate}
-            onChange={(e) => setForm({ ...form, interest_rate: e.target.value })}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
+        <label>
+          Faiz %
+          <input type="number" step="0.01" className="bk-input mt-0.5" value={form.interest_rate} onChange={(e) => setForm({ ...form, interest_rate: e.target.value })} />
         </label>
-        <label className="text-sm">
-          <span className="text-slate-500">Başlangıç</span>
-          <input
-            type="date"
-            required
-            value={form.start_date}
-            onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
+        <label>
+          Başlangıç
+          <input type="date" required className="bk-input mt-0.5" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
         </label>
-        <label className="text-sm">
-          <span className="text-slate-500">Taksit sayısı</span>
-          <input
-            type="number"
-            min={1}
-            max={120}
-            value={form.installment_count}
-            onChange={(e) => setForm({ ...form, installment_count: e.target.value })}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
+        <label>
+          Taksit sayısı
+          <input type="number" min={1} max={120} className="bk-input mt-0.5" value={form.installment_count} onChange={(e) => setForm({ ...form, installment_count: e.target.value })} />
         </label>
         <div className="md:col-span-3">
-          <button type="submit" className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm">
-            Yeni kredi oluştur
+          <button type="submit" className="bk-btn text-xs text-white" style={{ background: "#6ab35a" }}>
+            + Yeni Kredi Ekle
           </button>
         </div>
       </form>
 
-      <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
-            <tr>
-              <th className="px-4 py-3">Başlık</th>
-              <th className="px-4 py-3">Kredi veren</th>
-              <th className="px-4 py-3">Anapara</th>
-              <th className="px-4 py-3">Ödenen</th>
-              <th className="px-4 py-3">Kalan</th>
-              <th className="px-4 py-3">Taksit</th>
-              <th className="px-4 py-3">Durum</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((l) => (
-              <tr key={l.id} className="border-t border-slate-100">
-                <td className="px-4 py-3 font-medium">
-                  <Link href={`/finance/loans/${l.id}`} className="text-baykus-700 hover:underline">
-                    {l.title}
-                  </Link>
-                </td>
-                <td className="px-4 py-3">{l.lender || "—"}</td>
-                <td className="px-4 py-3">{formatMoney(Number(l.principal_amount))}</td>
-                <td className="px-4 py-3">{formatMoney(Number(l.paid_amount))}</td>
-                <td className="px-4 py-3">{formatMoney(Number(l.remaining_amount))}</td>
-                <td className="px-4 py-3">
-                  {l.paid_count}/{l.installment_count}
-                </td>
-                <td className="px-4 py-3">{l.status}</td>
-                <td className="px-4 py-3 text-right">
-                  <Link href={`/finance/loans/${l.id}`} className="text-baykus-600 hover:underline">
-                    Aç
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
-                  Kredi yok
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="space-y-2">
+        {visible.map((l) => {
+          const overdue = Number(l.overdue_count || 0) > 0;
+          const nextDue = l.next_due_date ? String(l.next_due_date).slice(0, 10) : null;
+          return (
+            <Link
+              key={l.id}
+              href={`/finance/loans/${l.id}`}
+              className="flex items-center justify-between rounded px-4 py-3 text-white hover:opacity-95"
+              style={{ background: overdue ? "#b94a48" : "#82bdd9", minHeight: 64 }}
+            >
+              <div>
+                <div className="font-semibold">{l.title}</div>
+                <div className="text-xs opacity-90">
+                  {l.lender || "—"} · {l.paid_count}/{l.installment_count} ödendi
+                  {nextDue && ` · Sonraki: ${nextDue}`}
+                  {overdue ? " · ⚠ Geciken taksit" : ""}
+                </div>
+              </div>
+              <div className="rounded bg-white text-slate-900 px-3 py-1.5 text-sm font-semibold tabular-nums">
+                TL {formatMoney(Number(l.remaining_amount)).replace(" ₺", "").replace("₺", "")}
+              </div>
+            </Link>
+          );
+        })}
+        {visible.length === 0 && (
+          <div className="rounded border bg-white py-10 text-center text-sm text-baykus-muted">
+            Kayıtlı aktif kredi bulunmuyor.
+          </div>
+        )}
       </div>
     </div>
   );

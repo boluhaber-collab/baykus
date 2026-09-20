@@ -557,6 +557,8 @@ export type CashDailyPanel = {
     total_amount: number;
     deposit_amount: number;
     remaining_amount: number;
+    cost?: number;
+    profit?: number | null;
     status: string;
     href: string;
   }[];
@@ -1097,6 +1099,9 @@ export type Loan = {
   unpaid_count: number;
   paid_amount: number;
   remaining_amount: number;
+  this_month_due?: number;
+  next_due_date?: string | null;
+  overdue_count?: number;
   created_at: string;
   updated_at: string;
   installments?: LoanInstallment[];
@@ -1206,14 +1211,19 @@ export type Asset = {
   id: number;
   name: string;
   category?: string | null;
+  serial_no?: string | null;
   purchase_date?: string | null;
   cost: number;
+  current_value?: number | null;
+  status?: string;
+  maintenance_date?: string | null;
   depreciation_method: string;
   useful_life_months?: number | null;
   note?: string | null;
   active: boolean;
   book_value?: number | null;
   monthly_depreciation?: number | null;
+  maintenance_due_soon?: boolean;
   created_at: string;
   updated_at: string;
 };

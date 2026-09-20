@@ -69,6 +69,9 @@ class LoanListItem(BaseModel):
     unpaid_count: int = 0
     paid_amount: Decimal = Decimal("0")
     remaining_amount: Decimal = Decimal("0")
+    this_month_due: Decimal = Decimal("0")
+    next_due_date: date | None = None
+    overdue_count: int = 0
     created_at: datetime
     updated_at: datetime
 

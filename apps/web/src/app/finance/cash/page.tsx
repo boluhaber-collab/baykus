@@ -162,6 +162,9 @@ export default function CashPage() {
             <span>
               En Çok Satılan Ürün: <strong>{s.top_product}</strong>
             </span>
+            <span>
+              En Çok Kazandıran Kategori: <strong>{s.top_category}</strong>
+            </span>
           </div>
         )}
       </fieldset>
@@ -219,6 +222,8 @@ export default function CashPage() {
                   <th className="text-right">Toplam</th>
                   <th className="text-right">Kapora</th>
                   <th className="text-right">Kalan</th>
+                  <th className="text-right">Maliyet</th>
+                  <th className="text-right">Kâr</th>
                   <th>Durum</th>
                 </tr>
               </thead>
@@ -241,6 +246,8 @@ export default function CashPage() {
                     <td className="text-right tabular-nums">{formatMoney(o.total_amount)}</td>
                     <td className="text-right tabular-nums text-emerald-700">{formatMoney(o.deposit_amount)}</td>
                     <td className="text-right tabular-nums text-amber-700">{formatMoney(o.remaining_amount)}</td>
+                    <td className="text-right tabular-nums text-slate-600">{formatMoney(o.cost || 0)}</td>
+                    <td className="text-right tabular-nums text-emerald-800">{formatMoney(o.profit || 0)}</td>
                     <td>
                       <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${statusBadgeClass(o.status)}`}>
                         {o.status}
@@ -250,7 +257,7 @@ export default function CashPage() {
                 ))}
                 {(panel?.orders || []).length === 0 && (
                   <tr>
-                    <td colSpan={10} className="text-center text-baykus-muted py-6">
+                    <td colSpan={12} className="text-center text-baykus-muted py-6">
                       Aralıkta sipariş yok
                     </td>
                   </tr>

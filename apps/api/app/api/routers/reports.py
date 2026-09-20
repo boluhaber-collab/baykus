@@ -1124,7 +1124,7 @@ def cari_statements_report(
         "count": len(detail),
         "assumptions": [
             "Borç (debit) alacağı artırır; alacak (credit) tahsilattır.",
-            "CSV dışa aktarım masaüstü Cari Döküm PDF yerine geçer.",
+            "CSV / basit PDF / yazdırılabilir HTML — masaüstü ReportLab Cari Döküm şablonu değildir.",
         ],
     }
     if _wants_csv(request, format):
@@ -1133,6 +1133,56 @@ def cari_statements_report(
             ["id", "tarih", "tip", "borc", "alacak", "bakiye", "not"],
             [[d["id"], d["date"], d["type"], d["debit"], d["credit"], d["balance"], d["note"]] for d in detail],
         )
+    if (format or "").lower() == "pdf":
+        from fastapi.responses import Response
+        from app.services.pdf import build_cari_statement_pdf
+        from app.models.settings_model import AppSetting
+
+        settings_map: dict[str, str] = {}
+        for row in db.query(AppSetting).all():
+            settings_map[row.key] = row.value or ""
+        pdf = build_cari_statement_pdf(
+            customer.name,
+            detail,
+            summary["closing_balance"],
+            settings_map,
+        )
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="cari_dokum_{customer.id}.pdf"'},
+        )
+    if (format or "").lower() == "html":
+        from fastapi.responses import HTMLResponse
+
+        rows_html = "".join(
+            f"<tr><td>{d['date'] or ''}</td><td>{d['type']}</td>"
+            f"<td style='text-align:right'>{d['debit']:.2f}</td>"
+            f"<td style='text-align:right'>{d['credit']:.2f}</td>"
+            f"<td style='text-align:right'>{d['balance']:.2f}</td>"
+            f"<td>{(d['note'] or '')}</td></tr>"
+            for d in detail
+        )
+        html = f"""<!DOCTYPE html><html><head><meta charset=utf-8>
+<title>Cari Döküm — {customer.name}</title>
+<style>
+body{{font-family:Segoe UI,Arial,sans-serif;margin:24px;color:#111}}
+h1{{font-size:18px;margin:0 0 8px}}
+.meta{{color:#64748b;font-size:13px;margin-bottom:16px}}
+table{{border-collapse:collapse;width:100%;font-size:12px}}
+th,td{{border:1px solid #cbd5e1;padding:6px 8px}}
+th{{background:#1e3a5f;color:#fff;text-align:left}}
+tr:nth-child(even){{background:#f8fafc}}
+@media print{{button{{display:none}}}}
+</style></head><body>
+<button onclick="window.print()">Yazdır</button>
+<h1>Cari Döküm / Ekstre</h1>
+<div class="meta">Müşteri: <b>{customer.name}</b> · Kapanış: <b>{summary['closing_balance']:.2f} ₺</b>
+· Web basit ekstre (masaüstü ReportLab şablonu değil)</div>
+<table><thead><tr><th>Tarih</th><th>Tip</th><th>Borç</th><th>Alacak</th><th>Bakiye</th><th>Not</th></tr></thead>
+<tbody>{rows_html}</tbody></table>
+</body></html>"""
+        return HTMLResponse(html)
     return {"summary": summary, "rows": detail}
 
 

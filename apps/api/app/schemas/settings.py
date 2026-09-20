@@ -74,6 +74,8 @@ class AppSettingsOut(BaseModel):
     postgres_db: str = "baykus"
     postgres_user: str = ""
     postgres_ssl: str = "Hayır"
+    merkezi_db_turu: str = "PostgreSQL"
+    sunucu_lokasyon: str = ""
     # Hızlı İşlemler / Sol Menü / Şablon (non-secret JSON)
     hizli_islemler: list[str] = Field(default_factory=lambda: list(DEFAULT_HIZLI))
     sol_menu_sirasi: list[str] = Field(default_factory=lambda: list(DEFAULT_SOL_MENU))
@@ -108,6 +110,8 @@ class AppSettingsUpdate(BaseModel):
     postgres_db: str | None = None
     postgres_user: str | None = None
     postgres_ssl: str | None = None
+    merkezi_db_turu: str | None = None
+    sunucu_lokasyon: str | None = None
     hizli_islemler: list[str] | None = None
     sol_menu_sirasi: list[str] | None = None
     sol_menu_adlari: dict[str, str] | None = None

@@ -487,13 +487,41 @@ def cash_daily_panel(
         .all()
     )
 
+    from app.models.product import Product
+
+    # Prefetch product cost/purchase for line costing
+    product_ids = {
+        ln.product_id
+        for o in orders
+        for ln in (o.lines or [])
+        if ln.product_id
+    }
+    products_by_id: dict[int, Product] = {}
+    if product_ids:
+        for p in db.query(Product).filter(Product.id.in_(product_ids)).all():
+            products_by_id[p.id] = p
+
+    def _line_unit_cost(ln) -> Decimal:
+        """Prefer product.cost, else purchase_price (desktop Alış Fiyatı)."""
+        if ln.product_id and ln.product_id in products_by_id:
+            p = products_by_id[ln.product_id]
+            c = _dec(getattr(p, "cost", 0))
+            if c > 0:
+                return c
+            pp = _dec(getattr(p, "purchase_price", 0))
+            if pp > 0:
+                return pp
+        return Decimal("0")
+
     order_count = 0
     revenue = Decimal("0")
     collections = Decimal("0")
     remaining_sum = Decimal("0")
+    cost_sum = Decimal("0")
     delivered = 0
     quote_count = 0
     product_qty: dict[str, int] = {}
+    category_rev: dict[str, Decimal] = {}
     order_rows = []
     for o in orders:
         ch = (getattr(o, "channel", None) or "")
@@ -514,11 +542,21 @@ def cash_daily_panel(
         if st == "Teslim Edildi":
             delivered += 1
         products = []
+        order_cost = Decimal("0")
         for ln in o.lines or []:
             name = (ln.description or "Ürün").strip()
             qty = int(ln.quantity or 0)
+            unit_c = _line_unit_cost(ln)
+            line_cost = unit_c * Decimal(qty)
+            order_cost += line_cost
             product_qty[name] = product_qty.get(name, 0) + qty
             products.append(f"{name}×{qty}" if qty else name)
+            cat = "-"
+            if ln.product_id and ln.product_id in products_by_id:
+                cat = (products_by_id[ln.product_id].category or "-").strip() or "-"
+            category_rev[cat] = category_rev.get(cat, Decimal("0")) + _dec(ln.line_total)
+        cost_sum += order_cost
+        order_profit = total - order_cost
         order_rows.append(
             {
                 "id": o.id,
@@ -532,7 +570,8 @@ def cash_daily_panel(
                 "total_amount": float(total),
                 "deposit_amount": float(effective_paid),
                 "remaining_amount": float(rem),
-                "profit": None,
+                "cost": float(order_cost),
+                "profit": float(order_profit),
                 "status": st,
                 "href": f"/orders/{o.id}",
             }
@@ -541,6 +580,9 @@ def cash_daily_panel(
     top_product = "-"
     if product_qty:
         top_product = max(product_qty.items(), key=lambda x: x[1])[0]
+    top_category = "-"
+    if category_rev:
+        top_category = max(category_rev.items(), key=lambda x: x[1])[0]
 
     # Expenses in range
     expense_total = _dec(
@@ -598,7 +640,7 @@ def cash_daily_panel(
         )
     movements.sort(key=lambda x: x["date"], reverse=True)
 
-    cost = Decimal("0")  # maliyet ayrı maliyet modülünde; masaüstü Excel alanı
+    cost = cost_sum
     gross = revenue - cost
     net = gross - expense_total
     registers = db.query(CashRegister).order_by(CashRegister.id).all()
@@ -620,7 +662,7 @@ def cash_daily_panel(
             "quote_count": quote_count,
             "delivered_count": delivered,
             "top_product": top_product,
-            "top_category": "-",
+            "top_category": top_category,
         },
         "orders": order_rows,
         "movements": movements,

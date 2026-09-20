@@ -39,8 +39,8 @@ export default function AuditLogPage() {
         <Link href="/settings" className="text-sm text-baykus-600 hover:underline">
           ← Ayarlar
         </Link>
-        <h1 className="text-2xl font-bold mt-2">Denetim kaydı</h1>
-        <p className="text-sm text-slate-500">Admin — create / update / delete günlükleri</p>
+        <h1 className="text-2xl font-bold mt-2">İşlem Geçmişi</h1>
+        <p className="text-sm text-slate-500">Sistem › İşlem Geçmişi · create / update / delete (admin)</p>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
@@ -53,7 +53,7 @@ export default function AuditLogPage() {
         <input
           value={entityType}
           onChange={(e) => setEntityType(e.target.value)}
-          placeholder="entity_type (order, quote…)"
+          placeholder="Varlık tipi (order, loan, asset…)"
           className="rounded-lg border px-3 py-2 text-sm"
         />
         <input
