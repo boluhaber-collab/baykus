@@ -6,7 +6,8 @@ import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import {
   Customer,
   Product,
-  ProductPricingInfo,
+  ProductDetail,
+  ProductVariant,
   apiFetch,
   formatMoney,
 } from "@/lib/api";
@@ -28,25 +29,31 @@ const PRINT_TYPES = ["", "DTF", "Sublimasyon", "Serigrafi", "Nakış", "Transfer
 type Line = {
   key: string;
   product_id: string;
+  variant_id?: string;
   description: string;
   quantity: string;
   size: string;
   color: string;
   print_type: string;
   unit_price: string;
+  depo: string;
   stock_qty?: number | null;
 };
+
+type Wh = { id: number; name: string; is_default?: boolean; is_active?: boolean };
 
 function emptyLine(): Line {
   return {
     key: Math.random().toString(36).slice(2),
     product_id: "",
+    variant_id: "",
     description: "",
     quantity: "1",
     size: "",
     color: "",
     print_type: "",
     unit_price: "0",
+    depo: "Ana Depo",
     stock_qty: null,
   };
 }
@@ -86,6 +93,15 @@ function CreateSaleInner() {
   const [payAmount, setPayAmount] = useState("");
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [productQ, setProductQ] = useState("");
+  const [warehouses, setWarehouses] = useState<Wh[]>([]);
+  const [variantPick, setVariantPick] = useState<{
+    lineKey: string;
+    product: Product;
+    detail: ProductDetail;
+    variants: ProductVariant[];
+    depo: string;
+    whStocks: Record<string, number>;
+  } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -98,10 +114,12 @@ function CreateSaleInner() {
     Promise.all([
       apiFetch<Customer[]>("/api/customers"),
       apiFetch<Product[]>("/api/products"),
+      apiFetch<Wh[]>("/api/stock/warehouses?active=true").catch(() => [] as Wh[]),
     ])
-      .then(([c, p]) => {
+      .then(([c, p, w]) => {
         setCustomers(c);
         setProducts(p);
+        setWarehouses(w || []);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Yükleme hatası"));
   }, []);
@@ -112,26 +130,150 @@ function CreateSaleInner() {
   );
 
   const filteredCustomers = useMemo(() => {
-    const needle = customerQ.trim().toLowerCase();
+    const needle = customerQ.trim().toLocaleLowerCase("tr");
     if (!needle) return customers.slice(0, 80);
     return customers
       .filter((c) =>
         [c.name, c.company, c.phone, c.code]
           .filter(Boolean)
           .join(" ")
-          .toLowerCase()
+          .toLocaleLowerCase("tr")
           .includes(needle),
       )
       .slice(0, 80);
   }, [customers, customerQ]);
 
   const filteredProducts = useMemo(() => {
-    const needle = productQ.trim().toLowerCase();
+    const needle = productQ.trim().toLocaleLowerCase("tr");
     if (!needle) return products;
     return products.filter((p) =>
-      [p.sku, p.name, p.category].filter(Boolean).join(" ").toLowerCase().includes(needle),
+      [p.sku, p.name, p.category]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("tr")
+        .includes(needle),
     );
   }, [products, productQ]);
+
+  async function loadWhStocks(productId: number): Promise<Record<string, number>> {
+    const map: Record<string, number> = {};
+    await Promise.all(
+      warehouses.map(async (w) => {
+        try {
+          const rows = await apiFetch<{ product_id: number; variant_id: number | null; stock_qty: number }[]>(
+            `/api/stock/warehouses/${w.id}/stock`,
+          );
+          for (const r of rows) {
+            if (r.product_id === productId) {
+              const key = `${w.name}::${r.variant_id ?? 0}`;
+              map[key] = r.stock_qty;
+              map[`${w.name}::0`] = (map[`${w.name}::0`] || 0) + r.stock_qty;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }),
+    );
+    return map;
+  }
+
+  async function applyProductToLine(lineKey: string, pid: string) {
+    const prod = products.find((p) => String(p.id) === pid);
+    if (!pid || !prod) {
+      updateLine(lineKey, {
+        product_id: "",
+        variant_id: "",
+        description: "",
+        unit_price: "0",
+        stock_qty: null,
+        size: "",
+        color: "",
+      });
+      return;
+    }
+    const defaultDepo =
+      prod.warehouse ||
+      warehouses.find((w) => w.is_default)?.name ||
+      warehouses[0]?.name ||
+      "Ana Depo";
+    try {
+      const detail = await apiFetch<ProductDetail>(`/api/products/${pid}`);
+      const variants = detail.variants || [];
+      const depo = detail.warehouse || defaultDepo;
+      const whStocks = await loadWhStocks(Number(pid));
+      if (variants.length > 1) {
+        setVariantPick({ lineKey, product: prod, detail, variants, depo, whStocks });
+        updateLine(lineKey, {
+          product_id: pid,
+          description: prod.name,
+          unit_price: String(prod.base_price ?? 0),
+          depo,
+          stock_qty: prod.stock_qty ?? null,
+        });
+        return;
+      }
+      if (variants.length === 1) {
+        const v = variants[0]!;
+        const stock =
+          whStocks[`${depo}::${v.id}`] ??
+          whStocks[`${depo}::0`] ??
+          v.stock_qty ??
+          detail.stock_qty ??
+          null;
+        updateLine(lineKey, {
+          product_id: pid,
+          variant_id: String(v.id),
+          description: prod.name,
+          size: v.size || "",
+          color: v.color || "",
+          print_type: v.print_type || "",
+          unit_price: String(v.price ?? prod.base_price ?? 0),
+          depo,
+          stock_qty: stock,
+        });
+        return;
+      }
+      updateLine(lineKey, {
+        product_id: pid,
+        variant_id: "",
+        description: detail.name || prod.name,
+        unit_price: String(detail.base_price ?? prod.base_price ?? 0),
+        depo,
+        stock_qty: whStocks[`${depo}::0`] ?? detail.stock_qty ?? prod.stock_qty ?? null,
+      });
+    } catch {
+      updateLine(lineKey, {
+        product_id: pid,
+        description: prod.name,
+        unit_price: String(prod.base_price ?? 0),
+        depo: defaultDepo,
+        stock_qty: prod.stock_qty ?? null,
+      });
+    }
+  }
+
+  function confirmVariant(v: ProductVariant, depoOverride?: string) {
+    if (!variantPick) return;
+    const depo = depoOverride || variantPick.depo;
+    const stock =
+      variantPick.whStocks[`${depo}::${v.id}`] ??
+      variantPick.whStocks[`${depo}::0`] ??
+      v.stock_qty ??
+      null;
+    updateLine(variantPick.lineKey, {
+      product_id: String(variantPick.product.id),
+      variant_id: String(v.id),
+      description: variantPick.product.name,
+      size: v.size || "",
+      color: v.color || "",
+      print_type: v.print_type || "",
+      unit_price: String(v.price ?? variantPick.product.base_price ?? 0),
+      depo,
+      stock_qty: stock,
+    });
+    setVariantPick(null);
+  }
 
   const linesTotal = useMemo(() => {
     return lines.reduce((sum, l) => {
@@ -185,6 +327,7 @@ function CreateSaleInner() {
       .filter((l) => l.description.trim())
       .map((l) => ({
         product_id: l.product_id ? Number(l.product_id) : null,
+        variant_id: l.variant_id ? Number(l.variant_id) : null,
         description: l.description.trim(),
         quantity: Math.max(1, Number(l.quantity) || 1),
         size: l.size || null,
@@ -193,6 +336,7 @@ function CreateSaleInner() {
         unit_price: Number(l.unit_price) || 0,
         discount_rate: 0,
         discount_amount: 0,
+        warehouse: l.depo || null,
       }));
     if (!payload.length) throw new Error("En az bir ürün satırı gerekli");
     return payload;
@@ -437,6 +581,7 @@ function CreateSaleInner() {
                   <th>Açıklama</th>
                   <th>Beden</th>
                   <th>Renk</th>
+                  <th>Depo</th>
                   <th>Baskı</th>
                   <th>Adet</th>
                   <th>Birim Fiyat</th>
@@ -453,26 +598,8 @@ function CreateSaleInner() {
                         <select
                           className="bk-input"
                           value={line.product_id}
-                          onChange={async (e) => {
-                            const pid = e.target.value;
-                            const prod = products.find((p) => String(p.id) === pid);
-                            updateLine(line.key, {
-                              product_id: pid,
-                              description: prod?.name || line.description,
-                              unit_price: prod ? String(prod.base_price ?? 0) : line.unit_price,
-                              stock_qty: prod?.stock_qty ?? null,
-                            });
-                            if (!pid) return;
-                            try {
-                              const info = await apiFetch<ProductPricingInfo>(`/api/products/${pid}/pricing`);
-                              updateLine(line.key, {
-                                description: info.name || prod?.name || line.description,
-                                unit_price: String(info.unit_price ?? 0),
-                                stock_qty: info.stock_qty,
-                              });
-                            } catch {
-                              /* keep */
-                            }
+                          onChange={(e) => {
+                            void applyProductToLine(line.key, e.target.value);
                           }}
                         >
                           <option value="">— Manuel —</option>
@@ -505,6 +632,32 @@ function CreateSaleInner() {
                       </td>
                       <td>
                         <input className="bk-input w-20" value={line.color} onChange={(e) => updateLine(line.key, { color: e.target.value })} />
+                      </td>
+                      <td>
+                        <select
+                          className="bk-input w-28"
+                          value={line.depo}
+                          onChange={(e) => {
+                            const depo = e.target.value;
+                            updateLine(line.key, { depo });
+                            if (line.product_id) {
+                              void (async () => {
+                                const map = await loadWhStocks(Number(line.product_id));
+                                const vid = line.variant_id ? Number(line.variant_id) : 0;
+                                updateLine(line.key, {
+                                  depo,
+                                  stock_qty: map[`${depo}::${vid}`] ?? map[`${depo}::0`] ?? line.stock_qty,
+                                });
+                              })();
+                            }
+                          }}
+                        >
+                          {(warehouses.length ? warehouses.map((w) => w.name) : [line.depo || "Ana Depo"]).map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td>
                         <select className="bk-input w-28" value={line.print_type} onChange={(e) => updateLine(line.key, { print_type: e.target.value })}>
@@ -622,6 +775,63 @@ function CreateSaleInner() {
           </Link>
         </div>
       </form>
+
+      {variantPick && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-slate-200">
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <div>
+                <div className="text-sm font-bold">Varyant / Depo Seç</div>
+                <div className="text-xs text-baykus-muted">{variantPick.product.name}</div>
+              </div>
+              <button type="button" className="text-slate-500 hover:text-slate-800 text-lg leading-none" onClick={() => setVariantPick(null)}>
+                ×
+              </button>
+            </div>
+            <div className="px-4 py-2 border-b">
+              <label className="text-[11px] text-baykus-muted">Depo</label>
+              <select
+                className="bk-input w-full mt-0.5"
+                value={variantPick.depo}
+                onChange={(e) => setVariantPick({ ...variantPick, depo: e.target.value })}
+              >
+                {(warehouses.length ? warehouses.map((w) => w.name) : [variantPick.depo]).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="max-h-72 overflow-auto p-2 space-y-1">
+              {variantPick.variants.map((v) => {
+                const stock =
+                  variantPick.whStocks[`${variantPick.depo}::${v.id}`] ??
+                  variantPick.whStocks[`${variantPick.depo}::0`] ??
+                  v.stock_qty ??
+                  0;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => confirmVariant(v)}
+                    className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-baykus-primary hover:bg-sky-50 transition"
+                  >
+                    <div className="text-sm font-medium">
+                      {[v.color, v.size, v.name].filter(Boolean).join(" / ") || v.sku || `Varyant #${v.id}`}
+                    </div>
+                    <div className="text-xs text-baykus-muted flex justify-between mt-0.5">
+                      <span className={stock <= 0 ? "text-red-600 font-semibold" : ""}>
+                        Stok ({variantPick.depo}): {stock}
+                      </span>
+                      <span className="font-semibold text-baykus-text">{formatMoney(Number(v.price || 0))}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

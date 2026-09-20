@@ -737,7 +737,7 @@ export default function DashboardPage() {
             ↻ Yenile
           </button>
           <Link
-            href="/production"
+            href="/orders/weekly-plan"
             className="bk-btn text-xs font-semibold text-white"
             style={{ backgroundColor: "#f59e0b" }}
           >

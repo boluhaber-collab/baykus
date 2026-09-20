@@ -35,13 +35,14 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 |----------|-----|-------|
 | Sipariş Merkezi | `/orders` | done (sekmeler: Teklifler/Siparişler/Açık/Hazırlanıyor/Baskıda/Hazır/Teslim + Kanban; satır renkleri; toplu durum; teklif→sipariş) |
 | Satışlar (= Direkt Satışlar) | `/sales` | done — hub değil; özet kartlar + 3 CTA + filtre + tablo; iptal→stok iade |
-| Satış / Teklif Oluştur | `/sales/create` | done (beden/renk/baskı, ürün ekle, teslim tarihi, kapora/kalan, Nakit→kasa / EFT·Kart→banka, stok↓) |
+| Satış / Teklif Oluştur | `/sales/create` | done (batch 12: varyant/depo picker + warehouse_stocks; beden/renk/baskı; kapora/stok↓) |
 | Perakende Satışlar | `/sales/retail` | done |
 | Perakende Satış Gir | `/sales/retail/new` | done — masaüstü `perakende_satis_gir`; kayıt→stok↓ + kasa/banka |
 | Teklifler | `/quotes` | done |
 | Sipariş Listesi | `/orders` | done |
 | Teslim Edilen Siparişler | `/orders?status=Teslim%20Edildi` | done |
 | Teslim Takibi | `/orders/delivery` | done |
+| Haftalık Plan | `/orders/weekly-plan` | done (batch 12; StatusFooter) |
 | Sipariş Yaşam Çizgisi | `/orders/kanban` | done |
 
 ## Üretim / Atölye
@@ -259,5 +260,23 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, masaüs
 | Sublimasyon Baskı Süreleri | Ürün / Baskı Süresi (metin) / Diğer Talimatlar · arama · `duration_text` | done |
 
 API: Alembic **016** (`price_list_items` baskılı alanlar, `sublimation_print_times.duration_text`). SQLite: `python -m app.bootstrap_sqlite` kolon yamaları.
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.
+
+
+## Batch 12 — TS noise + Hızlı satış varyant/depo + Haftalık Plan + SAT talep + Teklif şartları (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| TS: `.casefold` | `/finance/open-balances` → `toLocaleLowerCase("tr")` | done |
+| TS: WA `customer_id` | `/whatsapp/track` Candidate tipine eklendi | done |
+| TR lowercasing | hızlı satış / WA track / açık bakiyeler | done |
+| Hızlı satış varyant/depo | `/sales/create` — Perakende modal parity; beden/renk/depo; `warehouse_stocks` stok kontrolü | done |
+| Haftalık Plan | `/orders/weekly-plan` + `GET /api/dashboard/weekly-plan` · StatusFooter/dashboard alt çubuk | done |
+| Satın Alma Talebi | `/purchases/new` — kritik stok seçim · talep adedi · satın almaya dönüştür (+ manuel sekme) | done |
+| Teklif şartları | `/quotes/new` + `/quotes/[id]` — Şablon Yönetimi alanları (sartlar/kapanış/başlık) | done |
+| İnce hub kalınlaştırma | `/stock/critical`, `/orders/delivery`, `/payables`, `/communication`, `/orders/[id]/timeline` | done |
+
+API: `CriticalStockItem` + supplier/purchase/size/color/print; weekly-plan dashboard endpoint. Alembic yok.
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.

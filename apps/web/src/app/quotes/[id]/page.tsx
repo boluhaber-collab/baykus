@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import {
+  AppSettings,
   Customer,
   Product,
   QuoteDetail,
@@ -67,6 +68,7 @@ export default function QuoteDetailPage() {
   const [validUntil, setValidUntil] = useState("");
   const [discount, setDiscount] = useState("0");
   const [lines, setLines] = useState<EditLine[]>([emptyLine()]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -87,6 +89,12 @@ export default function QuoteDetailPage() {
   useEffect(() => {
     if (Number.isFinite(id)) load();
   }, [id, load]);
+
+  useEffect(() => {
+    apiFetch<AppSettings>("/api/settings/app")
+      .then(setSettings)
+      .catch(() => setSettings(null));
+  }, []);
 
   useEffect(() => {
     if (!editing) return;
@@ -537,6 +545,33 @@ export default function QuoteDetailPage() {
               </tbody>
             </table>
           </div>
+
+          {settings && (settings.teklif_sablon_sartlar_goster === "Evet" || settings.teklif_sablon_kapanis) && (
+            <div className="mt-6 rounded-xl border bg-white p-5 shadow-sm space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold text-sm">Teklif Şartları</h2>
+                <Link href="/settings?tab=sablon" className="text-xs text-baykus-600 hover:underline">
+                  Şablon Yönetimi →
+                </Link>
+              </div>
+              {(settings.teklif_sablon_baslik || settings.teklif_sablon_alt_baslik) && (
+                <div>
+                  <div className="text-sm font-bold">{settings.teklif_sablon_baslik}</div>
+                  {settings.teklif_sablon_alt_baslik && (
+                    <div className="text-xs text-slate-500">{settings.teklif_sablon_alt_baslik}</div>
+                  )}
+                </div>
+              )}
+              {settings.teklif_sablon_sartlar_goster === "Evet" && settings.teklif_sablon_sartlar && (
+                <pre className="whitespace-pre-wrap text-xs bg-slate-50 rounded-lg border px-3 py-2 font-sans">
+{settings.teklif_sablon_sartlar}
+                </pre>
+              )}
+              {settings.teklif_sablon_kapanis && (
+                <p className="text-xs text-slate-700 italic">{settings.teklif_sablon_kapanis}</p>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

@@ -164,6 +164,11 @@ class CriticalStockItem(BaseModel):
     stock_qty: int
     critical_stock_threshold: int
     warehouse: str | None
+    supplier_name: str | None = None
+    purchase_price: float = 0
+    size: str | None = None
+    color: str | None = None
+    print_type: str | None = None
 
 
 class ProductPricingOut(BaseModel):

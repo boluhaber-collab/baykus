@@ -456,6 +456,11 @@ export type CriticalStockItem = {
   stock_qty: number;
   critical_stock_threshold: number;
   warehouse?: string | null;
+  supplier_name?: string | null;
+  purchase_price?: number;
+  size?: string | null;
+  color?: string | null;
+  print_type?: string | null;
 };
 
 export function stockBadgeClass(qty: number, threshold: number, isCritical?: boolean): string {

@@ -7,6 +7,7 @@ import { apiFetch, formatMoney } from "@/lib/api";
 type Candidate = {
   id: number;
   order_number: string;
+  customer_id?: number | null;
   customer_name: string | null;
   customer_phone: string | null;
   status: string;
@@ -85,11 +86,11 @@ export default function WhatsAppTrackPage() {
     let rows = data?.candidates || [];
     if (tur !== "Tümü") rows = rows.filter((r) => r.takip_turu === tur);
     if (q.trim()) {
-      const needle = q.trim().toLowerCase();
+      const needle = q.trim().toLocaleLowerCase("tr");
       rows = rows.filter((r) =>
         [r.takip_turu, r.order_number, r.customer_name, r.customer_phone, r.status, r.neden, r.products]
           .join(" ")
-          .toLowerCase()
+          .toLocaleLowerCase("tr")
           .includes(needle),
       );
     }

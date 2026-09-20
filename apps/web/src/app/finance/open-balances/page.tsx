@@ -51,12 +51,12 @@ export default function OpenBalancesPage() {
   const filtered = useMemo(() => {
     let rows = data?.open_orders || [];
     if (status !== "Tümü") rows = rows.filter((r) => r.status === status);
-    const needle = q.trim().casefold?.() || q.trim().toLowerCase();
+    const needle = q.trim().toLocaleLowerCase("tr");
     if (needle) {
       rows = rows.filter((r) =>
         [r.customer_name, r.customer_phone, r.order_number, r.products, r.status]
           .join(" ")
-          .toLowerCase()
+          .toLocaleLowerCase("tr")
           .includes(needle),
       );
     }

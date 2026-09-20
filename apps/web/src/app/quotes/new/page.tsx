@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { apiFetch, Customer, Product, ProductPricingInfo, QUOTE_STATUSES, formatMoney } from "@/lib/api";
+import { apiFetch, AppSettings, Customer, Product, ProductPricingInfo, QUOTE_STATUSES, formatMoney } from "@/lib/api";
 
 type Line = {
   key: string;
@@ -43,6 +43,7 @@ export default function NewQuotePage() {
   const [validUntil, setValidUntil] = useState("");
   const [discount, setDiscount] = useState("0");
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -55,10 +56,12 @@ export default function NewQuotePage() {
     Promise.all([
       apiFetch<Customer[]>("/api/customers"),
       apiFetch<Product[]>("/api/products"),
+      apiFetch<AppSettings>("/api/settings/app").catch(() => null),
     ])
-      .then(([c, p]) => {
+      .then(([c, p, s]) => {
         setCustomers(c);
         setProducts(p);
+        if (s) setSettings(s);
       })
       .catch((e) => setError(e.message));
   }, []);
@@ -262,6 +265,43 @@ export default function NewQuotePage() {
             </div>
           ))}
         </div>
+
+        {(settings?.teklif_sablon_sartlar_goster === "Evet" || settings?.teklif_sablon_kapanis) && (
+          <div className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">Teklif Şartları / Şablon</h2>
+              <Link href="/settings?tab=sablon" className="text-xs text-baykus-primary hover:underline">
+                Şablon Yönetimi →
+              </Link>
+            </div>
+            {settings.teklif_sablon_baslik && (
+              <div>
+                <div className="text-[10px] text-baykus-muted uppercase">Başlık</div>
+                <div className="text-sm font-bold">{settings.teklif_sablon_baslik}</div>
+                {settings.teklif_sablon_alt_baslik && (
+                  <div className="text-xs text-baykus-muted">{settings.teklif_sablon_alt_baslik}</div>
+                )}
+              </div>
+            )}
+            {settings.teklif_sablon_sartlar_goster === "Evet" && settings.teklif_sablon_sartlar && (
+              <div>
+                <div className="text-[10px] text-baykus-muted uppercase mb-1">Şartlar</div>
+                <pre className="whitespace-pre-wrap text-xs bg-baykus-bg rounded-lg border px-3 py-2 font-sans">
+{settings.teklif_sablon_sartlar}
+                </pre>
+              </div>
+            )}
+            {settings.teklif_sablon_kapanis && (
+              <div>
+                <div className="text-[10px] text-baykus-muted uppercase mb-1">Kapanış</div>
+                <p className="text-xs text-slate-700">{settings.teklif_sablon_kapanis}</p>
+              </div>
+            )}
+            <p className="text-[11px] text-baykus-muted">
+              PDF çıktısında Şablon Yönetimi alanları kullanılır (Ayarlar › Şablon Yönetimi).
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <button disabled={busy} type="submit" className="rounded-lg bg-baykus-primary text-white px-5 py-2 text-sm font-medium disabled:opacity-50">

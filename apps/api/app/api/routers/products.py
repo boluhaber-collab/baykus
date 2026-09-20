@@ -293,6 +293,11 @@ def list_critical_stock(
                             stock_qty=v.stock_qty,
                             critical_stock_threshold=threshold,
                             warehouse=p.warehouse,
+                            supplier_name=p.supplier_name,
+                            purchase_price=float(p.purchase_price or p.cost or 0),
+                            size=getattr(v, "size", None),
+                            color=getattr(v, "color", None),
+                            print_type=getattr(v, "print_type", None),
                         )
                     )
         elif (p.stock_qty or 0) < threshold:
@@ -308,6 +313,8 @@ def list_critical_stock(
                     stock_qty=p.stock_qty or 0,
                     critical_stock_threshold=threshold,
                     warehouse=p.warehouse,
+                    supplier_name=p.supplier_name,
+                    purchase_price=float(p.purchase_price or p.cost or 0),
                 )
             )
     return items

@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
@@ -703,3 +703,151 @@ def put_dashboard_notes(
     _notes_upsert(db, json.dumps(notes, ensure_ascii=False))
     db.commit()
     return DashboardNotesOut(notes=notes)
+
+
+@router.get("/weekly-plan")
+def weekly_plan(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+    week_start: str | None = Query(default=None),
+) -> dict:
+    """Haftalık Plan — teslim / kredi / not / masraf vade (masaüstü haftalik_plan_penceresi)."""
+    from datetime import date as date_cls, timedelta
+
+    from app.models.expense import Expense
+    from app.models.loan import Loan, LoanInstallment
+
+    _ = user
+    today = date_cls.today()
+    if week_start:
+        try:
+            y, m, d = (int(x) for x in week_start.split("-")[:3])
+            bas = date_cls(y, m, d)
+        except Exception:
+            bas = today - timedelta(days=today.weekday())
+    else:
+        bas = today - timedelta(days=today.weekday())
+    bas = bas - timedelta(days=bas.weekday())
+    gunler = [bas + timedelta(days=i) for i in range(7)]
+    gun_son = gunler[-1]
+    day_set = set(gunler)
+    days_out: dict[str, list[dict]] = {g.isoformat(): [] for g in gunler}
+
+    def ekle(
+        tarih: date_cls | None,
+        tur: str,
+        baslik: str,
+        detay: str = "",
+        renk: str = "#64748b",
+        href: str | None = None,
+    ) -> None:
+        if not tarih or tarih not in day_set:
+            return
+        days_out[tarih.isoformat()].append(
+            {
+                "tur": tur,
+                "baslik": (baslik or tur).strip() or tur,
+                "detay": (detay or "").strip(),
+                "renk": renk,
+                "href": href,
+            }
+        )
+
+    notes_row = db.query(AppSetting).filter(AppSetting.key == NOTES_KEY).first()
+    if notes_row and notes_row.value:
+        try:
+            raw = json.loads(notes_row.value)
+            if isinstance(raw, list):
+                for n in raw:
+                    at = str(n.get("at") or "")[:10]
+                    try:
+                        y, m, d = (int(x) for x in at.split("-")[:3])
+                        tdate = date_cls(y, m, d)
+                    except Exception:
+                        continue
+                    ekle(tdate, "Not", str(n.get("text") or "Not")[:80], "", "#0ea5e9", "/dashboard")
+        except Exception:
+            pass
+
+    for o in (
+        db.query(Order)
+        .options(joinedload(Order.customer), joinedload(Order.lines))
+        .filter(Order.status.notin_(list(CLOSED_STATUSES)))
+        .all()
+    ):
+        ddate = o.due_date or o.delivery_date
+        if not ddate or ddate < bas or ddate > gun_son:
+            continue
+        musteri = o.customer.name if o.customer else ""
+        urun = ""
+        if o.lines:
+            urun = (o.lines[0].description or "")[:40]
+        ekle(
+            ddate,
+            "Teslim",
+            f"{o.order_number} teslim",
+            " | ".join(x for x in [musteri, urun, o.status] if x),
+            "#16a34a",
+            f"/orders/{o.id}",
+        )
+
+    for r in (
+        db.query(LoanInstallment)
+        .join(Loan)
+        .filter(
+            LoanInstallment.is_paid.is_(False),
+            Loan.status == "aktif",
+            LoanInstallment.due_date >= bas,
+            LoanInstallment.due_date <= gun_son,
+        )
+        .all()
+    ):
+        title = r.loan.title if r.loan is not None else "Kredi"
+        renk = "#dc2626" if r.due_date < today else "#9333ea"
+        ekle(
+            r.due_date,
+            "Kredi",
+            title or "Kredi Ödemesi",
+            f"Ödeme: {_f(r.amount)} ₺",
+            renk,
+            f"/finance/loans/{r.loan_id}",
+        )
+
+    for e in (
+        db.query(Expense)
+        .filter(Expense.due_date.isnot(None), Expense.due_date >= bas, Expense.due_date <= gun_son)
+        .all()
+    ):
+        cat_name = ""
+        try:
+            cat_name = e.category.name if e.category is not None else ""
+        except Exception:
+            cat_name = ""
+        blob = f"{cat_name} {e.note or ''} {e.payment_method or ''}".casefold()
+        is_card = "kredi kart" in blob or "kart" in (e.payment_method or "").casefold()
+        ekle(
+            e.due_date,
+            "Kredi Kartı" if is_card else "Masraf",
+            (e.note or cat_name or "Masraf")[:60],
+            f"{_f(e.amount)} ₺",
+            "#f97316" if is_card else "#64748b",
+            "/finance/expenses",
+        )
+
+    for k in days_out:
+        days_out[k].sort(key=lambda x: (x["tur"], x["baslik"]))
+
+    return {
+        "week_start": bas.isoformat(),
+        "week_end": gun_son.isoformat(),
+        "today": today.isoformat(),
+        "days": [
+            {
+                "date": g.isoformat(),
+                "label": ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"][i],
+                "is_today": g == today,
+                "events": days_out[g.isoformat()],
+            }
+            for i, g in enumerate(gunler)
+        ],
+    }
