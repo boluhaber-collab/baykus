@@ -997,6 +997,25 @@ def seed(db: Session) -> None:
 
 
 def main() -> None:
+    """Seed only. For SQLite first-time setup prefer: python -m app.bootstrap_sqlite
+
+    Postgres: alembic upgrade head && python -m app.seed
+    SQLite:   python -m app.bootstrap_sqlite   (create_all + seed; skip alembic)
+    """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.database_url.startswith("sqlite"):
+        from sqlalchemy import inspect
+
+        import app.models  # noqa: F401
+        from app.db.base import Base
+        from app.db.session import engine
+
+        if "users" not in set(inspect(engine).get_table_names()):
+            print("SQLite tabloları yok — create_all...")
+            Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
     try:
         seed(db)

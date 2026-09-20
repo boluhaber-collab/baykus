@@ -42,6 +42,23 @@ docker compose up --build
 9. **Finans** → kasa/banka özeti; **Kasa** hareket ekle; **Banka** hesap detayı + hareket.  
 10. **Raporlar** → hub kartları; her rapor filtre + tablo + CSV.  
 
+## Windows (Docker yok)
+
+SQLite ile Docker / PostgreSQL olmadan çalıştırma:
+
+→ **[WINDOWS.md](WINDOWS.md)** (Türkçe adımlar)
+
+```powershell
+.\scripts\run-windows.ps1
+# sonra iki pencere:
+.\scripts\dev-api-windows.ps1
+.\scripts\dev-web-windows.ps1
+```
+
+`DATABASE_URL=sqlite:///./baykus.db` → şema için **Alembic değil**, `python -m app.bootstrap_sqlite` (`create_all` + seed).
+
+---
+
 ## Docker olmadan (yerel geliştirme)
 
 ### 1) PostgreSQL
