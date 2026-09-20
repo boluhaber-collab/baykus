@@ -1,4 +1,4 @@
-"""Depolar CRUD + stock-by-warehouse + transfer stub."""
+"""Depolar CRUD + per-warehouse stock + Depolar Arası Transfer."""
 
 from __future__ import annotations
 
@@ -8,8 +8,14 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db, require_roles
 from app.models.product import DEFAULT_WAREHOUSE, Product, ProductVariant, StockMovement
 from app.models.user import User
-from app.models.warehouse import Warehouse
-from app.schemas.warehouse import WarehouseCreate, WarehouseOut, WarehouseTransfer, WarehouseUpdate
+from app.models.warehouse import Warehouse, WarehouseStock
+from app.schemas.warehouse import (
+    WarehouseCreate,
+    WarehouseOut,
+    WarehouseTransfer,
+    WarehouseTransferResult,
+    WarehouseUpdate,
+)
 
 router = APIRouter(prefix="/stock/warehouses", tags=["warehouses"])
 
@@ -17,7 +23,112 @@ READ = ("admin", "satış", "üretim", "muhasebe")
 WRITE = ("admin", "üretim")
 
 
+def _vkey(variant_id: int | None) -> int:
+    return int(variant_id or 0)
+
+
+def _get_balance(
+    db: Session, product_id: int, variant_id: int | None, warehouse: str
+) -> WarehouseStock | None:
+    return (
+        db.query(WarehouseStock)
+        .filter(
+            WarehouseStock.product_id == product_id,
+            WarehouseStock.variant_key == _vkey(variant_id),
+            WarehouseStock.warehouse == warehouse,
+        )
+        .first()
+    )
+
+
+def _ensure_balance(
+    db: Session,
+    product: Product,
+    variant: ProductVariant | None,
+    warehouse: str,
+    *,
+    bootstrap_qty: int | None = None,
+) -> WarehouseStock:
+    """Get or create balance row; optionally seed qty from product/variant once."""
+    wh = (warehouse or DEFAULT_WAREHOUSE).strip() or DEFAULT_WAREHOUSE
+    vid = variant.id if variant else None
+    row = _get_balance(db, product.id, vid, wh)
+    if row:
+        return row
+    qty = 0
+    if bootstrap_qty is not None:
+        qty = max(0, int(bootstrap_qty))
+    row = WarehouseStock(
+        product_id=product.id,
+        variant_id=vid,
+        variant_key=_vkey(vid),
+        warehouse=wh,
+        quantity=qty,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def _sync_aggregate(db: Session, product: Product, variant: ProductVariant | None) -> None:
+    """Recompute product/variant stock_qty as sum of warehouse balances."""
+    if variant is not None:
+        total = (
+            db.query(WarehouseStock)
+            .filter(
+                WarehouseStock.product_id == product.id,
+                WarehouseStock.variant_key == variant.id,
+            )
+            .all()
+        )
+        variant.stock_qty = sum(int(r.quantity or 0) for r in total)
+        # Also keep product aggregate as sum of all variant balances + bare
+        all_rows = (
+            db.query(WarehouseStock).filter(WarehouseStock.product_id == product.id).all()
+        )
+        product.stock_qty = sum(int(r.quantity or 0) for r in all_rows)
+    else:
+        rows = (
+            db.query(WarehouseStock)
+            .filter(
+                WarehouseStock.product_id == product.id,
+                WarehouseStock.variant_key == 0,
+            )
+            .all()
+        )
+        product.stock_qty = sum(int(r.quantity or 0) for r in rows)
+
+
+def _bootstrap_from_legacy(db: Session, product: Product) -> None:
+    """If no warehouse_stocks yet for product, seed from product.warehouse + qtys."""
+    existing = (
+        db.query(WarehouseStock)
+        .filter(WarehouseStock.product_id == product.id)
+        .count()
+    )
+    if existing:
+        return
+    wh = (product.warehouse or DEFAULT_WAREHOUSE).strip() or DEFAULT_WAREHOUSE
+    if product.variants:
+        for v in product.variants:
+            q = int(v.stock_qty or 0)
+            if q > 0 or True:
+                _ensure_balance(db, product, v, wh, bootstrap_qty=q)
+    else:
+        _ensure_balance(db, product, None, wh, bootstrap_qty=int(product.stock_qty or 0))
+    db.flush()
+
+
 def _stats(db: Session, name: str) -> tuple[int, int]:
+    rows = (
+        db.query(WarehouseStock)
+        .filter(WarehouseStock.warehouse == name, WarehouseStock.quantity > 0)
+        .all()
+    )
+    if rows:
+        product_ids = {r.product_id for r in rows}
+        return len(product_ids), sum(int(r.quantity or 0) for r in rows)
+    # Legacy fallback: Product.warehouse label
     products = db.query(Product).filter(Product.warehouse == name).all()
     count = len(products)
     qty = 0
@@ -93,81 +204,116 @@ def create_warehouse(
     return _out(db, row)
 
 
-@router.post("/transfer")
+@router.post("/transfer", response_model=WarehouseTransferResult)
 def transfer_stock(
     payload: WarehouseTransfer,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(*WRITE)),
-) -> dict:
-    """Stub transfer: move product.warehouse label + record paired stock movements."""
-    if payload.from_warehouse.strip() == payload.to_warehouse.strip():
+) -> WarehouseTransferResult:
+    """Depolar Arası Transfer — decrease source balance, increase/create target."""
+    from_wh = payload.from_warehouse.strip()
+    to_wh = payload.to_warehouse.strip()
+    if from_wh.casefold() == to_wh.casefold():
         raise HTTPException(status_code=400, detail="Kaynak ve hedef depo aynı olamaz")
+    if payload.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Transfer miktarı sıfırdan büyük olmalıdır")
+
     product = db.get(Product, payload.product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Ürün bulunamadı")
-    current = (product.warehouse or DEFAULT_WAREHOUSE).strip()
-    if current != payload.from_warehouse.strip():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ürün şu an '{current}' deposunda (beklenen: {payload.from_warehouse})",
-        )
-    to_wh = payload.to_warehouse.strip()
-    if not db.query(Warehouse).filter(Warehouse.name == to_wh).first():
-        # Allow free-text target but prefer known warehouses
-        pass
 
-    variant = None
+    variant: ProductVariant | None = None
     if payload.variant_id:
         variant = db.get(ProductVariant, payload.variant_id)
         if not variant or variant.product_id != product.id:
             raise HTTPException(status_code=400, detail="Varyant bulunamadı")
-        qty_before = int(variant.stock_qty or 0)
+
+    # Prefer known warehouses but allow free-text target (desktop behavior)
+    if not db.query(Warehouse).filter(Warehouse.name == to_wh).first():
+        # create soft warehouse entry so UI lists it
+        db.add(Warehouse(name=to_wh, is_active=True, notes="Transfer ile oluştu"))
+        db.flush()
+
+    _bootstrap_from_legacy(db, product)
+
+    # Source qty: balance row or legacy product.warehouse match
+    src = _get_balance(db, product.id, variant.id if variant else None, from_wh)
+    if not src:
+        legacy_wh = (product.warehouse or DEFAULT_WAREHOUSE).strip()
+        if legacy_wh.casefold() == from_wh.casefold():
+            boot_qty = int(variant.stock_qty if variant else product.stock_qty or 0)
+            src = _ensure_balance(
+                db, product, variant, from_wh, bootstrap_qty=boot_qty
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Kaynak depoda transfer edilecek stok yok ({from_wh})",
+            )
+
+    src_before = int(src.quantity or 0)
+    if payload.quantity > src_before:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Kaynak depoda en fazla {src_before} adet transfer edilebilir",
+        )
+
+    src.quantity = src_before - payload.quantity
+    tgt = _ensure_balance(db, product, variant, to_wh, bootstrap_qty=0)
+    tgt_before = int(tgt.quantity or 0)
+    tgt.quantity = tgt_before + payload.quantity
+
+    _sync_aggregate(db, product, variant)
+
+    # Primary warehouse label: keep source if still has stock, else target
+    if src.quantity > 0:
+        product.warehouse = from_wh
     else:
-        qty_before = int(product.stock_qty or 0)
+        product.warehouse = to_wh
 
-    if payload.quantity > qty_before:
-        raise HTTPException(status_code=400, detail="Yetersiz stok")
-
-    note = payload.note or f"Transfer: {payload.from_warehouse} → {to_wh}"
-    # decrease from source (logical), then set warehouse, increase at dest — qty unchanged overall
+    note = payload.note or f"Transfer: {from_wh} → {to_wh}"
+    label = f"{product.name}" + (f" / {variant.name}" if variant else "")
     db.add(
         StockMovement(
             product_id=product.id,
             variant_id=variant.id if variant else None,
             direction="decrease",
             quantity=payload.quantity,
-            qty_before=qty_before,
-            qty_after=qty_before,
+            qty_before=src_before,
+            qty_after=src.quantity,
             reason="transfer_out",
-            note=note,
-            warehouse=payload.from_warehouse,
+            note=f"{note} | {label}",
+            warehouse=from_wh,
             created_by_user_id=user.id,
         )
     )
-    product.warehouse = to_wh
     db.add(
         StockMovement(
             product_id=product.id,
             variant_id=variant.id if variant else None,
             direction="increase",
             quantity=payload.quantity,
-            qty_before=qty_before,
-            qty_after=qty_before,
+            qty_before=tgt_before,
+            qty_after=tgt.quantity,
             reason="transfer_in",
-            note=note,
+            note=f"{note} | {label}",
             warehouse=to_wh,
             created_by_user_id=user.id,
         )
     )
     db.commit()
-    return {
-        "ok": True,
-        "product_id": product.id,
-        "from_warehouse": payload.from_warehouse,
-        "to_warehouse": to_wh,
-        "quantity": payload.quantity,
-        "note": note,
-    }
+    return WarehouseTransferResult(
+        ok=True,
+        product_id=product.id,
+        variant_id=variant.id if variant else None,
+        from_warehouse=from_wh,
+        to_warehouse=to_wh,
+        quantity=payload.quantity,
+        source_qty_after=int(src.quantity),
+        target_qty_after=int(tgt.quantity),
+        note=note,
+    )
+
 
 @router.get("/{warehouse_id}", response_model=WarehouseOut)
 def get_warehouse(
@@ -201,10 +347,12 @@ def update_warehouse(
         )
         if clash:
             raise HTTPException(status_code=400, detail="Depo adı zaten var")
-        # Rename product warehouse labels
         old = row.name
         db.query(Product).filter(Product.warehouse == old).update(
             {Product.warehouse: data["name"]}, synchronize_session=False
+        )
+        db.query(WarehouseStock).filter(WarehouseStock.warehouse == old).update(
+            {WarehouseStock.warehouse: data["name"]}, synchronize_session=False
         )
     if data.get("is_default"):
         _clear_default(db, except_id=warehouse_id)
@@ -224,9 +372,17 @@ def delete_warehouse(
     row = db.get(Warehouse, warehouse_id)
     if not row:
         raise HTTPException(status_code=404, detail="Depo bulunamadı")
+    if row.name.casefold() in {"ana depo", "bolu bayi"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Ana Depo ve BOLU BAYİ varsayılan depolardır; silinemez",
+        )
     pc, _ = _stats(db, row.name)
     if pc > 0:
-        raise HTTPException(status_code=400, detail="Depoda ürün varken silinemez — önce taşıyın")
+        raise HTTPException(
+            status_code=400,
+            detail="Depoda ürün varken silinemez — önce stokları başka depoya aktarın",
+        )
     db.delete(row)
     db.commit()
 
@@ -240,13 +396,54 @@ def warehouse_stock(
     row = db.get(Warehouse, warehouse_id)
     if not row:
         raise HTTPException(status_code=404, detail="Depo bulunamadı")
+
+    # Prefer warehouse_stocks
+    balances = (
+        db.query(WarehouseStock)
+        .filter(WarehouseStock.warehouse == row.name, WarehouseStock.quantity > 0)
+        .all()
+    )
+    out: list[dict] = []
+    if balances:
+        for b in balances:
+            product = db.get(Product, b.product_id)
+            if not product:
+                continue
+            if b.variant_id:
+                v = db.get(ProductVariant, b.variant_id)
+                if not v:
+                    continue
+                out.append(
+                    {
+                        "product_id": product.id,
+                        "variant_id": v.id,
+                        "sku": v.sku,
+                        "name": f"{product.name} / {v.name}",
+                        "stock_qty": int(b.quantity or 0),
+                        "warehouse": row.name,
+                    }
+                )
+            else:
+                out.append(
+                    {
+                        "product_id": product.id,
+                        "variant_id": None,
+                        "sku": product.sku,
+                        "name": product.name,
+                        "stock_qty": int(b.quantity or 0),
+                        "warehouse": row.name,
+                    }
+                )
+        out.sort(key=lambda x: x["name"])
+        return out
+
+    # Legacy: products tagged with this warehouse
     products = (
         db.query(Product)
         .filter(Product.warehouse == row.name)
         .order_by(Product.name)
         .all()
     )
-    out = []
     for p in products:
         if p.variants:
             for v in p.variants:

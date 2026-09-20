@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
 type Warehouse = {
@@ -32,13 +32,11 @@ export default function WarehousesPage() {
   const [editId, setEditId] = useState<number | null>(null);
   const [stock, setStock] = useState<StockRow[]>([]);
   const [selected, setSelected] = useState<Warehouse | null>(null);
-  const [transfer, setTransfer] = useState({
-    product_id: "",
-    quantity: "1",
-    from_warehouse: "",
-    to_warehouse: "",
-    note: "",
-  });
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [pick, setPick] = useState<StockRow | null>(null);
+  const [transferQty, setTransferQty] = useState("1");
+  const [toWarehouse, setToWarehouse] = useState("");
+  const [transferNote, setTransferNote] = useState("");
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -54,6 +52,11 @@ export default function WarehousesPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const targets = useMemo(
+    () => items.filter((w) => w.name !== selected?.name && w.is_active),
+    [items, selected],
+  );
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -90,6 +93,7 @@ export default function WarehousesPage() {
       if (selected?.id === id) {
         setSelected(null);
         setStock([]);
+        setShowTransfer(false);
       }
       await load();
     } catch (err) {
@@ -99,7 +103,8 @@ export default function WarehousesPage() {
 
   async function showStock(w: Warehouse) {
     setSelected(w);
-    setTransfer((t) => ({ ...t, from_warehouse: w.name }));
+    setShowTransfer(false);
+    setPick(null);
     try {
       setStock(await apiFetch<StockRow[]>(`/api/stock/warehouses/${w.id}/stock`));
     } catch (err) {
@@ -107,24 +112,58 @@ export default function WarehousesPage() {
     }
   }
 
-  async function doTransfer(e: FormEvent) {
-    e.preventDefault();
+  function openTransfer(row?: StockRow) {
+    if (!selected) return;
+    if (stock.length === 0) {
+      setError("Bu depoda transfer edilecek ürün bulunmuyor.");
+      return;
+    }
+    const first = row || stock[0];
+    setPick(first);
+    setTransferQty("1");
+    setToWarehouse(targets[0]?.name || "");
+    setTransferNote("");
+    setShowTransfer(true);
     setError("");
     setMsg("");
+  }
+
+  async function doTransfer(e: FormEvent) {
+    e.preventDefault();
+    if (!selected || !pick) return;
+    setError("");
+    setMsg("");
+    const qty = Number(transferQty) || 0;
+    if (qty <= 0) {
+      setError("Transfer miktarı sıfırdan büyük olmalıdır.");
+      return;
+    }
+    if (!toWarehouse) {
+      setError("Ürün ve hedef depo seçin.");
+      return;
+    }
     try {
-      await apiFetch("/api/stock/warehouses/transfer", {
+      const res = await apiFetch<{
+        ok: boolean;
+        source_qty_after: number;
+        target_qty_after: number;
+      }>("/api/stock/warehouses/transfer", {
         method: "POST",
         body: JSON.stringify({
-          product_id: Number(transfer.product_id),
-          quantity: Number(transfer.quantity) || 1,
-          from_warehouse: transfer.from_warehouse,
-          to_warehouse: transfer.to_warehouse,
-          note: transfer.note || null,
+          product_id: pick.product_id,
+          variant_id: pick.variant_id,
+          quantity: qty,
+          from_warehouse: selected.name,
+          to_warehouse: toWarehouse,
+          note: transferNote || null,
         }),
       });
-      setMsg("Transfer kaydedildi");
+      setMsg(
+        `Stok transferi tamamlandı. Kaynak kalan: ${res.source_qty_after} · Hedef: ${res.target_qty_after}`,
+      );
+      setShowTransfer(false);
       await load();
-      if (selected) await showStock(selected);
+      await showStock(selected);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transfer hatası");
     }
@@ -132,16 +171,29 @@ export default function WarehousesPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-bold">Depolar</h2>
-        <p className="text-xs text-baykus-muted">Depo CRUD · stok görünümü · transfer stub</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-bold">Depolar</h2>
+          <p className="text-xs text-baykus-muted">
+            Depo Tanımı · stok görünümü · Depolar Arası Transfer
+          </p>
+        </div>
+        {selected && (
+          <button
+            type="button"
+            className="rounded-lg bg-[#ef4444] text-white px-4 py-2 text-sm font-bold shadow-sm"
+            onClick={() => openTransfer()}
+          >
+            Depolar Arası Transfer
+          </button>
+        )}
       </div>
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
       {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
       <form onSubmit={submit} className="rounded border bg-white p-3 grid md:grid-cols-3 gap-2 text-sm">
         <label>
-          Ad
+          Depo Adı
           <input required className="bk-input mt-0.5" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </label>
         <label>
@@ -166,7 +218,7 @@ export default function WarehousesPage() {
             Aktif
           </label>
           <button type="submit" className="bk-btn bk-btn-primary text-xs ml-auto">
-            {editId ? "Güncelle" : "Ekle"}
+            {editId ? "Kaydet" : "Ekle"}
           </button>
         </div>
       </form>
@@ -238,8 +290,9 @@ export default function WarehousesPage() {
               <thead>
                 <tr>
                   <th>SKU</th>
-                  <th>Ad</th>
+                  <th>Ürün / Varyant</th>
                   <th className="text-right">Adet</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -248,11 +301,20 @@ export default function WarehousesPage() {
                     <td className="font-mono text-xs">{s.sku}</td>
                     <td>{s.name}</td>
                     <td className="text-right tabular-nums">{s.stock_qty}</td>
+                    <td className="text-right">
+                      <button
+                        type="button"
+                        className="text-xs text-[#ef4444] font-semibold hover:underline"
+                        onClick={() => openTransfer(s)}
+                      >
+                        Transfer
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {stock.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="text-center text-baykus-muted py-6">
+                    <td colSpan={4} className="text-center text-baykus-muted py-6">
                       Bu depoda ürün yok
                     </td>
                   </tr>
@@ -260,59 +322,88 @@ export default function WarehousesPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
 
-          <form onSubmit={doTransfer} className="rounded border bg-white p-3 grid md:grid-cols-5 gap-2 text-sm">
-            <label>
-              Ürün ID
-              <input
-                required
-                className="bk-input mt-0.5"
-                value={transfer.product_id}
-                onChange={(e) => setTransfer({ ...transfer, product_id: e.target.value })}
-              />
-            </label>
-            <label>
-              Adet
-              <input
-                required
-                type="number"
-                min={1}
-                className="bk-input mt-0.5"
-                value={transfer.quantity}
-                onChange={(e) => setTransfer({ ...transfer, quantity: e.target.value })}
-              />
-            </label>
-            <label>
-              Kaynak
-              <input
-                required
-                className="bk-input mt-0.5"
-                value={transfer.from_warehouse}
-                onChange={(e) => setTransfer({ ...transfer, from_warehouse: e.target.value })}
-              />
-            </label>
-            <label>
-              Hedef
-              <select
-                required
-                className="bk-input mt-0.5"
-                value={transfer.to_warehouse}
-                onChange={(e) => setTransfer({ ...transfer, to_warehouse: e.target.value })}
-              >
-                <option value="">— seç —</option>
-                {items
-                  .filter((w) => w.name !== transfer.from_warehouse)
-                  .map((w) => (
+      {showTransfer && selected && pick && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form
+            onSubmit={doTransfer}
+            className="w-full max-w-lg rounded-xl bg-white shadow-xl overflow-hidden"
+          >
+            <div className="bg-[#ef4444] text-white px-4 py-3 flex items-center justify-between">
+              <div className="text-sm font-bold tracking-wide">
+                DEPOLAR ARASI TRANSFER · {selected.name.toUpperCase()}
+              </div>
+              <button type="button" className="text-white text-xl leading-none" onClick={() => setShowTransfer(false)}>
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4 text-sm">
+              <label className="block">
+                <span className="font-bold">Ürün / Varyant</span>
+                <select
+                  className="bk-input mt-1"
+                  value={`${pick.product_id}:${pick.variant_id ?? ""}`}
+                  onChange={(e) => {
+                    const [pid, vid] = e.target.value.split(":");
+                    const row = stock.find(
+                      (s) =>
+                        s.product_id === Number(pid) &&
+                        String(s.variant_id ?? "") === vid,
+                    );
+                    if (row) setPick(row);
+                  }}
+                >
+                  {stock.map((s) => (
+                    <option key={`${s.product_id}-${s.variant_id}`} value={`${s.product_id}:${s.variant_id ?? ""}`}>
+                      {s.name} ({s.stock_qty} adet)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="font-bold">Hedef Depo</span>
+                <select
+                  required
+                  className="bk-input mt-1"
+                  value={toWarehouse}
+                  onChange={(e) => setToWarehouse(e.target.value)}
+                >
+                  <option value="">— seç —</option>
+                  {targets.map((w) => (
                     <option key={w.id} value={w.name}>
                       {w.name}
                     </option>
                   ))}
-              </select>
-            </label>
-            <div className="flex items-end">
-              <button type="submit" className="bk-btn bk-btn-primary text-xs w-full">
-                Transfer
-              </button>
+                </select>
+              </label>
+              <label className="block">
+                <span className="font-bold">Miktar</span>
+                <input
+                  required
+                  type="number"
+                  min={1}
+                  max={pick.stock_qty}
+                  className="bk-input mt-1 w-40"
+                  value={transferQty}
+                  onChange={(e) => setTransferQty(e.target.value)}
+                />
+                <span className="ml-2 text-xs text-baykus-muted">En fazla {pick.stock_qty}</span>
+              </label>
+              <label className="block">
+                <span className="text-xs text-baykus-muted">Not (opsiyonel)</span>
+                <input
+                  className="bk-input mt-1"
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                />
+              </label>
+              <div className="flex justify-end pt-2">
+                <button type="submit" className="rounded-lg bg-[#ef4444] text-white px-5 py-2.5 text-sm font-bold">
+                  Transferi Tamamla
+                </button>
+              </div>
             </div>
           </form>
         </div>

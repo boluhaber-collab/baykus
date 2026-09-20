@@ -17,7 +17,8 @@ from app.models.quote import Quote, QuoteLine
 from app.models.settings_model import AppSetting
 from app.models.supplier import Purchase, PurchaseLine, Supplier, SupplierMovement
 from app.models.user import Role, User, user_roles
-from app.models.warehouse import Warehouse
+from app.models.warehouse import Warehouse, WarehouseStock
+from app.models.variant_option import VariantOption
 from app.models.whatsapp import WhatsAppSendLog, WhatsAppTemplate
 
 __all__ = [
@@ -36,7 +37,8 @@ __all__ = [
     "Asset",
     "DtfScenario",
     "SpecialDay", "Campaign",
-    "Warehouse",
+    "Warehouse", "WarehouseStock",
+    "VariantOption",
     "DirectoryContact",
     "Document",
     "CostItem",

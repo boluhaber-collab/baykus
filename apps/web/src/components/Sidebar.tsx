@@ -4,8 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { NAV_GROUPS, NavGroup } from "@/lib/nav";
-import { clearToken } from "@/lib/api";
+import { NAV_GROUPS, NavGroup, orderNavGroups } from "@/lib/nav";
+import { AppSettings, apiFetch, clearToken } from "@/lib/api";
 
 function pathMatches(pathname: string, href: string): boolean {
   const clean = href.split("?")[0];
@@ -35,24 +35,60 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [groups, setGroups] = useState<NavGroup[]>(NAV_GROUPS);
+
+  useEffect(() => {
+    function applyFromSettings(s: AppSettings | null) {
+      if (!s) return;
+      setGroups(orderNavGroups(NAV_GROUPS, s.sol_menu_sirasi, s.sol_menu_adlari));
+    }
+    try {
+      const cached = localStorage.getItem("baykus_app_settings");
+      if (cached) applyFromSettings(JSON.parse(cached) as AppSettings);
+    } catch {
+      /* ignore */
+    }
+    void apiFetch<AppSettings>("/api/settings/app")
+      .then((s) => {
+        try {
+          localStorage.setItem("baykus_app_settings", JSON.stringify(s));
+        } catch {
+          /* ignore */
+        }
+        applyFromSettings(s);
+      })
+      .catch(() => {
+        /* guest / no token — keep default */
+      });
+    function onChanged() {
+      try {
+        const cached = localStorage.getItem("baykus_app_settings");
+        if (cached) applyFromSettings(JSON.parse(cached) as AppSettings);
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener("baykus-settings-changed", onChanged);
+    return () => window.removeEventListener("baykus-settings-changed", onChanged);
+  }, []);
 
   const activeGroupId = useMemo(() => {
-    for (const g of NAV_GROUPS) {
+    for (const g of groups) {
       if (groupIsActive(pathname, g)) return g.id;
     }
     return null;
-  }, [pathname]);
+  }, [pathname, groups]);
 
   useEffect(() => {
     setOpen((prev) => {
       const next = { ...prev };
-      for (const g of NAV_GROUPS) {
+      for (const g of groups) {
         if (g.defaultOpen && next[g.id] === undefined) next[g.id] = true;
         if (g.id === activeGroupId) next[g.id] = true;
       }
       return next;
     });
-  }, [activeGroupId]);
+  }, [activeGroupId, groups]);
 
   function toggle(id: string) {
     setOpen((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -83,7 +119,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 px-1.5 py-2 space-y-0.5 overflow-y-auto text-[13px]">
-        {NAV_GROUPS.map((group) => {
+        {groups.map((group) => {
           const hasChildren = group.items.length > 0 && !group.tek;
           const isOpen = open[group.id] ?? false;
           const active = groupIsActive(pathname, group);

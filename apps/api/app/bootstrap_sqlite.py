@@ -87,6 +87,13 @@ def bootstrap() -> None:
     db = SessionLocal()
     try:
         seed(db)
+        # Ensure default depots (desktop Ana Depo / BOLU BAYİ)
+        from app.models.warehouse import Warehouse
+        for name, is_def in (("Ana Depo", True), ("BOLU BAYİ", False)):
+            if not db.query(Warehouse).filter(Warehouse.name == name).first():
+                db.add(Warehouse(name=name, is_active=True, is_default=is_def, notes="Varsayılan"))
+        db.commit()
+        print("Varsayılan depolar kontrol edildi.")
     finally:
         db.close()
 

@@ -360,15 +360,80 @@ export function titleForPath(pathname: string): string {
   return crumbs[crumbs.length - 1]?.label || "Baykuş Baskı";
 }
 
-export const QUICK_ACTIONS = [
-  { id: "satis_belgeleri", label: "Satışlar", href: "/sales", hex: "#198754" },
-  { id: "siparis_listesi", label: "Sipariş Listesi", href: "/orders", hex: "#38bdf8" },
-  { id: "atolye_paneli", label: "Üretim Akış Paneli", href: "/production", hex: "#eab308" },
-  { id: "gider_takibi", label: "Gider Takibi", href: "/finance/expenses", hex: "#dc2626" },
-  { id: "fiyat_listesi", label: "Fiyat Listesi", href: "/price-lists", hex: "#db2777" },
-  { id: "alis_hareketleri", label: "Alış Hareketleri", href: "/purchases", hex: "#0d9488" },
-  { id: "satis_teklif_olustur", label: "Satış / Teklif Oluştur", href: "/sales/create", hex: "#1e3a8a" },
-] as const;
+/** Full desktop hizli_islem_katalogu keys → web routes */
+export const QUICK_ACTION_CATALOG: {
+  id: string;
+  label: string;
+  href: string;
+  hex: string;
+  description?: string;
+  fixed?: boolean;
+}[] = [
+  { id: "satis_teklif_olustur", label: "Satış / Teklif Oluştur", href: "/sales/create", hex: "#1f6feb", description: "Yeni satış veya teklif kaydı oluşturun." },
+  { id: "teklif_listesi", label: "Teklifler", href: "/quotes", hex: "#7c3aed", description: "Hazırlanan teklifleri görüntüleyin." },
+  { id: "siparis_listesi", label: "Sipariş Listesi", href: "/orders", hex: "#0f766e", description: "Sipariş durumlarını ve teslimleri takip edin." },
+  { id: "akis_paneli", label: "Sipariş Merkezi", href: "/orders", hex: "#111827", description: "Sipariş sürecini tek ekrandan yönetin." },
+  { id: "atolye_paneli", label: "Üretim Akış Paneli", href: "/production", hex: "#f59e0b", description: "Üretimdeki işleri ve aşamaları izleyin." },
+  { id: "is_emirleri", label: "İş Emirleri", href: "/production/work-orders", hex: "#2563eb", description: "İş emirlerine hızlı erişim sağlayın." },
+  { id: "musteri_merkezi", label: "Müşteri Merkezi", href: "/customers", hex: "#198754", description: "Müşteri ve cari işlemlerini yönetin." },
+  { id: "musteri_iletisim", label: "Müşteri İletişim", href: "/communication", hex: "#0f766e", description: "Kampanya, WhatsApp ve fihrist araçlarını açın." },
+  { id: "alis_hareketleri", label: "Alış Hareketleri", href: "/purchases", hex: "#198754", description: "Alış hareketlerini yönetin.", fixed: true },
+  { id: "tedarik_merkezi", label: "Tedarik Merkezi", href: "/suppliers", hex: "#0f766e", description: "Tedarikçi ve satın alma işlemlerine ulaşın." },
+  { id: "satis_belgeleri", label: "Satışlar", href: "/sales", hex: "#0f766e", description: "Direkt satış belgelerini görüntüleyin." },
+  { id: "perakende_satislar", label: "Perakende Satışlar", href: "/sales/retail", hex: "#f97316", description: "Perakende satış listesi." },
+  { id: "gider_takibi", label: "Gider Takibi", href: "/finance/expenses", hex: "#be123c", description: "Masraf kayıtlarını ve ödemeleri takip edin." },
+  { id: "acik_bakiyeler", label: "Açık Bakiyeler", href: "/customers/receivables", hex: "#be123c", description: "Açık cari alacaklar." },
+  { id: "hesaplarim", label: "Hesaplarım", href: "/finance/banks", hex: "#334155", description: "Banka hesapları." },
+  { id: "krediler", label: "Krediler", href: "/finance/loans", hex: "#7c3aed", description: "Kredi ödemeleri." },
+  { id: "urun_stok_merkezi", label: "Ürün & Stok Merkezi", href: "/products", hex: "#06b6d4", description: "Ürün, varyant ve stok durumunu yönetin." },
+  { id: "fiyat_listesi", label: "Fiyat Listesi", href: "/price-lists", hex: "#be123c", description: "Fiyat listeleri." },
+  { id: "dtf_maliyet", label: "DTF Maliyet", href: "/tools/dtf", hex: "#0891b2", description: "DTF maliyet hesaplama." },
+  { id: "maliyet_yonetimi", label: "Maliyet Yönetimi", href: "/tools/costs", hex: "#7c3aed", description: "Maliyet kalemleri." },
+  { id: "internet_raporu", label: "İnternet Raporu", href: "/ecommerce", hex: "#f97316", description: "İnternet satışları." },
+  { id: "gorevler", label: "Görevler", href: "/crm", hex: "#2563eb", description: "CRM / görevler." },
+  { id: "evrak_dolabi", label: "Evrak Dolabı", href: "/documents", hex: "#0f766e", description: "Belgelerinize merkezi alandan erişin." },
+  { id: "yedekleme", label: "Yedekleme", href: "/settings/backups", hex: "#16a34a", description: "Yedekleme paneli." },
+  { id: "ayarlar", label: "Ayarlar", href: "/settings", hex: "#6f42c1", description: "Sistem ayarları." },
+];
+
+/** Default dashboard strip (until settings loaded) */
+export const QUICK_ACTIONS = QUICK_ACTION_CATALOG.filter((a) =>
+  [
+    "satis_belgeleri",
+    "siparis_listesi",
+    "atolye_paneli",
+    "gider_takibi",
+    "fiyat_listesi",
+    "alis_hareketleri",
+    "satis_teklif_olustur",
+  ].includes(a.id),
+);
+
+export const DEFAULT_SOL_MENU_ORDER = NAV_GROUPS.map((g) => g.label);
+
+export function orderNavGroups(
+  groups: NavGroup[],
+  order: string[] | undefined,
+  labels: Record<string, string> | undefined,
+): NavGroup[] {
+  const byLabel = new Map(groups.map((g) => [g.label, g]));
+  const used = new Set<string>();
+  const out: NavGroup[] = [];
+  for (const name of order || DEFAULT_SOL_MENU_ORDER) {
+    const g = byLabel.get(name);
+    if (!g || used.has(g.id)) continue;
+    used.add(g.id);
+    const display = labels?.[name]?.trim();
+    out.push(display ? { ...g, label: display } : g);
+  }
+  for (const g of groups) {
+    if (!used.has(g.id)) {
+      const display = labels?.[g.label]?.trim();
+      out.push(display ? { ...g, label: display } : g);
+    }
+  }
+  return out;
+}
 
 /** @deprecated */
 export type NavItem = NavLeaf;

@@ -847,6 +847,36 @@ export type AppSettings = {
   postgres_db?: string;
   postgres_user?: string;
   postgres_ssl?: string;
+  hizli_islemler?: string[];
+  sol_menu_sirasi?: string[];
+  sol_menu_adlari?: Record<string, string>;
+  teklif_sablon_adi?: string;
+  teklif_sablon_baslik?: string;
+  teklif_sablon_alt_baslik?: string;
+  teklif_sablon_logo_goster?: string;
+  teklif_sablon_musteri_goster?: string;
+  teklif_sablon_urun_detay_goster?: string;
+  teklif_sablon_toplam_goster?: string;
+  teklif_sablon_not_goster?: string;
+  teklif_sablon_sartlar_goster?: string;
+  teklif_sablon_sartlar?: string;
+  teklif_sablon_kapanis?: string;
+};
+
+export type VariantOption = {
+  id: number;
+  kind: string;
+  value: string;
+  note?: string | null;
+};
+
+export type QuickActionCatalogItem = {
+  key: string;
+  label: string;
+  href: string;
+  color: string;
+  description?: string;
+  fixed?: boolean;
 };
 
 export type DashboardNote = { id: string; text: string; at: string };

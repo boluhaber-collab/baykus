@@ -27,7 +27,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
 | Ürün & Stok Merkezi (tek) | `/products` hub — özet + İşlemler (6+Depolar) | done |
-| Ürün Yönetimi / Kartlar / Stok / Kritik / Rapor / Hızlı Varyant / Depolar | masaüstü renkleri; Depolar → `/stock/warehouses` | done |
+| Ürün Yönetimi / Kartlar / Stok / Kritik / Rapor / Hızlı Varyant / Depolar | masaüstü renkleri; Depolar → `/stock/warehouses` (+ transfer) | done |
 | Sidebar | tek satır | done |
 
 ## Satış / Sipariş
@@ -104,7 +104,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Sistem
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Ayarlar | `/settings` sekmeli (Genel/Kullanıcılar/Entegrasyonlar/Yedek/Sistem/YARDIM) | done |
+| Ayarlar | `/settings` sekmeli (Genel/Hızlı İşlemler/Sol Menü/Varyant/Şablon/Kullanıcılar/Entegrasyonlar/Yedek/Sistem/YARDIM) | done |
 | Yetki / Kilit Modu | `/settings/lock-mode` | done |
 | Kullanıcı Yönetimi | `/settings?tab=kullanicilar` | done |
 | İşlem Geçmişi | `/settings/audit` | done |
@@ -173,9 +173,28 @@ Spec: `docs/DIRECT_SALES_SPEC.md` · ekran görüntüleri: `docs/parity-shots/`
 | Müşteri Merkezi CTA | Listesi · Yeni · Takibi · Açık Alacaklar | done |
 | Tedarik Merkezi CTA | Tedarikçiler · Alış · Borç/Alacak · Ödeme · Satın Alma | done |
 | Ürün & Stok CTA | Yönetim · Kartlar · Stok · Kritik · Rapor · Hızlı Varyant · Depolar | done |
-| `/settings` sekmeler | Genel (Firma/Logo/PDF/WA) · Kullanıcılar · Entegrasyonlar · Yedek · Sistem · YARDIM | done |
-| Ayar kaydı (non-secret) | `PUT /api/settings/app` — whatsapp, web, pdf_alt, logo yolları, tema, veri motoru, PG host | done |
-| API key / BizimHesap sırları | commit edilmez; `/settings/integrations` ayrı | done |
+| `/settings` sekmeler | Genel · **Hızlı İşlemler** · **Sol Menü Sıralaması** · **Varyant Yönetimi** · **Şablon Yönetimi** · Kullanıcılar · Entegrasyonlar · Yedek · Sistem · YARDIM | done |
+| Ayar kaydı (non-secret) | `PUT /api/settings/app` — firma/tema/PG + hizli_islemler + sol_menu_* + teklif_sablon_* | done |
+| API key / BizimHesap sırları | commit edilmez; `/settings/integrations` ayrı; PUT filtresi | done |
 | Dashboard notlar | `GET/PUT /api/dashboard/notes` (AppSetting JSON) | done |
 | Perakende varyant seçici | çoklu varyantta modal picker | done |
+| Hızlı İşlemler → Ana Sayfa | seçili anahtarlar dashboard şeridine yansır | done |
+| Sol Menü sıra/başlık | Sidebar `orderNavGroups` + localStorage | done |
+| Varyant kataloğu | `GET/POST/PUT/DELETE /api/settings/variants` | done |
+| Depolar Arası Transfer | `POST /api/stock/warehouses/transfer` + `warehouse_stocks` bakiyesi | done |
+
+## Batch 8 — Ayarlar sekmeleri + Depo transfer (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Hızlı İşlemler sekmesi | katalog checkbox; sabit `alis_hareketleri` | done |
+| Sol Menü Sıralaması | yukarı/aşağı/başlık değiştir; kaydet | done |
+| Varyant Yönetimi | Tür/Değer/Not CRUD | done |
+| Şablon Yönetimi | teklif alanları + canlı önizleme | done |
+| Depolar Arası Transfer UI | modal: Ürün/Varyant · Hedef Depo · Miktar · Transferi Tamamla | done |
+| Per-depo stok | `warehouse_stocks` (SQLite create_all / Alembic 013) | done |
+| BizimHesap canlı sync | stub — Selenium/DPAPI yok; etiketli disabled | stub |
+| WhatsApp Desktop Selenium | stub — sadece `wa.me` + taslak | stub |
+| DPAPI yedek şifresi | stub — web zip yedek | stub |
+
 

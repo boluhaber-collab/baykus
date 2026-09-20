@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardNote, DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
-import { QUICK_ACTIONS } from "@/lib/nav";
+import { AppSettings, DashboardNote, DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
+import { QUICK_ACTION_CATALOG, QUICK_ACTIONS } from "@/lib/nav";
 
 type UsdRates = { buy: number; sell: number } | null;
 
@@ -25,6 +25,32 @@ export default function DashboardPage() {
   const [catFilter, setCatFilter] = useState("");
   const [nameFilter, setNameFilter] = useState("");
   const [notes, setNotes] = useState<DashboardNote[]>([]);
+  const [quickActions, setQuickActions] = useState(QUICK_ACTIONS);
+
+  useEffect(() => {
+    function apply(s: AppSettings) {
+      const keys = s.hizli_islemler || [];
+      const map = new Map(QUICK_ACTION_CATALOG.map((a) => [a.id, a]));
+      const picked = keys.map((k) => map.get(k)).filter(Boolean) as typeof QUICK_ACTION_CATALOG;
+      setQuickActions(picked.length ? picked : QUICK_ACTIONS);
+    }
+    try {
+      const cached = localStorage.getItem("baykus_app_settings");
+      if (cached) apply(JSON.parse(cached) as AppSettings);
+    } catch {
+      /* ignore */
+    }
+    void apiFetch<AppSettings>("/api/settings/app")
+      .then((s) => {
+        try {
+          localStorage.setItem("baykus_app_settings", JSON.stringify(s));
+        } catch {
+          /* ignore */
+        }
+        apply(s);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -239,7 +265,7 @@ export default function DashboardPage() {
         <span className="text-xs font-semibold text-baykus-muted uppercase tracking-wide mr-1">
           Hızlı İşlemler
         </span>
-        {QUICK_ACTIONS.map((a) => (
+        {quickActions.map((a) => (
           <Link
             key={a.id}
             href={a.href}

@@ -44,3 +44,15 @@ class WarehouseTransfer(BaseModel):
     from_warehouse: str = Field(min_length=1, max_length=100)
     to_warehouse: str = Field(min_length=1, max_length=100)
     note: str | None = None
+
+
+class WarehouseTransferResult(BaseModel):
+    ok: bool = True
+    product_id: int
+    variant_id: int | None = None
+    from_warehouse: str
+    to_warehouse: str
+    quantity: int
+    source_qty_after: int
+    target_qty_after: int
+    note: str | None = None
