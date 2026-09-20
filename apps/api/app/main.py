@@ -32,10 +32,14 @@ from app.api.routers import (
     tasks,
 )
 from app.core.config import get_settings
+from app.core.lock_middleware import LockModeMiddleware
 
 cfg = get_settings()
 
 app = FastAPI(title=cfg.app_name, version="0.1.0")
+
+# Lock mode gate runs inside CORS (added last = outermost in Starlette)
+app.add_middleware(LockModeMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

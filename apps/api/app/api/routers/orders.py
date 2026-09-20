@@ -804,10 +804,14 @@ def work_order_pdf(
     from app.services.pdf import build_work_order_pdf
 
     order = _load_order(db, order_id)
-    rows = {s.key: s.value for s in db.query(AppSetting).all()}
+    rows = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
     settings = {
         "company_name": rows.get("company_name", "Baykuş Baskı"),
         "phone": rows.get("phone", ""),
+        "email": rows.get("email", rows.get("company_email", "")),
+        "address": rows.get("address", rows.get("adres", "")),
+        "logo_dosyasi": rows.get("logo_dosyasi", ""),
+        "form_logo_dosyasi": rows.get("form_logo_dosyasi", ""),
     }
     pdf_bytes = build_work_order_pdf(order, settings)
     return Response(

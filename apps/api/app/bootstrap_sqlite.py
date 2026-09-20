@@ -52,6 +52,7 @@ def bootstrap() -> None:
     Base.metadata.create_all(bind=engine)
 
     # SQLite cannot ADD via create_all for existing tables — patch critical columns
+    # Covers alembic 013–018 deltas used by web (warehouse stocks, expense group_name, …)
     from sqlalchemy import inspect, text
     insp = inspect(engine)
     with engine.begin() as conn:
@@ -111,6 +112,9 @@ def bootstrap() -> None:
                 ("blank_price", "ALTER TABLE price_list_items ADD COLUMN blank_price NUMERIC(12,2)"),
                 ("printed_price", "ALTER TABLE price_list_items ADD COLUMN printed_price NUMERIC(12,2)"),
                 ("embroidered_price", "ALTER TABLE price_list_items ADD COLUMN embroidered_price NUMERIC(12,2)"),
+                ("product_id", "ALTER TABLE price_list_items ADD COLUMN product_id INTEGER"),
+                ("variant_id", "ALTER TABLE price_list_items ADD COLUMN variant_id INTEGER"),
+                ("notes", "ALTER TABLE price_list_items ADD COLUMN notes TEXT"),
             ):
                 if col not in pcols:
                     conn.execute(text(sql))

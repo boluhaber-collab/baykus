@@ -145,10 +145,16 @@ def load_quote(db: Session, quote_id: int) -> Quote:
 
 
 def company_settings(db: Session) -> dict[str, str]:
-    rows = {s.key: s.value for s in db.query(AppSetting).all()}
+    rows = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
     return {
         "company_name": rows.get("company_name", "Baykuş Baskı"),
         "phone": rows.get("phone", ""),
+        "email": rows.get("email", rows.get("company_email", "")),
+        "address": rows.get("address", rows.get("adres", "")),
+        "tax_office": rows.get("tax_office", rows.get("vergi_dairesi", "")),
+        "tax_no": rows.get("tax_no", rows.get("vergi_no", "")),
+        "logo_dosyasi": rows.get("logo_dosyasi", ""),
+        "form_logo_dosyasi": rows.get("form_logo_dosyasi", ""),
         "theme_label": rows.get("theme_label", "Varsayılan"),
     }
 

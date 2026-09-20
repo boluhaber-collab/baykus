@@ -72,7 +72,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Fiyat / Maliyet
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Fiyat Listesi | `/price-lists` | done (batch 17: toplu %/mutlak + Excel) |
+| Fiyat Listesi | `/price-lists` | done (batch 18: Excel product_id/SKU/barkod + PDF polish) |
 | DTF Maliyet Hesaplama | `/tools/dtf` | done |
 | Maliyet Yönetimi | `/tools/costs` | done |
 | Son Alış Fiyatları | `/tools/last-purchase-prices` | done |
@@ -106,7 +106,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
 | Ayarlar | `/settings` sekmeli (Genel/Hızlı İşlemler/Sol Menü/Varyant/Şablon/Kullanıcılar/Entegrasyonlar/Yedek/Sistem/YARDIM) | done |
-| Yetki / Kilit Modu | `/settings/lock-mode` | done (batch 17: preset chips + nav hide) |
+| Yetki / Kilit Modu | `/settings/lock-mode` | done (batch 18: API middleware 403 + JWT lock_mode) |
 | Kullanıcı Yönetimi | `/settings?tab=kullanicilar` | done (batch 17: disable/roles/şifre) |
 | İşlem Geçmişi | `/settings/audit` | done |
 | Yedekleme | `/settings/backups` | done |
@@ -372,9 +372,23 @@ API: price-lists bulk-adjust/import/template; products bulk-price-*; search supp
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password.
 
+### Kalan → Batch 18’de kapatılanlar: lock API gate, Excel product_id, PDF polish.
+
+
+## Batch 18 — Lock API gate / Excel product_id / PDF polish / regression (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Lock mode API gating | `LockModeMiddleware` + `app/core/lock_mode.py` — `user_mode` ayarı; gizli modül prefix → **403**; JWT/`/me` `lock_mode` | done |
+| Preset → API prefix | Yönetici/Personel/Tam Yetki/Sadece Satış/Sadece Stok ↔ nav grupları (Sidebar ile aynı) | done |
+| Fiyat listesi Excel product_id | Şablon: `product_id,SKU,Barkod,Ürün,…` · eşleşme: id → barkod → SKU → isim · `unmatched_rows` raporu | done |
+| PDF polish | İş emri / cari mutabakat / tedarikçi fişi / fiyat listesi — logo (settings), header çizgisi, totals kutusu, imza satırları | done |
+| Regression | price-lists TS cast fix; `bootstrap_sqlite` product_id/variant_id/notes + 018 group_name | done |
+| Smoke | Sadece Stok → `/api/finance` 403 · `/api/products` 200 · import product_id · work-order PDF `%PDF` | done |
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password / ReportLab twin stiller.
+
 ### Kalan (dürüst)
 
-- Masaüstü ReportLab twin PDF stilleri (cari/demirbaş/fiyat listesi) — web basit PDF/HTML
-- Lock mode sunucu claim zorunlu API gate (şimdi istemci menü + ayar; roller zaten API’de)
-- Fiyat listesi Excel’de ürün_id otomatik eşleştirme (isim eşleşmesi var)
+- Masaüstü ReportLab twin PDF stilleri (cari/demirbaş/fiyat listesi) — web polish’li basit PDF (batch 18)
 - Merkezi DB canlı şifre / VPS kullanıcı senkron (masaüstü postgres users)

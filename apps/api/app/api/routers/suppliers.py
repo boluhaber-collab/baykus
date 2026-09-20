@@ -497,10 +497,14 @@ def supplier_voucher_pdf(
             date_out = mov.movement_date.isoformat() if mov.movement_date else date_out
             note_out = mov.note or note_out
 
-    rows = {s.key: s.value for s in db.query(AppSetting).all()}
+    rows = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
     settings = {
         "company_name": rows.get("company_name", "Baykuş Baskı"),
         "phone": rows.get("phone", ""),
+        "email": rows.get("email", rows.get("company_email", "")),
+        "address": rows.get("address", rows.get("adres", "")),
+        "logo_dosyasi": rows.get("logo_dosyasi", ""),
+        "form_logo_dosyasi": rows.get("form_logo_dosyasi", ""),
     }
     pdf_bytes = build_supplier_voucher_pdf(
         supplier.name, tip_out, amount_out, date_out, due_out, note_out, settings

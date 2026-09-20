@@ -17,5 +17,6 @@ class UserOut(BaseModel):
     full_name: str
     is_active: bool
     roles: list[str]
+    lock_mode: str = "Yönetici"
 
     model_config = {"from_attributes": True}

@@ -69,7 +69,8 @@ export default function LockModePage() {
         <h2 className="text-base font-bold">Yetki / Kilit Modu</h2>
         <p className="text-xs text-baykus-muted">
           Programı başka biri kullanırken sol menüde yalnızca gerekli bölümler görünsün (masaüstü
-          yetki_kilit_modu_penceresi). İstemci tarafı menü filtresi + ayar kaydı.
+          yetki_kilit_modu_penceresi). Ayar <code className="text-[10px]">user_mode</code> olarak
+          kaydedilir; API middleware gizli modül prefix&apos;lerine 403 döner (yalnızca Sidebar filtresi değil).
         </p>
       </div>
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}

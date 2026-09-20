@@ -138,6 +138,9 @@ def create_price_list(
 
 
 PRICE_LIST_TEMPLATE_HEADERS = [
+    "product_id",
+    "SKU",
+    "Barkod",
     "Ürün",
     "Tedarikçi",
     "Alış Fiyatı",
@@ -172,13 +175,16 @@ def _norm_header(h: str) -> str:
 def _col_map(headers: list[str]) -> dict[str, str]:
     clean = {_norm_header(h): h for h in headers}
     adaylar = {
-        "description": ["urun", "ürün", "urun adi", "ürün adı", "product", "açıklama", "aciklama"],
+        "product_id": ["product_id", "urun_id", "ürün_id", "urun id", "ürün id", "id"],
+        "sku": ["sku", "stok kodu", "stok_kodu", "kod"],
+        "barcode": ["barkod", "barcode", "ean", "barcode_no"],
+        "description": ["urun", "ürün", "urun adi", "ürün adı", "product", "product_name", "name"],
         "supplier_name": ["tedarikci", "tedarikçi", "supplier"],
         "purchase_price": ["alis fiyati", "alış fiyatı", "alis", "alış", "maliyet", "purchase"],
         "blank_price": ["baskisiz fiyati", "baskısız fiyatı", "baskisiz", "baskısız", "blank", "unit_price", "satis", "satış"],
         "printed_price": ["baskili fiyati", "baskılı fiyatı", "baskili", "baskılı", "printed"],
         "embroidered_price": ["nakisli fiyati", "nakışlı fiyatı", "nakisli", "nakışlı", "embroidered"],
-        "notes": ["not", "notes", "aciklama", "açıklama"],
+        "notes": ["not", "notes"],
     }
     out: dict[str, str] = {}
     for hedef, isimler in adaylar.items():
@@ -311,10 +317,11 @@ async def import_price_list_rows(
         raise HTTPException(status_code=400, detail="Excel dosyasında okunacak satır bulunamadı")
 
     cmap = _col_map(list(rows[0].keys()))
-    if "description" not in cmap:
+    has_id_keys = any(k in cmap for k in ("product_id", "sku", "barcode"))
+    if "description" not in cmap and not has_id_keys:
         raise HTTPException(
             status_code=400,
-            detail="Excel içinde en az Ürün sütunu olmalı (Alış / Baskısız / Baskılı / Nakışlı isteğe bağlı).",
+            detail="Excel içinde product_id / SKU / Barkod veya Ürün sütunu olmalı.",
         )
 
     def _num(v) -> Decimal | None:
@@ -326,23 +333,99 @@ async def import_price_list_rows(
         except Exception:
             return None
 
+    from app.models.product import Product, ProductVariant
+
+    products = db.query(Product).all()
+    by_id: dict[int, Product] = {p.id: p for p in products}
+    by_sku: dict[str, Product] = {str(p.sku or "").strip().lower(): p for p in products if p.sku}
+    by_name: dict[str, Product] = {str(p.name or "").strip().lower(): p for p in products if p.name}
+    by_barcode: dict[str, Product] = {}
+    for v in db.query(ProductVariant).all():
+        bc = str(v.barcode or "").strip()
+        if bc and v.product_id in by_id:
+            by_barcode[bc.lower()] = by_id[v.product_id]
+        sku = str(v.sku or "").strip().lower()
+        if sku and v.product_id in by_id and sku not in by_sku:
+            by_sku[sku] = by_id[v.product_id]
+
+    def _resolve_product(row: dict) -> tuple[Product | None, str]:
+        """Match product_id → barcode → SKU → name. Returns (product, match_how)."""
+        if "product_id" in cmap:
+            raw = row.get(cmap["product_id"])
+            if raw is not None and str(raw).strip() and str(raw).strip().lower() != "nan":
+                try:
+                    pid = int(float(str(raw).strip()))
+                    if pid in by_id:
+                        return by_id[pid], "product_id"
+                    return None, f"product_id={pid} bulunamadı"
+                except (TypeError, ValueError):
+                    return None, f"product_id geçersiz ({raw})"
+        if "barcode" in cmap:
+            bc = str(row.get(cmap["barcode"]) or "").strip()
+            if bc and bc.lower() != "nan":
+                p = by_barcode.get(bc.lower())
+                if p:
+                    return p, "barcode"
+                return None, f"barkod={bc} bulunamadı"
+        if "sku" in cmap:
+            sku = str(row.get(cmap["sku"]) or "").strip()
+            if sku and sku.lower() != "nan":
+                p = by_sku.get(sku.lower())
+                if p:
+                    return p, "sku"
+                return None, f"sku={sku} bulunamadı"
+        if "description" in cmap:
+            name = str(row.get(cmap["description"]) or "").strip()
+            if name and name.lower() != "nan":
+                p = by_name.get(name.lower())
+                if p:
+                    return p, "name"
+                return None, f"isim={name} eşleşmedi"
+        return None, "eşleştirme anahtarı yok"
+
     created = 0
     updated = 0
     skipped = 0
+    unmatched = 0
     errors: list[str] = []
+    unmatched_rows: list[dict] = []
 
     if mode == "replace":
         pl.items.clear()
         db.flush()
 
-    existing = {str(it.description or "").strip().lower(): it for it in (pl.items or [])}
+    existing_by_pid: dict[int, PriceListItem] = {}
+    existing_by_desc: dict[str, PriceListItem] = {}
+    for it in pl.items or []:
+        if it.product_id:
+            existing_by_pid[int(it.product_id)] = it
+        existing_by_desc[str(it.description or "").strip().lower()] = it
 
     for idx, row in enumerate(rows, start=2):
-        desc_raw = row.get(cmap["description"], "")
-        desc = str(desc_raw or "").strip()
-        if not desc or desc.lower() == "nan":
-            skipped += 1
-            continue
+        prod, how = _resolve_product(row)
+        desc_from_row = ""
+        if "description" in cmap:
+            desc_from_row = str(row.get(cmap["description"]) or "").strip()
+            if desc_from_row.lower() == "nan":
+                desc_from_row = ""
+
+        if prod is None:
+            # Free-text rows: need a description; report catalog miss clearly
+            if not desc_from_row:
+                skipped += 1
+                unmatched += 1
+                errors.append(f"Satır {idx}: eşleşmedi ({how})")
+                unmatched_rows.append({"row": idx, "reason": how})
+                continue
+            desc = desc_from_row
+            product_id = None
+            unmatched += 1
+            errors.append(f"Satır {idx}: ürün kataloğunda yok — isimle eklendi/güncellendi ({how})")
+            unmatched_rows.append({"row": idx, "reason": how, "description": desc})
+        else:
+            desc = desc_from_row or prod.name
+            product_id = prod.id
+
         supplier = str(row.get(cmap.get("supplier_name", ""), "") or "").strip() or None
         purchase = _num(row.get(cmap["purchase_price"])) if "purchase_price" in cmap else None
         blank = _num(row.get(cmap["blank_price"])) if "blank_price" in cmap else None
@@ -354,11 +437,16 @@ async def import_price_list_rows(
             errors.append(f"Satır {idx}: fiyat yok — atlandı ({desc})")
             continue
 
-        key = desc.lower()
-        it = existing.get(key)
+        it = None
+        if product_id is not None:
+            it = existing_by_pid.get(product_id)
+        if it is None:
+            it = existing_by_desc.get(desc.lower())
+
         if it is None:
             unit = blank if blank is not None else Decimal("0")
             it = PriceListItem(
+                product_id=product_id,
                 description=desc,
                 supplier_name=supplier,
                 purchase_price=purchase,
@@ -369,9 +457,14 @@ async def import_price_list_rows(
                 notes=notes,
             )
             pl.items.append(it)
-            existing[key] = it
+            if product_id is not None:
+                existing_by_pid[product_id] = it
+            existing_by_desc[desc.lower()] = it
             created += 1
         else:
+            if product_id is not None:
+                it.product_id = product_id
+            it.description = desc
             if supplier is not None:
                 it.supplier_name = supplier
             if purchase is not None:
@@ -394,14 +487,25 @@ async def import_price_list_rows(
         action="import",
         entity_type="price_list",
         entity_id=pl.id,
-        detail={"created": created, "updated": updated, "skipped": skipped, "mode": mode},
+        detail={
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+            "unmatched": unmatched,
+            "mode": mode,
+        },
     )
     return {
         "created": created,
         "updated": updated,
         "skipped": skipped,
-        "errors": errors[:20],
-        "message": f"İçe aktarma: {created} yeni, {updated} güncellendi, {skipped} atlandı",
+        "unmatched": unmatched,
+        "unmatched_rows": unmatched_rows[:50],
+        "errors": errors[:40],
+        "message": (
+            f"İçe aktarma: {created} yeni, {updated} güncellendi, {skipped} atlandı"
+            + (f", {unmatched} eşleşmeyen" if unmatched else "")
+        ),
     }
 
 
@@ -549,9 +653,11 @@ th,td{{border:1px solid #cbd5e1;padding:6px 8px}} th{{background:#0f766e;color:#
 </body></html>"""
         return HTMLResponse(html)
     # pdf
+    from app.models.settings_model import AppSetting
     from app.services.pdf import build_price_list_pdf
 
-    pdf = build_price_list_pdf(pl.name, rows)
+    settings_map = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
+    pdf = build_price_list_pdf(pl.name, rows, settings_map)
     return Response(
         content=pdf,
         media_type="application/pdf",

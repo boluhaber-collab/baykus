@@ -226,9 +226,9 @@ export default function PriceListDetailPage() {
         if (!selected.has(it.key)) return it;
         const next = { ...it };
         for (const f of bulkFields) {
-          const cur = Number((next as Record<string, string>)[f]) || 0;
+          const cur = Number(String((next as Record<string, unknown>)[f] ?? "")) || 0;
           const nv = bulkMode === "percent" ? cur * (1 + value / 100) : cur + value;
-          (next as Record<string, string>)[f] = String(Math.max(0, Math.round(nv * 100) / 100));
+          (next as Record<string, unknown>)[f] = String(Math.max(0, Math.round(nv * 100) / 100));
         }
         return next;
       }),
@@ -244,7 +244,7 @@ export default function PriceListDetailPage() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await apiFetch<{ created?: number; updated?: number; skipped?: number; message?: string }>(
+      const res = await apiFetch<{ created?: number; updated?: number; skipped?: number; unmatched?: number; errors?: string[]; message?: string }>(
         `/api/price-lists/${id}/import?mode=merge`,
         { method: "POST", body: fd },
       );
