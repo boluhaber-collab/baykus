@@ -64,7 +64,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex w-[15.5rem] shrink-0 flex-col bg-baykus-splash text-white min-h-screen border-r border-slate-800">
+    <aside className="flex w-[15.5rem] shrink-0 flex-col bg-[#1b2230] text-white min-h-screen border-r border-slate-800/80">
       <div className="px-3 py-4 border-b border-slate-700/80 flex flex-col items-center gap-2">
         <Image
           src="/ana_ekran_logo.png"
@@ -156,13 +156,16 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="p-3 border-t border-slate-700/80">
+      <div className="p-3 border-t border-slate-700/80 space-y-2">
         <button
           onClick={logout}
-          className="w-full rounded-md bg-slate-800 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700"
+          className="w-full rounded-md bg-slate-800/80 px-3 py-2 text-xs text-slate-200 hover:bg-slate-700"
         >
           Çıkış Yap
         </button>
+        <div className="text-[9px] text-slate-500 text-center leading-tight">
+          Baykuş Baskı · © 2026
+        </div>
       </div>
     </aside>
   );

@@ -2,22 +2,45 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { DashboardSummary, apiFetch, formatMoney } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
 import { QUICK_ACTIONS } from "@/lib/nav";
 
 type UsdRates = { buy: number; sell: number } | null;
+type NoteItem = { id: string; text: string; at: string };
 
 const WORKSHOP_STATUSES = ["Sipariş Alındı", "Hazırlanıyor", "Baskıda", "Hazır"] as const;
+const NOTES_KEY = "baykus_dashboard_notes";
 
 function statusCount(data: DashboardSummary, status: string): number {
   return data.status_counts.find((s) => s.status === status)?.count ?? 0;
 }
 
+function loadNotes(): NoteItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(NOTES_KEY);
+    return raw ? (JSON.parse(raw) as NoteItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveNotes(notes: NoteItem[]) {
+  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
 export default function DashboardPage() {
+  const router = useRouter();
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [usd, setUsd] = useState<UsdRates>(null);
+  const [smartQ, setSmartQ] = useState("");
+  const [stockProducts, setStockProducts] = useState<Product[]>([]);
+  const [catFilter, setCatFilter] = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [notes, setNotes] = useState<NoteItem[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,10 +75,21 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadStock = useCallback(async () => {
+    try {
+      const rows = await apiFetch<Product[]>("/api/products?limit=200&active_only=true");
+      setStockProducts(rows.filter((p) => (p.stock_qty ?? p.total_stock ?? 0) > 0));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     load();
     loadUsd();
-  }, [load, loadUsd]);
+    loadStock();
+    setNotes(loadNotes());
+  }, [load, loadUsd, loadStock]);
 
   const todayLabel = useMemo(
     () =>
@@ -74,8 +108,36 @@ export default function DashboardPage() {
 
   const assetMax = useMemo(() => {
     if (!data) return 1;
-    return Math.max(Number(data.cash_balance) || 0, Number(data.bank_balance) || 0, Number(data.stock_value) || 0, 1);
+    return Math.max(
+      Number(data.cash_balance) || 0,
+      Number(data.bank_balance) || 0,
+      Number(data.stock_value) || 0,
+      1,
+    );
   }, [data]);
+
+  const debtMax = useMemo(() => {
+    if (!data) return 1;
+    return Math.max(Number(data.receivables_total) || 0, Number(data.payables_total) || 0, 1);
+  }, [data]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of stockProducts) if (p.category) set.add(p.category);
+    return Array.from(set).sort();
+  }, [stockProducts]);
+
+  const filteredStock = useMemo(() => {
+    return stockProducts.filter((p) => {
+      if (catFilter && p.category !== catFilter) return false;
+      if (nameFilter) {
+        const n = nameFilter.toLocaleLowerCase("tr");
+        if (!p.name.toLocaleLowerCase("tr").includes(n) && !p.sku.toLocaleLowerCase("tr").includes(n))
+          return false;
+      }
+      return true;
+    });
+  }, [stockProducts, catFilter, nameFilter]);
 
   const footerOk =
     !data ||
@@ -83,48 +145,82 @@ export default function DashboardPage() {
       (data.due_soon_count ?? 0) === 0 &&
       (data.overdue_deliveries_count ?? 0) === 0);
 
+  function runSmartSearch() {
+    const q = smartQ.trim();
+    if (!q) return;
+    const enc = encodeURIComponent(q);
+    if (/^\d+$/.test(q) || q.toUpperCase().startsWith("SIP") || q.toUpperCase().startsWith("ORD")) {
+      router.push(`/orders?q=${enc}`);
+    } else if (q.startsWith("05") || q.replace(/\s/g, "").length >= 10) {
+      router.push(`/customers?q=${enc}`);
+    } else {
+      router.push(`/products?q=${enc}`);
+    }
+  }
+
+  function addNote() {
+    const text = prompt("Not:");
+    if (!text?.trim()) return;
+    const next = [
+      { id: Math.random().toString(36).slice(2), text: text.trim(), at: new Date().toISOString() },
+      ...notes,
+    ];
+    setNotes(next);
+    saveNotes(next);
+  }
+
+  function removeNote(id: string) {
+    const next = notes.filter((n) => n.id !== id);
+    setNotes(next);
+    saveNotes(next);
+  }
+
   return (
     <div className="space-y-3 pb-2">
-      {/* Top metrics strip */}
+      {/* Top metrics strip — sağ üst kutucuklar */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="text-xl font-bold text-slate-400 capitalize tracking-tight">{todayLabel}</div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold uppercase tracking-wide text-baykus-muted">
-          <span>
-            Bugünkü Satış{" "}
-            <strong className="ml-1 text-sm text-baykus-text tabular-nums normal-case">
-              {data ? formatMoney(Number(data.orders_today_revenue)) : "—"}
-            </strong>
-          </span>
-          <span className="hidden sm:inline text-baykus-line">|</span>
-          <span>
-            Bugünkü Tahsilat{" "}
-            <strong className="ml-1 text-sm text-baykus-text tabular-nums normal-case">
-              {data ? formatMoney(Number(data.collections_today ?? 0)) : "—"}
-            </strong>
-          </span>
-          <span className="hidden sm:inline text-baykus-line">|</span>
-          <span>
-            İnternet Satışı{" "}
-            <strong className="ml-1 text-sm text-baykus-text tabular-nums normal-case">
-              {data
-                ? `${formatMoney(Number(data.internet_sales_today_revenue ?? 0))} | ${data.internet_sales_today_count ?? 0} sipariş`
-                : "—"}
-            </strong>
-          </span>
-          <span className="hidden sm:inline text-baykus-line">|</span>
-          <span>
-            Güncel Dolar{" "}
-            <strong className="ml-1 text-sm text-baykus-text tabular-nums normal-case">
-              {usd ? `Alış ${fmtUsd(usd.buy)} TL | Satış ${fmtUsd(usd.sell)} TL` : "—"}
-            </strong>
-          </span>
+        <div className="text-xl font-bold text-slate-700 tracking-tight capitalize">{todayLabel}</div>
+        <div className="flex flex-wrap items-stretch gap-2">
+          {(
+            [
+              {
+                label: "BUGÜNKÜ SATIŞ",
+                value: data ? formatMoney(Number(data.orders_today_revenue)) : "—",
+              },
+              {
+                label: "BUGÜNKÜ TAHSİLAT",
+                value: data ? formatMoney(Number(data.collections_today ?? 0)) : "—",
+              },
+              {
+                label: "İNTERNET SATIŞI",
+                value: data
+                  ? `${formatMoney(Number(data.internet_sales_today_revenue ?? 0))} | ${data.internet_sales_today_count ?? 0} sipariş`
+                  : "—",
+              },
+              {
+                label: "GÜNCEL DOLAR",
+                value: usd ? `Alış: ${fmtUsd(usd.buy)} TL | Satış: ${fmtUsd(usd.sell)} TL` : "—",
+              },
+            ] as const
+          ).map((box) => (
+            <div
+              key={box.label}
+              className="rounded border border-baykus-line bg-white px-3 py-1.5 shadow-sm min-w-[9.5rem]"
+            >
+              <div className="text-[9px] font-bold uppercase tracking-wide text-baykus-muted">
+                {box.label}
+              </div>
+              <div className="text-xs font-bold tabular-nums text-baykus-text mt-0.5">{box.value}</div>
+            </div>
+          ))}
           <button
             type="button"
             onClick={() => {
               load();
               loadUsd();
+              loadStock();
             }}
-            className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-baykus-line bg-white text-baykus-muted hover:bg-baykus-bg"
+            className="inline-flex h-9 w-9 items-center justify-center self-center rounded-full border border-baykus-line bg-white text-baykus-muted hover:bg-baykus-bg"
             title="Yenile"
           >
             ↻
@@ -136,22 +232,20 @@ export default function DashboardPage() {
       {loading && !data && <p className="text-baykus-muted text-sm">Yükleniyor…</p>}
 
       {/* Hızlı İşlemler */}
-      <div>
-        <div className="text-xs font-semibold text-baykus-muted mb-1.5 uppercase tracking-wide">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-baykus-muted uppercase tracking-wide mr-1">
           Hızlı İşlemler
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {QUICK_ACTIONS.map((a) => (
-            <Link
-              key={a.id}
-              href={a.href}
-              className="rounded px-3.5 py-2.5 text-xs font-bold text-white shadow-sm hover:opacity-95"
-              style={{ backgroundColor: a.hex }}
-            >
-              {a.label}
-            </Link>
-          ))}
-        </div>
+        </span>
+        {QUICK_ACTIONS.map((a) => (
+          <Link
+            key={a.id}
+            href={a.href}
+            className="rounded px-3 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
+            style={{ backgroundColor: a.hex }}
+          >
+            {a.label}
+          </Link>
+        ))}
       </div>
 
       {/* KPI cards */}
@@ -159,41 +253,41 @@ export default function DashboardPage() {
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Link
             href="/reports/sales"
-            className="rounded-lg px-4 py-3 text-white shadow-sm"
+            className="rounded-lg px-4 py-4 text-white shadow-sm text-center"
             style={{ backgroundColor: "#2563eb" }}
           >
             <div className="text-[11px] font-semibold opacity-90">{monthName} Cirosu</div>
-            <div className="text-xl font-bold tabular-nums mt-0.5">
+            <div className="text-2xl font-bold tabular-nums mt-1">
               {formatMoney(Number(data.orders_month_revenue))}
             </div>
           </Link>
           <Link
             href="/reports/profit"
-            className="rounded-lg px-4 py-3 text-white shadow-sm"
+            className="rounded-lg px-4 py-4 text-white shadow-sm text-center"
             style={{ backgroundColor: "#15803d" }}
           >
             <div className="text-[11px] font-semibold opacity-90">{monthName} Net Kar</div>
-            <div className="text-xl font-bold tabular-nums mt-0.5">
+            <div className="text-2xl font-bold tabular-nums mt-1">
               {formatMoney(Number(data.month_net_profit ?? 0))}
             </div>
           </Link>
           <Link
             href="/finance/cash"
-            className="rounded-lg px-4 py-3 text-white shadow-sm"
+            className="rounded-lg px-4 py-4 text-white shadow-sm text-center"
             style={{ backgroundColor: "#f59e0b" }}
           >
             <div className="text-[11px] font-semibold opacity-90">Güncel Kasa</div>
-            <div className="text-xl font-bold tabular-nums mt-0.5">
+            <div className="text-2xl font-bold tabular-nums mt-1">
               {formatMoney(Number(data.cash_balance))}
             </div>
           </Link>
           <Link
             href="/finance/banks"
-            className="rounded-lg px-4 py-3 text-white shadow-sm"
+            className="rounded-lg px-4 py-4 text-white shadow-sm text-center"
             style={{ backgroundColor: "#be123c" }}
           >
             <div className="text-[11px] font-semibold opacity-90">Banka Bakiyesi</div>
-            <div className="text-xl font-bold tabular-nums mt-0.5">
+            <div className="text-2xl font-bold tabular-nums mt-1">
               {formatMoney(Number(data.bank_balance))}
             </div>
           </Link>
@@ -206,7 +300,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {/* ÜRETİM / ATÖLYE */}
             <div className="bk-card overflow-hidden">
-              <div className="bg-baykus-navy text-white px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="bg-[#1b2230] text-white px-3 py-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-bold tracking-wide">
                   ÜRETİM / ATÖLYE{" "}
                   <span className="font-normal opacity-80 ml-2">
@@ -215,14 +309,14 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex gap-1.5">
                   <Link
-                    href="/orders/kanban"
+                    href="/production"
                     className="rounded px-2.5 py-1 text-[11px] font-semibold text-white"
                     style={{ backgroundColor: "#f59e0b" }}
                   >
-                    Üretim Akışı
+                    Üretim Akış
                   </Link>
                   <Link
-                    href="/production"
+                    href="/production/work-orders"
                     className="rounded px-2.5 py-1 text-[11px] font-semibold bg-slate-600 text-white hover:bg-slate-500"
                   >
                     İş Emirleri
@@ -249,19 +343,19 @@ export default function DashboardPage() {
 
             {/* VARLIKLAR */}
             <div className="bk-card overflow-hidden">
-              <div className="bg-baykus-navy text-white text-xs font-bold px-3 py-2 tracking-wide">
+              <div className="bg-[#1b2230] text-white text-xs font-bold px-3 py-2 tracking-wide">
                 VARLIKLAR
               </div>
               <div className="p-3 space-y-3">
                 {(
                   [
-                    { label: "Kasa", value: Number(data.cash_balance), href: "/finance/cash", color: "#94a3b8" },
-                    { label: "Banka", value: Number(data.bank_balance), href: "/finance/banks", color: "#64748b" },
+                    { label: "Kasa", value: Number(data.cash_balance), href: "/finance/cash", color: "#22c55e" },
+                    { label: "Banka", value: Number(data.bank_balance), href: "/finance/banks", color: "#3b82f6" },
                     {
                       label: "Stok",
                       value: Number(data.stock_value ?? 0),
                       href: "/reports/stock",
-                      color: "#16a34a",
+                      color: "#166534",
                     },
                   ] as const
                 ).map((row) => {
@@ -283,6 +377,65 @@ export default function DashboardPage() {
                     </Link>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* BORÇLAR / ALACAKLAR */}
+            <div className="bk-card overflow-hidden">
+              <div className="bg-[#1b2230] text-white text-xs font-bold px-3 py-2 tracking-wide">
+                BORÇLAR / ALACAKLAR
+              </div>
+              <div className="p-3 space-y-3">
+                {(
+                  [
+                    {
+                      label: "Açık Hesap Alacağı",
+                      value: Number(data.receivables_total),
+                      href: "/customers/receivables",
+                      color: "#3b82f6",
+                    },
+                    {
+                      label: "Tedarikçi Borcu",
+                      value: Number(data.payables_total ?? 0),
+                      href: "/suppliers/payables",
+                      color: "#ef4444",
+                    },
+                  ] as const
+                ).map((row) => {
+                  const pct = Math.min(100, Math.round((row.value / debtMax) * 100));
+                  return (
+                    <Link key={row.label} href={row.href} className="block group">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-semibold group-hover:text-baykus-primary">{row.label}</span>
+                        <span className="tabular-nums font-medium">{formatMoney(row.value)}</span>
+                      </div>
+                      <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${pct}%`, backgroundColor: row.color }}
+                        />
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* PERFORMANS */}
+            <div className="bk-card overflow-hidden">
+              <div className="bg-[#1b2230] text-white text-xs font-bold px-3 py-2 tracking-wide">
+                PERFORMANS
+              </div>
+              <div className="p-3 text-xs space-y-2">
+                <div>
+                  En Çok Satan Ürün:{" "}
+                  <strong>{data.top_selling_product || "—"}</strong>
+                </div>
+                <div className="text-baykus-muted border-t border-baykus-line pt-2">
+                  Geciken Teslim: {data.overdue_deliveries_count ?? 0} | Bugün Teslim:{" "}
+                  {data.due_today_count ?? 0} | Stok Değeri:{" "}
+                  {formatMoney(Number(data.stock_value ?? 0))}
+                </div>
               </div>
             </div>
           </div>
@@ -329,7 +482,7 @@ export default function DashboardPage() {
             </Link>
 
             <Link
-              href="/orders?overdue=1"
+              href="/orders/overdue"
               className="block rounded-lg px-4 py-3 text-white shadow-sm"
               style={{ backgroundColor: "#ef4444" }}
             >
@@ -362,32 +515,204 @@ export default function DashboardPage() {
                 Ödeme Yap
               </Link>
             </div>
+
+            {/* STOK UYARISI */}
+            <div className="bk-card overflow-hidden">
+              <div className="bg-[#1d4ed8] text-white text-xs font-bold px-3 py-2 tracking-wide">
+                STOK UYARISI
+              </div>
+              <div className="p-2 max-h-40 overflow-auto">
+                {(data.low_stock_items || []).length === 0 ? (
+                  <p className="text-xs text-baykus-muted px-1 py-2">Kritik stok uyarısı yok.</p>
+                ) : (
+                  <ul className="text-xs space-y-1">
+                    {data.low_stock_items.map((it) => (
+                      <li key={`${it.product_id}-${it.variant_id || 0}`}>
+                        <Link href={`/products/${it.product_id}`} className="hover:underline">
+                          <span className="font-semibold">{it.name}</span>
+                          <span className="text-baykus-muted">
+                            {" "}
+                            · {it.stock_qty} / eşik {it.threshold}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
+      {/* Akıllı Arama */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <input
+          className="bk-input flex-1 min-w-[16rem]"
+          placeholder="Müşteri / telefon / sipariş no / ürün / tedarikçi"
+          value={smartQ}
+          onChange={(e) => setSmartQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") runSmartSearch();
+          }}
+        />
+        <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => setSmartQ("")}>
+          Temizle
+        </button>
+        <button type="button" className="bk-btn bk-btn-primary text-xs" onClick={runSmartSearch}>
+          Ara
+        </button>
+      </div>
+
+      {/* Stokta Var + Notlar */}
+      <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
+        <div className="bk-card overflow-hidden">
+          <div className="bg-[#1b2230] text-white text-xs font-bold px-3 py-2 tracking-wide">
+            STOKTA VAR OLAN ÜRÜNLER
+          </div>
+          <div className="p-2 flex flex-wrap gap-2 items-center border-b border-baykus-line">
+            <select
+              className="bk-input w-auto text-xs"
+              value={catFilter}
+              onChange={(e) => setCatFilter(e.target.value)}
+            >
+              <option value="">Kategori</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <input
+              className="bk-input max-w-[12rem] text-xs"
+              placeholder="Ürün Adı"
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+            />
+            <button
+              type="button"
+              className="bk-btn bk-btn-primary text-xs"
+              onClick={() => loadStock()}
+            >
+              Filtrele
+            </button>
+            <button
+              type="button"
+              className="bk-btn bk-btn-ghost text-xs"
+              onClick={() => {
+                setCatFilter("");
+                setNameFilter("");
+              }}
+            >
+              Temizle
+            </button>
+          </div>
+          <div className="bk-table-wrap border-0 rounded-none max-h-64 overflow-auto">
+            <table className="bk-table">
+              <thead>
+                <tr>
+                  <th>Kategori</th>
+                  <th>Ürün Adı</th>
+                  <th>Renk</th>
+                  <th className="text-right">Satış Fiyatı</th>
+                  <th>Stok</th>
+                  <th className="text-right">Stok Adedi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStock.slice(0, 50).map((p, i) => (
+                  <tr key={p.id} className={i % 2 === 1 ? "bg-rose-50/60" : ""}>
+                    <td className="text-xs">{p.category || "—"}</td>
+                    <td>
+                      <Link href={`/products/${p.id}`} className="hover:underline font-medium">
+                        {p.name}
+                      </Link>
+                    </td>
+                    <td className="text-xs">—</td>
+                    <td className="text-right tabular-nums">{formatMoney(Number(p.base_price))}</td>
+                    <td>
+                      <span
+                        className={`text-[11px] font-semibold ${
+                          p.is_critical ? "text-red-600" : "text-emerald-600"
+                        }`}
+                      >
+                        {p.is_critical ? "Kritik" : "Var"}
+                      </span>
+                    </td>
+                    <td className="text-right tabular-nums">{p.stock_qty ?? p.total_stock ?? 0}</td>
+                  </tr>
+                ))}
+                {filteredStock.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center text-baykus-muted py-6">
+                      Stokta ürün yok
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bk-card overflow-hidden flex flex-col">
+          <div className="bg-[#1b2230] text-white px-3 py-2 flex items-center justify-between">
+            <span className="text-xs font-bold tracking-wide">NOTLAR</span>
+            <button
+              type="button"
+              onClick={addNote}
+              className="rounded px-2 py-0.5 text-[11px] font-bold text-white"
+              style={{ backgroundColor: "#16a34a" }}
+            >
+              Not Ekle
+            </button>
+          </div>
+          <div className="p-3 flex-1 overflow-auto text-xs space-y-2">
+            {notes.length === 0 ? (
+              <p className="text-baykus-muted">Henüz not eklenmemiş.</p>
+            ) : (
+              notes.map((n) => (
+                <div key={n.id} className="rounded border border-baykus-line bg-baykus-bg px-2 py-1.5">
+                  <div className="flex justify-between gap-2">
+                    <span>{n.text}</span>
+                    <button
+                      type="button"
+                      className="text-red-500 shrink-0"
+                      onClick={() => removeNote(n.id)}
+                      title="Sil"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="text-[10px] text-baykus-muted mt-0.5">
+                    {new Date(n.at).toLocaleString("tr-TR")}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Footer status */}
       <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-baykus-line bg-white px-3 py-2 text-xs">
         <div className="flex items-center gap-2 text-baykus-muted">
+          <span className="font-semibold text-red-600">⚠ Teslim Tarihi Alarmı</span>
           <span className={footerOk ? "text-emerald-600" : "text-amber-600"}>
-            {footerOk ? "✓" : "!"}
-          </span>
-          <span>
             {footerOk
-              ? "Bugün teslim edilecek veya geciken iş yok."
+              ? "✔ Bugün teslim edilecek veya geciken iş yok."
               : "Teslim takibi gereken açık işler var."}
           </span>
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={load} className="bk-btn bk-btn-ghost text-xs">
-            Yenile
+            ↻ Yenile
           </button>
           <Link
             href="/production"
             className="bk-btn text-xs font-semibold text-white"
             style={{ backgroundColor: "#f59e0b" }}
           >
-            Haftalık Plan
+            📅 Haftalık Plan
           </Link>
         </div>
       </div>

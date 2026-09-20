@@ -125,6 +125,8 @@ class DashboardSummary(BaseModel):
     customer_count: int = 0
     receivables_total: float = 0.0
     receivables_customer_count: int = 0
+    payables_total: float = 0.0
+    top_selling_product: str | None = None
 
     # Finance
     cash_balance: float = 0.0

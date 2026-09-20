@@ -15,7 +15,7 @@ export default function TopBar() {
       <button
         type="button"
         onClick={() => router.back()}
-        className="inline-flex items-center gap-1.5 rounded border border-baykus-line bg-slate-100 px-3 py-1.5 text-sm text-baykus-text hover:bg-slate-200"
+        className="inline-flex items-center gap-1.5 rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 shadow-sm"
       >
         <span aria-hidden>←</span>
         Geri

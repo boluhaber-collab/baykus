@@ -13,7 +13,7 @@ const config: Config = {
         "baykus-primary": "#2563eb",
         "baykus-primary-dark": "#1d4ed8",
         "baykus-success": "#16a34a",
-        "baykus-splash": "#111827",
+        "baykus-splash": "#1b2230",
         "baykus-accent": "#93c5fd",
         "baykus-navy": "#1e293b",
         baykus: {
@@ -25,7 +25,7 @@ const config: Config = {
           primary: "#2563eb",
           "primary-dark": "#1d4ed8",
           success: "#16a34a",
-          splash: "#111827",
+          splash: "#1b2230",
           accent: "#93c5fd",
           navy: "#1e293b",
           50: "#f4f7fb",

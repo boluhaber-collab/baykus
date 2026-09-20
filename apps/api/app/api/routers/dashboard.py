@@ -577,7 +577,54 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
     ]
     month_label = TR_MONTHS[month_start.month]
 
-    return DashboardSummary(
+    # Payables (supplier debt)
+    payables_total = 0.0
+    try:
+        from app.models.supplier import Supplier, SupplierMovement
+        suppliers = db.query(Supplier).filter(Supplier.is_active.is_(True)).all()
+        if suppliers:
+            sids = [s.id for s in suppliers]
+            smap = {
+                r[0]: (_dec(r[1]), _dec(r[2]))
+                for r in (
+                    db.query(
+                        SupplierMovement.supplier_id,
+                        func.coalesce(func.sum(SupplierMovement.debit), 0),
+                        func.coalesce(func.sum(SupplierMovement.credit), 0),
+                    )
+                    .filter(SupplierMovement.supplier_id.in_(sids))
+                    .group_by(SupplierMovement.supplier_id)
+                    .all()
+                )
+            }
+            pt = Decimal("0")
+            for s in suppliers:
+                d, cr = smap.get(s.id, (Decimal("0"), Decimal("0")))
+                bal = _dec(s.opening_balance) + d - cr
+                if bal > 0:
+                    pt += bal
+            payables_total = _f(pt)
+    except Exception:
+        payables_total = 0.0
+
+    # Top selling product (month)
+    top_selling_product = None
+    try:
+        from app.models.order import OrderLine
+        row = (
+            db.query(OrderLine.description, func.sum(OrderLine.quantity))
+            .join(Order, Order.id == OrderLine.order_id)
+            .filter(Order.created_at >= month_start, Order.status != "Sipariş İptali")
+            .group_by(OrderLine.description)
+            .order_by(func.sum(OrderLine.quantity).desc())
+            .first()
+        )
+        if row and row[0]:
+            top_selling_product = str(row[0])
+    except Exception:
+        top_selling_product = None
+
+        return DashboardSummary(
         orders_today_count=int(today_row[0] or 0),
         orders_today_revenue=_f(today_row[1]),
         orders_month_count=int(month_row[0] or 0),
@@ -603,6 +650,8 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         customer_count=cust_count,
         receivables_total=recv_total,
         receivables_customer_count=recv_cust,
+        payables_total=payables_total,
+        top_selling_product=top_selling_product,
         cash_balance=_f(cash_total),
         bank_balance=_f(bank_total),
         total_liquidity=_f(cash_total + bank_total),

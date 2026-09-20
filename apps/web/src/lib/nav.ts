@@ -212,9 +212,10 @@ export type Crumb = { label: string; href?: string };
 
 const PATH_LABELS: Record<string, string> = {
   "/dashboard": "Ana Sayfa",
-  "/sales": "Satış / Sipariş",
+  "/sales": "Direkt Satışlar",
   "/sales/create": "Satış / Teklif Oluştur",
   "/sales/retail": "Perakende Satışlar",
+  "/sales/retail/new": "Perakende Satış",
   "/production": "Üretim Akış Paneli",
   "/production/work-orders": "İş Emirleri",
   "/production/sublimation": "Sublimasyon Baskı Süreleri",
@@ -302,6 +303,27 @@ export function crumbsForPath(pathname: string): Crumb[] {
   if (pathname === "/" || pathname === "/dashboard") {
     return [{ label: "Ana Sayfa" }, { label: "Genel Bakış" }];
   }
+  // Masaüstü: Satışlar › Direkt Satışlar › Perakende Satış
+  if (pathname === "/sales" || pathname.startsWith("/sales?")) {
+    return [
+      { label: "Satışlar", href: "/sales" },
+      { label: "Direkt Satışlar" },
+    ];
+  }
+  if (pathname === "/sales/retail/new") {
+    return [
+      { label: "Satışlar", href: "/sales" },
+      { label: "Direkt Satışlar", href: "/sales" },
+      { label: "Perakende Satış" },
+    ];
+  }
+  if (pathname === "/sales/retail" || pathname.startsWith("/sales/retail?")) {
+    return [
+      { label: "Satış / Sipariş", href: "/sales" },
+      { label: "Satışlar", href: "/sales" },
+      { label: "Perakende Satışlar" },
+    ];
+  }
   const group = findGroupForPath(pathname);
   const exact = PATH_LABELS[pathname];
   const pageLabel =
@@ -326,18 +348,20 @@ export function crumbsForPath(pathname: string): Crumb[] {
 
 export function titleForPath(pathname: string): string {
   if (pathname === "/" || pathname === "/dashboard") return "Ana Sayfa";
+  if (pathname === "/sales" || pathname.startsWith("/sales?")) return "Direkt Satışlar";
+  if (pathname === "/sales/retail/new") return "Perakende Satış Gir";
   const crumbs = crumbsForPath(pathname);
   return crumbs[crumbs.length - 1]?.label || "Baykuş Baskı";
 }
 
 export const QUICK_ACTIONS = [
-  { id: "satis_belgeleri", label: "Satışlar", href: "/sales", hex: "#0f766e" },
-  { id: "siparis_listesi", label: "Sipariş Listesi", href: "/orders", hex: "#0f766e" },
-  { id: "atolye_paneli", label: "Üretim Akış Paneli", href: "/production", hex: "#f59e0b" },
-  { id: "gider_takibi", label: "Masraflar", href: "/finance/expenses", hex: "#be123c" },
-  { id: "fiyat_listesi", label: "Fiyat Listesi", href: "/price-lists", hex: "#be123c" },
-  { id: "alis_hareketleri", label: "Alış Hareketleri", href: "/purchases", hex: "#198754" },
-  { id: "satis_teklif_olustur", label: "Satış / Teklif Oluştur", href: "/sales/create", hex: "#1f6feb" },
+  { id: "satis_belgeleri", label: "Satışlar", href: "/sales", hex: "#198754" },
+  { id: "siparis_listesi", label: "Sipariş Listesi", href: "/orders", hex: "#38bdf8" },
+  { id: "atolye_paneli", label: "Üretim Akış Paneli", href: "/production", hex: "#eab308" },
+  { id: "gider_takibi", label: "Gider Takibi", href: "/finance/expenses", hex: "#dc2626" },
+  { id: "fiyat_listesi", label: "Fiyat Listesi", href: "/price-lists", hex: "#db2777" },
+  { id: "alis_hareketleri", label: "Alış Hareketleri", href: "/purchases", hex: "#0d9488" },
+  { id: "satis_teklif_olustur", label: "Satış / Teklif Oluştur", href: "/sales/create", hex: "#1e3a8a" },
 ] as const;
 
 /** @deprecated */

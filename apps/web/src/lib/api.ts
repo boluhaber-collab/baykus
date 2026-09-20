@@ -260,6 +260,8 @@ export type DashboardSummary = {
   customer_count: number;
   receivables_total: number;
   receivables_customer_count: number;
+  payables_total?: number;
+  top_selling_product?: string | null;
   cash_balance: number;
   bank_balance: number;
   total_liquidity: number;

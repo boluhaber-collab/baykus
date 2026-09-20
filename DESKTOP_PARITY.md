@@ -7,7 +7,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Ana Sayfa
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Ana Sayfa | `/dashboard` | done |
+| Ana Sayfa | `/dashboard` | done — masaüstü ana_sayfa: KPI şerit, hızlı işlemler, atölye, varlıklar, borç/alacak, uyarılar, stok tablosu, notlar |
 
 ## Müşteri Merkezi
 | Masaüstü | Web | Durum |
@@ -31,9 +31,10 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
 | Sipariş Merkezi | `/orders` | done (sekmeler: Teklifler/Siparişler/Açık/Hazırlanıyor/Baskıda/Hazır/Teslim + Kanban; satır renkleri; toplu durum; teklif→sipariş) |
-| Satışlar | `/sales` | done |
+| Satışlar (= Direkt Satışlar) | `/sales` | done — hub değil; özet kartlar + 3 CTA + filtre + tablo; iptal→stok iade |
 | Satış / Teklif Oluştur | `/sales/create` | done (beden/renk/baskı, ürün ekle, teslim tarihi, kapora/kalan, Nakit→kasa / EFT·Kart→banka, stok↓) |
 | Perakende Satışlar | `/sales/retail` | done |
+| Perakende Satış Gir | `/sales/retail/new` | done — masaüstü `perakende_satis_gir`; kayıt→stok↓ + kasa/banka |
 | Teklifler | `/quotes` | done |
 | Sipariş Listesi | `/orders` | done |
 | Teslim Edilen Siparişler | `/orders?status=Teslim%20Edildi` | done |
@@ -145,3 +146,17 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 
 Revizyon: Alembic **012** (`design_approved_at`, `design_whatsapp_at`, design_status etiket remap). SQLite: `python -m app.bootstrap_sqlite`.
 
+## Direkt Satışlar / Perakende (batch 6 — UI parity)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| `/sales` = Direkt Satışlar (`satis_belgeleri_paneli` → `direkt_satislar_penceresi`) | hub kartlar kaldırıldı | done |
+| Breadcrumb Satışlar › Direkt Satışlar | `crumbsForPath` | done |
+| Perakende Gir breadcrumb Satışlar › Direkt Satışlar › Perakende Satış | `/sales/retail/new` | done |
+| Özet: Listelenen / Toplam / Tahsil / İptal | `#198754/#be123c/#0f766e/#f59e0b` | done |
+| CTA: Perakende / Yeni / Kayıtlı | `/sales/retail/new`, `/sales/create?type=…` | done |
+| İptalde stok iade + finans temizliği | `DELETE /api/orders/{id}?soft=true` | done |
+| Sidebar navy `#1b2230` | Sidebar + theme tokens | done |
+| Dashboard payables + top seller | `DashboardSummary.payables_total`, `top_selling_product` | done |
+
+Spec: `docs/DIRECT_SALES_SPEC.md` · ekran görüntüleri: `docs/parity-shots/`

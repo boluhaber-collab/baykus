@@ -437,6 +437,57 @@ def _apply_sale_side_effects(db: Session, order: Order, user: User) -> None:
 
 
 
+
+def _restore_stock_on_cancel(db: Session, order: Order, user: User) -> None:
+    """İptalde stok iadesi (direkt satış / perakende)."""
+    from app.models.product import Product, ProductVariant, StockMovement
+
+    for line in order.lines:
+        if not line.product_id:
+            continue
+        product = db.get(Product, line.product_id)
+        if not product:
+            continue
+        ptype = getattr(product, "product_type", None) or "stoklu"
+        if ptype == "hizmet":
+            continue
+        qty = int(line.quantity or 0)
+        if qty <= 0:
+            continue
+        variant = None
+        if line.variant_id:
+            variant = db.get(ProductVariant, line.variant_id)
+            if not variant or variant.product_id != product.id:
+                continue
+            before = int(variant.stock_qty or 0)
+            after = before + qty
+            variant.stock_qty = after
+        else:
+            before = int(product.stock_qty or 0)
+            after = before + qty
+            product.stock_qty = after
+        db.add(
+            StockMovement(
+                product_id=product.id,
+                variant_id=variant.id if variant else None,
+                direction="increase",
+                quantity=qty,
+                qty_before=before,
+                qty_after=after,
+                reason="sale_cancel",
+                note=f"İptal iade {order.order_number}",
+                warehouse=getattr(product, "warehouse", None) or "Ana Depo",
+                created_by_user_id=user.id,
+            )
+        )
+        try:
+            from app.api.routers.products import _sync_product_stock
+            _sync_product_stock(product)
+        except Exception:
+            if product.variants:
+                product.stock_qty = sum(int(v.stock_qty or 0) for v in product.variants)
+
+
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
 
 def create_order(
@@ -632,16 +683,24 @@ def delete_order(
     if soft:
         if order.status != "Sipariş İptali":
             old = order.status
+            # Stok iadesi (satış iptali)
+            _restore_stock_on_cancel(db, order, user)
+            # Bağlı kasa/banka tahsilatlarını sil (order_id note eşleşmesi yok; payment kayıtları kalsın)
+            from app.models.finance import CashMovement, BankMovement
+            for m in db.query(CashMovement).filter(CashMovement.note.ilike(f"%{order.order_number}%")).all():
+                db.delete(m)
+            for m in db.query(BankMovement).filter(BankMovement.note.ilike(f"%{order.order_number}%")).all():
+                db.delete(m)
             order.status = "Sipariş İptali"
             order.updated_at = datetime.utcnow()
-            _record_status(db, order, old, "Sipariş İptali", user, note="Soft cancel")
+            _record_status(db, order, old, "Sipariş İptali", user, note="Satış iptali")
             db.commit()
             write_audit(
                 user_id=user.id,
                 action="delete",
                 entity_type="order",
                 entity_id=order.id,
-                detail={"soft": True, "order_number": order.order_number},
+                detail={"soft": True, "order_number": order.order_number, "stock_restored": True},
             )
         return
     # Hard delete only for admin

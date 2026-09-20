@@ -22,12 +22,21 @@ CLOSED_STATUSES = frozenset({"Teslim Edildi", "Sipariş İptali"})
 ORDER_CHANNELS = [
     "mağaza",
     "perakende",
+    "yeni müşteri",
+    "kayıtlı müşteri",
     "internet",
     "Trendyol",
     "Hepsiburada",
     "N11",
     "diğer",
 ]
+DIRECT_SALE_CHANNELS = frozenset({
+    "perakende",
+    "yeni müşteri",
+    "kayıtlı müşteri",
+    "mağaza",
+    "magaza",
+})
 DEFAULT_ORDER_CHANNEL = "mağaza"
 
 # Desktop Tasarım Onay Akışı labels (siparis_detay_penceresi_ac)
