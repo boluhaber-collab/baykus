@@ -19,6 +19,8 @@ apps/web/.turbo/
 baykus.db
 apps/web/tsconfig.tsbuildinfo
 
-apps/api/uploads/**
+apps/api/uploads/*
 !apps/api/uploads/.gitkeep
+!apps/api/uploads/designs/
+apps/api/uploads/designs/*
 !apps/api/uploads/designs/.gitkeep
