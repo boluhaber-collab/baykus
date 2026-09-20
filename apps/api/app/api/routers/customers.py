@@ -170,16 +170,14 @@ def customer_track(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ_ROLES)),
     limit: int = Query(default=50, ge=1, le=200),
-) -> list[dict]:
-    """Timeline of recent orders and cari payments across customers."""
+    customer_id: int | None = Query(default=None),
+) -> dict:
+    """Müşteri takip — timeline + açık alacak özeti + notlar (masaüstü)."""
     events: list[dict] = []
-    orders = (
-        db.query(Order)
-        .options(joinedload(Order.customer))
-        .order_by(Order.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    oq = db.query(Order).options(joinedload(Order.customer)).order_by(Order.created_at.desc())
+    if customer_id:
+        oq = oq.filter(Order.customer_id == customer_id)
+    orders = oq.limit(limit).all()
     for o in orders:
         events.append(
             {
@@ -193,29 +191,83 @@ def customer_track(
                 "href": f"/orders/{o.id}",
             }
         )
-    payments = (
+    mq = (
         db.query(CariMovement)
         .options(joinedload(CariMovement.customer))
-        .filter(CariMovement.movement_type == "payment")
         .order_by(CariMovement.movement_date.desc(), CariMovement.id.desc())
-        .limit(limit)
-        .all()
     )
+    if customer_id:
+        mq = mq.filter(CariMovement.customer_id == customer_id)
+    else:
+        mq = mq.filter(CariMovement.movement_type == "payment")
+    payments = mq.limit(limit).all()
     for m in payments:
         events.append(
             {
-                "type": "payment",
+                "type": m.movement_type or "payment",
                 "at": m.movement_date.isoformat() if m.movement_date else None,
                 "customer_id": m.customer_id,
                 "customer_name": m.customer.name if m.customer else None,
-                "label": "Cari ödeme",
+                "label": "Cari " + (m.movement_type or "hareket"),
                 "detail": m.note,
-                "amount": float(m.credit or 0),
+                "amount": float(m.credit or m.debit or 0),
                 "href": f"/customers/{m.customer_id}",
             }
         )
     events.sort(key=lambda e: e.get("at") or "", reverse=True)
-    return events[:limit]
+
+    # Receivables snapshot
+    receivables = []
+    customers_q = db.query(Customer).filter(Customer.is_active.is_(True))
+    if customer_id:
+        customers_q = customers_q.filter(Customer.id == customer_id)
+    customers = customers_q.order_by(Customer.name).all()
+    bal_map = _balances_map(db, [c.id for c in customers])
+    for c in customers:
+        debit_s, credit_s = bal_map.get(c.id, (Decimal("0"), Decimal("0")))
+        balance = (c.opening_balance or Decimal("0")) + debit_s - credit_s
+        if balance <= 0 and not customer_id:
+            continue
+        receivables.append(
+            {
+                "customer_id": c.id,
+                "name": c.name,
+                "phone": c.phone,
+                "balance": float(balance),
+                "notes": c.notes,
+                "special_day_note": c.special_day_note,
+                "special_day_date": c.special_day_date.isoformat() if c.special_day_date else None,
+            }
+        )
+    receivables.sort(key=lambda x: x["balance"], reverse=True)
+
+    focus = None
+    if customer_id:
+        c = db.get(Customer, customer_id)
+        if c:
+            debit_s, credit_s = bal_map.get(c.id, (Decimal("0"), Decimal("0")))
+            balance = (c.opening_balance or Decimal("0")) + debit_s - credit_s
+            focus = {
+                "id": c.id,
+                "name": c.name,
+                "phone": c.phone,
+                "company": c.company,
+                "notes": c.notes,
+                "special_day_note": c.special_day_note,
+                "special_day_date": c.special_day_date.isoformat() if c.special_day_date else None,
+                "balance": float(balance),
+            }
+
+    return {
+        "events": events[:limit],
+        "receivables": receivables[:40],
+        "focus": focus,
+        "summary": {
+            "event_count": len(events[:limit]),
+            "receivable_count": len(receivables),
+            "receivable_total": sum(r["balance"] for r in receivables if r["balance"] > 0),
+        },
+    }
 
 @router.get("/receivables", response_model=list[ReceivableItem])
 def open_receivables(

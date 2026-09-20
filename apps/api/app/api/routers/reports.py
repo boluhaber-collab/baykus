@@ -1223,7 +1223,76 @@ def last_purchase_prices(
             "supplier": pur.supplier.name if pur and pur.supplier else None,
         }
     rows = list(seen.values())
+
+    # Ürün kartındaki purchase_price yedek (alış yoksa)
+    from app.models.product import Product
+
+    product_ids = {r["product_id"] for r in rows if r.get("product_id")}
+    products = {
+        p.id: p
+        for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
+    } if product_ids else {}
+    for r in rows:
+        prod = products.get(r.get("product_id"))
+        if prod:
+            r["product_name"] = prod.name
+            r["sku"] = prod.sku
+            r["card_purchase_price"] = float(prod.purchase_price or 0)
+            r["card_cost"] = float(prod.cost or 0)
+            r["card_sale_price"] = float(prod.base_price or 0)
+        else:
+            r["product_name"] = None
+            r["sku"] = None
+            r["card_purchase_price"] = None
+            r["card_cost"] = None
+            r["card_sale_price"] = None
+
+    # Alış hareketi olmayan ürünleri de ekle (kart fiyatı)
+    if not q or True:
+        existing_pids = {r["product_id"] for r in rows if r.get("product_id")}
+        extras = (
+            db.query(Product)
+            .filter(Product.is_active.is_(True))
+            .order_by(Product.name)
+            .limit(500)
+            .all()
+        )
+        for prod in extras:
+            if prod.id in existing_pids:
+                continue
+            if float(prod.purchase_price or 0) <= 0:
+                continue
+            if q:
+                blob = f"{prod.name} {prod.sku or ''}".lower()
+                if q.lower() not in blob:
+                    continue
+            rows.append(
+                {
+                    "product_id": prod.id,
+                    "variant_id": None,
+                    "description": prod.name,
+                    "unit_cost": float(prod.purchase_price or 0),
+                    "quantity": 0,
+                    "purchase_number": None,
+                    "purchase_date": None,
+                    "supplier": prod.supplier_name,
+                    "product_name": prod.name,
+                    "sku": prod.sku,
+                    "card_purchase_price": float(prod.purchase_price or 0),
+                    "card_cost": float(prod.cost or 0),
+                    "card_sale_price": float(prod.base_price or 0),
+                    "source": "product_card",
+                }
+            )
+            existing_pids.add(prod.id)
+
     return {
-        "summary": {"count": len(rows), "assumptions": ["Her ürün/açıklama için en son alış satırı."]},
+        "summary": {
+            "count": len(rows),
+            "assumptions": [
+                "Her ürün/açıklama için en son alış satırı.",
+                "Alış yoksa ürün kartı purchase_price kullanılır.",
+            ],
+        },
         "rows": rows,
     }

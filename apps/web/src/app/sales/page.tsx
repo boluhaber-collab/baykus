@@ -202,7 +202,7 @@ export default function DirektSatislarPage() {
             🛒 PERAKENDE SATIŞ GİR
           </Link>
           <Link
-            href="/sales/create?type=yeni_musteri"
+            href="/sales/create?type=yeni"
             className="flex items-center justify-center gap-2 rounded-md px-3 py-4 text-sm font-bold text-white shadow-sm hover:opacity-95"
             style={{ backgroundColor: "#0f766e" }}
           >

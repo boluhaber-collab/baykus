@@ -1,4 +1,4 @@
-"""Sublimasyon baskı süreleri (ürün / beden)."""
+"""Sublimasyon baskı süreleri (ürün / beden / süre metni)."""
 
 from datetime import datetime
 
@@ -15,7 +15,9 @@ class SublimationPrintTime(Base):
     product_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     size: Mapped[str | None] = mapped_column(String(50))
     minutes: Mapped[float] = mapped_column(Float, default=0)
-    notes: Mapped[str | None] = mapped_column(Text)
+    # Masaüstü "Baskı Süresi" serbest metin (örn. 45 sn / 180°C)
+    duration_text: Mapped[str | None] = mapped_column(String(120))
+    notes: Mapped[str | None] = mapped_column(Text)  # Diğer Talimatlar
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

@@ -242,3 +242,22 @@ Bilinçli boşluklar (karşılaştırmalı kontrol için): BizimHesap canlı syn
 API: Alembic **015** (`assets.serial_no/current_value/status/maintenance_date`). SQLite: `python -m app.bootstrap_sqlite` kolon yamaları.
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, masaüstü ReportLab Cari/Demirbaş twin stil.
+
+
+## Batch 11 — Hızlı satış / Fiyat / DTF / Kampanya / Takip / Sublimasyon (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Hızlı satış `?type=yeni` / `?type=kayitli` | `/sales/create` — diyaloğa yakın başlıklar · müşteri ara/yeni · ürün satırları · kapora/ödeme tipi · kayıt→stok+finans (`deposit_amount`) | done |
+| Direkt Satışlar CTA | `/sales` → `type=yeni` / `type=kayitli` | done |
+| Fiyat Listesi kalem alanları | baskısız / baskılı / nakışlı / alış / tedarikçi · düzenle modal · Yazdır HTML · CSV · PDF | done |
+| DTF Maliyet (masaüstü) | `/tools/dtf` Metretül · $/mt · kur → USD/TL kâr/marj · ayar persist · **Maliyete Aktar** | done |
+| Maliyet Yönetimi | kategori preset · 5 kalem hızlı giriş · özet kartlar · `/api/tools/costs/bulk` | done |
+| Son Alış Fiyatları | alış belgesi + ürün kartı yedek · CSV · kart/satış kolonları | done |
+| Özel Gün / Kampanya | `/crm/special-days` CRUD+filtre · `/crm/campaigns` + **toplu wa.me** (`POST /api/crm/bulk-wa`, Selenium yok) | done |
+| Müşteri Takibi | `/customers/track` timeline · alacaklar · notlar · müşteri filtresi | done |
+| Sublimasyon Baskı Süreleri | Ürün / Baskı Süresi (metin) / Diğer Talimatlar · arama · `duration_text` | done |
+
+API: Alembic **016** (`price_list_items` baskılı alanlar, `sublimation_print_times.duration_text`). SQLite: `python -m app.bootstrap_sqlite` kolon yamaları.
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.

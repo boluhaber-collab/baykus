@@ -9,6 +9,11 @@ class PriceListItemBase(BaseModel):
     variant_id: int | None = None
     description: str = Field(min_length=1, max_length=255)
     unit_price: Decimal = Field(default=Decimal("0"), ge=0)
+    supplier_name: str | None = None
+    purchase_price: Decimal | None = Field(default=None, ge=0)
+    blank_price: Decimal | None = Field(default=None, ge=0)
+    printed_price: Decimal | None = Field(default=None, ge=0)
+    embroidered_price: Decimal | None = Field(default=None, ge=0)
     valid_from: date | None = None
     valid_to: date | None = None
     notes: str | None = None

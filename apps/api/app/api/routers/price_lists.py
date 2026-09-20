@@ -1,11 +1,14 @@
-"""Fiyat listeleri CRUD."""
+"""Fiyat listeleri CRUD + yazdır / CSV / PDF."""
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
@@ -61,12 +64,24 @@ def _replace_items(pl: PriceList, items: list) -> None:
     pl.items.clear()
     for item in items:
         data = item.model_dump() if hasattr(item, "model_dump") else dict(item)
+        blank = data.get("blank_price")
+        unit = data.get("unit_price")
+        # Baskısız yoksa unit_price kullan; unit_price yoksa baskısız
+        if blank is None and unit is not None:
+            blank = unit
+        if unit is None or (blank is not None and _d(unit) == 0 and _d(blank) > 0):
+            unit = blank if blank is not None else 0
         pl.items.append(
             PriceListItem(
                 product_id=data.get("product_id"),
                 variant_id=data.get("variant_id"),
                 description=data["description"],
-                unit_price=_d(data.get("unit_price")),
+                unit_price=_d(unit),
+                supplier_name=(data.get("supplier_name") or None),
+                purchase_price=_d(data["purchase_price"]) if data.get("purchase_price") is not None else None,
+                blank_price=_d(blank) if blank is not None else None,
+                printed_price=_d(data["printed_price"]) if data.get("printed_price") is not None else None,
+                embroidered_price=_d(data["embroidered_price"]) if data.get("embroidered_price") is not None else None,
                 valid_from=data.get("valid_from"),
                 valid_to=data.get("valid_to"),
                 notes=data.get("notes"),
@@ -178,4 +193,97 @@ def delete_price_list(
         entity_type="price_list",
         entity_id=list_id,
         detail={"name": name},
+    )
+
+
+def _item_rows(pl: PriceList) -> list[dict]:
+    rows = []
+    for it in pl.items or []:
+        blank = it.blank_price if it.blank_price is not None else it.unit_price
+        rows.append(
+            {
+                "description": it.description,
+                "supplier_name": it.supplier_name or "",
+                "purchase_price": float(it.purchase_price or 0),
+                "blank_price": float(blank or 0),
+                "printed_price": float(it.printed_price or 0),
+                "embroidered_price": float(it.embroidered_price or 0),
+                "unit_price": float(it.unit_price or 0),
+                "notes": it.notes or "",
+            }
+        )
+    return rows
+
+
+@router.get("/{list_id}/export")
+def export_price_list(
+    list_id: int,
+    fmt: str = Query(default="csv", pattern="^(csv|html|pdf)$"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+):
+    """CSV / yazdırılabilir HTML / basit PDF."""
+    pl = _load(db, list_id)
+    rows = _item_rows(pl)
+    if fmt == "csv":
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(
+            ["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı", "Not"]
+        )
+        for r in rows:
+            w.writerow(
+                [
+                    r["description"],
+                    r["supplier_name"],
+                    r["purchase_price"],
+                    r["blank_price"],
+                    r["printed_price"],
+                    r["embroidered_price"],
+                    r["notes"],
+                ]
+            )
+        data = "\ufeff" + buf.getvalue()
+        return StreamingResponse(
+            iter([data]),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="fiyat_listesi_{list_id}.csv"'
+            },
+        )
+    if fmt == "html":
+        trs = "".join(
+            f"<tr><td>{r['description']}</td><td>{r['supplier_name']}</td>"
+            f"<td style='text-align:right'>{r['purchase_price']:.2f}</td>"
+            f"<td style='text-align:right'>{r['blank_price']:.2f}</td>"
+            f"<td style='text-align:right'>{r['printed_price']:.2f}</td>"
+            f"<td style='text-align:right'>{r['embroidered_price']:.2f}</td>"
+            f"<td>{r['notes']}</td></tr>"
+            for r in rows
+        )
+        html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>{pl.name}</title>
+<style>
+body{{font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#0f172a}}
+h1{{font-size:20px;margin:0 0 4px}} .muted{{color:#64748b;font-size:12px;margin-bottom:16px}}
+table{{border-collapse:collapse;width:100%;font-size:12px}}
+th,td{{border:1px solid #cbd5e1;padding:6px 8px}} th{{background:#0f766e;color:#fff;text-align:left}}
+@media print{{button{{display:none}}}}
+</style></head><body>
+<button onclick="window.print()">Yazdır</button>
+<h1>{pl.name}</h1>
+<div class="muted">Fiyat / Maliyet › Fiyat Listesi · {len(rows)} kalem</div>
+<table><thead><tr>
+<th>Ürün</th><th>Tedarikçi</th><th>Alış</th><th>Baskısız</th><th>Baskılı</th><th>Nakışlı</th><th>Not</th>
+</tr></thead><tbody>{trs or '<tr><td colspan=7>Kalem yok</td></tr>'}</tbody></table>
+</body></html>"""
+        return HTMLResponse(html)
+    # pdf
+    from app.services.pdf import build_price_list_pdf
+
+    pdf = build_price_list_pdf(pl.name, rows)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="fiyat_listesi_{list_id}.pdf"'},
     )

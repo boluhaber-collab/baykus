@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import date
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
@@ -202,3 +204,67 @@ def delete_campaign(
         raise HTTPException(status_code=404, detail="Kampanya bulunamadı")
     db.delete(row)
     db.commit()
+
+
+class BulkWaRequest(BaseModel):
+    customer_ids: list[int] = Field(default_factory=list)
+    message_template: str = Field(min_length=1)
+    campaign_id: int | None = None
+
+
+def _normalize_phone(phone: str | None) -> str:
+    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+    if digits.startswith("0") and len(digits) == 11:
+        digits = "90" + digits[1:]
+    elif len(digits) == 10 and digits.startswith("5"):
+        digits = "90" + digits
+    return digits
+
+
+def _apply_template(tpl: str, musteri: str, telefon: str) -> str:
+    return (
+        (tpl or "")
+        .replace("{musteri}", musteri)
+        .replace("{isim}", musteri)
+        .replace("{name}", musteri)
+        .replace("{telefon}", telefon)
+        .replace("{phone}", telefon)
+    )
+
+
+@router.post("/bulk-wa")
+def campaign_bulk_wa(
+    payload: BulkWaRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*WRITE)),
+) -> dict:
+    """Toplu wa.me linkleri üret (Selenium yok)."""
+    if not payload.customer_ids:
+        raise HTTPException(status_code=400, detail="Müşteri seçin")
+    customers = (
+        db.query(Customer)
+        .filter(Customer.id.in_(payload.customer_ids))
+        .order_by(Customer.name)
+        .all()
+    )
+    links = []
+    for c in customers:
+        name = c.name or ""
+        phone = c.phone or ""
+        msg = _apply_template(payload.message_template, name, phone)
+        digits = _normalize_phone(phone)
+        url = f"https://wa.me/{digits}?text={quote(msg)}" if digits else f"https://wa.me/?text={quote(msg)}"
+        links.append(
+            {
+                "customer_id": c.id,
+                "customer_name": name,
+                "phone": phone,
+                "message": msg,
+                "wa_url": url,
+            }
+        )
+    return {
+        "count": len(links),
+        "note": "Selenium / WhatsApp Desktop yok — wa.me linkleri.",
+        "links": links,
+    }

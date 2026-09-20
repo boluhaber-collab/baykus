@@ -22,6 +22,33 @@ class DtfCalcOut(BaseModel):
     quantity: int
 
 
+class DtfDesktopCalcIn(BaseModel):
+    """Masaüstü dtf_maliyet_hesaplama_araci alanları."""
+    metretul: Decimal = Field(ge=0)
+    alis_usd_mt: Decimal = Field(ge=0, description="Alış Fiyatı ($/mt)")
+    satis_usd_mt: Decimal = Field(ge=0, description="Satış Fiyatı ($/mt)")
+    kur: Decimal = Field(gt=0, description="Dolar Kuru (TL)")
+
+
+class DtfDesktopCalcOut(BaseModel):
+    metretul: Decimal
+    alis_usd: Decimal
+    satis_usd: Decimal
+    kar_usd: Decimal
+    alis_tl: Decimal
+    satis_tl: Decimal
+    kar_tl: Decimal
+    kar_marji: Decimal
+    birim_alis_tl: Decimal
+
+
+class DtfSettings(BaseModel):
+    metretul: Decimal = Field(default=Decimal("13.32"))
+    alis_usd_mt: Decimal = Field(default=Decimal("2"))
+    satis_usd_mt: Decimal = Field(default=Decimal("6"))
+    kur: Decimal = Field(default=Decimal("43"))
+
+
 class DtfScenarioCreate(DtfCalcIn):
     name: str = Field(min_length=1, max_length=150)
     note: str | None = None

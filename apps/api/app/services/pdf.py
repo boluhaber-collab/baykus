@@ -281,3 +281,48 @@ def build_cari_statement_pdf(
     )
     doc.build(body)
     return buf.getvalue()
+
+
+def build_price_list_pdf(list_name: str, rows: list[dict[str, Any]], settings: dict[str, str] | None = None) -> bytes:
+    """Basit fiyat listesi PDF (masaüstü twin stil değil)."""
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm
+    )
+    styles = getSampleStyleSheet()
+    h2 = ParagraphStyle("H2pl", parent=styles["Heading2"], fontSize=13, spaceBefore=4, spaceAfter=8)
+    body = []
+    body.extend(_company_header(settings or {}))
+    body.append(Paragraph(f"Fiyat Listesi — {list_name}", h2))
+    body.append(Paragraph(f"Kalem: {len(rows)}", styles["Normal"]))
+    body.append(Spacer(1, 8))
+    table_rows = [["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı"]]
+    for r in rows[:300]:
+        table_rows.append(
+            [
+                str(r.get("description") or "")[:32],
+                str(r.get("supplier_name") or "")[:18],
+                _money(r.get("purchase_price")),
+                _money(r.get("blank_price")),
+                _money(r.get("printed_price")),
+                _money(r.get("embroidered_price")),
+            ]
+        )
+    t = Table(table_rows, colWidths=[42 * mm, 30 * mm, 26 * mm, 26 * mm, 26 * mm, 26 * mm])
+    t.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f766e")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
+    body.append(t)
+    doc.build(body)
+    return buf.getvalue()

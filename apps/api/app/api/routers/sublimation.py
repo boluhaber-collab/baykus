@@ -1,6 +1,6 @@
-"""Sublimasyon baskı süreleri CRUD."""
+"""Sublimasyon baskı süreleri CRUD — masaüstü Ürün / Baskı Süresi / Diğer Talimatlar."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
@@ -17,14 +17,31 @@ router = APIRouter(prefix="/production/sublimation", tags=["sublimation"])
 
 @router.get("", response_model=list[SublimationPrintTimeOut])
 def list_times(
+    q: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış", "üretim")),
 ) -> list[SublimationPrintTimeOut]:
-    rows = (
-        db.query(SublimationPrintTime)
-        .order_by(SublimationPrintTime.product_name, SublimationPrintTime.size)
-        .all()
+    query = db.query(SublimationPrintTime).order_by(
+        SublimationPrintTime.product_name, SublimationPrintTime.size
     )
+    rows = query.all()
+    if q:
+        needle = q.strip().casefold()
+        parts = [p for p in needle.split() if p]
+
+        def match(r: SublimationPrintTime) -> bool:
+            blob = " ".join(
+                [
+                    r.product_name or "",
+                    r.size or "",
+                    r.duration_text or "",
+                    str(r.minutes or ""),
+                    r.notes or "",
+                ]
+            ).casefold()
+            return all(p in blob for p in parts)
+
+        rows = [r for r in rows if match(r)]
     return rows
 
 
@@ -34,7 +51,11 @@ def create_time(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "üretim")),
 ) -> SublimationPrintTimeOut:
-    row = SublimationPrintTime(**payload.model_dump())
+    data = payload.model_dump()
+    # duration_text yoksa minutes'tan üret
+    if not data.get("duration_text") and data.get("minutes"):
+        data["duration_text"] = f"{data['minutes']:g} dk"
+    row = SublimationPrintTime(**data)
     db.add(row)
     db.commit()
     db.refresh(row)

@@ -64,7 +64,7 @@ export default function PriceListsPage() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-base font-bold">Fiyat Listesi</h2>
-          <p className="text-xs text-baykus-muted">Fiyat / Maliyet › Fiyat Listesi · ürün/varyant kalemleri</p>
+          <p className="text-xs text-baykus-muted">Fiyat / Maliyet › Fiyat Listesi · baskılı/baskısız/nakışlı · yazdır/CSV/PDF detayda</p>
         </div>
         <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={load}>
           Yenile

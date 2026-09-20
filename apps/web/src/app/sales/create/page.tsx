@@ -11,14 +11,14 @@ import {
   formatMoney,
 } from "@/lib/api";
 
-type SaleType = "perakende" | "yeni_musteri" | "kayitli" | "internet" | "teklif";
+type SaleType = "perakende" | "yeni" | "kayitli" | "internet" | "teklif";
 
-const SALE_TYPES: { id: SaleType; label: string }[] = [
-  { id: "perakende", label: "Perakende" },
-  { id: "yeni_musteri", label: "Yeni Müşteri" },
-  { id: "kayitli", label: "Kayıtlı Müşteri" },
-  { id: "internet", label: "İnternet Siparişi" },
-  { id: "teklif", label: "Teklif" },
+const SALE_TYPES: { id: SaleType; label: string; title: string }[] = [
+  { id: "perakende", label: "Perakende", title: "Perakende Satış" },
+  { id: "yeni", label: "Yeni Müşteri", title: "Yeni Müşteriye Satış" },
+  { id: "kayitli", label: "Kayıtlı Müşteri", title: "Kayıtlı Müşteriye Satış" },
+  { id: "internet", label: "İnternet Siparişi", title: "İnternet Siparişi" },
+  { id: "teklif", label: "Teklif", title: "Teklif Girişi" },
 ];
 
 const PAY_TYPES = ["Nakit", "EFT", "Kart", "Veresiye"] as const;
@@ -51,29 +51,31 @@ function emptyLine(): Line {
   };
 }
 
-function payMethodApi(label: string): string {
-  const m: Record<string, string> = {
-    Nakit: "nakit",
-    EFT: "eft",
-    Kart: "kart",
-    Veresiye: "veresiye",
+function normalizeType(raw: string | null): SaleType {
+  const v = (raw || "kayitli").trim().toLowerCase();
+  const map: Record<string, SaleType> = {
+    perakende: "perakende",
+    yeni: "yeni",
+    yeni_musteri: "yeni",
+    "yeni musteri": "yeni",
+    kayitli: "kayitli",
+    "kayitli musteri": "kayitli",
+    internet: "internet",
+    teklif: "teklif",
   };
-  return m[label] || "nakit";
+  return map[v] || "kayitli";
 }
 
 function CreateSaleInner() {
   const router = useRouter();
   const search = useSearchParams();
-  const initialType = (search.get("type") as SaleType) || "kayitli";
-  const mappedInitial: SaleType =
-    initialType === "internet" || SALE_TYPES.some((t) => t.id === initialType)
-      ? (initialType === "internet" ? "internet" : initialType)
-      : "kayitli";
+  const mappedInitial = normalizeType(search.get("type"));
 
   const [saleType, setSaleType] = useState<SaleType>(mappedInitial);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [customerId, setCustomerId] = useState("");
+  const [customerQ, setCustomerQ] = useState("");
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newCompany, setNewCompany] = useState("");
@@ -83,8 +85,14 @@ function CreateSaleInner() {
   const [payType, setPayType] = useState<(typeof PAY_TYPES)[number]>("Nakit");
   const [payAmount, setPayAmount] = useState("");
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
+  const [productQ, setProductQ] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    setSaleType(normalizeType(search.get("type")));
+  }, [search]);
 
   useEffect(() => {
     Promise.all([
@@ -103,6 +111,28 @@ function CreateSaleInner() {
     [customers, customerId],
   );
 
+  const filteredCustomers = useMemo(() => {
+    const needle = customerQ.trim().toLowerCase();
+    if (!needle) return customers.slice(0, 80);
+    return customers
+      .filter((c) =>
+        [c.name, c.company, c.phone, c.code]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(needle),
+      )
+      .slice(0, 80);
+  }, [customers, customerQ]);
+
+  const filteredProducts = useMemo(() => {
+    const needle = productQ.trim().toLowerCase();
+    if (!needle) return products;
+    return products.filter((p) =>
+      [p.sku, p.name, p.category].filter(Boolean).join(" ").toLowerCase().includes(needle),
+    );
+  }, [products, productQ]);
+
   const linesTotal = useMemo(() => {
     return lines.reduce((sum, l) => {
       const qty = Number(l.quantity) || 0;
@@ -110,6 +140,8 @@ function CreateSaleInner() {
       return sum + qty * price;
     }, 0);
   }, [lines]);
+
+  const remaining = Math.max(0, linesTotal - (Number(payAmount) || 0));
 
   useEffect(() => {
     if (!payAmount && linesTotal > 0 && payType !== "Veresiye") {
@@ -124,7 +156,7 @@ function CreateSaleInner() {
 
   async function ensureCustomerId(): Promise<number | null> {
     if (saleType === "perakende") return customerId ? Number(customerId) : null;
-    if (saleType === "yeni_musteri") {
+    if (saleType === "yeni") {
       if (!newName.trim()) throw new Error("Yeni müşteri adı gerekli");
       const created = await apiFetch<{ id: number }>("/api/customers", {
         method: "POST",
@@ -138,7 +170,11 @@ function CreateSaleInner() {
       });
       return created.id;
     }
-    if (saleType === "kayitli" || saleType === "internet" || saleType === "teklif") {
+    if (saleType === "kayitli") {
+      if (!customerId) throw new Error("Kayıtlı müşteri seçin");
+      return Number(customerId);
+    }
+    if (saleType === "internet" || saleType === "teklif") {
       return customerId ? Number(customerId) : null;
     }
     return null;
@@ -165,11 +201,12 @@ function CreateSaleInner() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setMsg("");
     setBusy(true);
     try {
       const payloadLines = buildLinesPayload();
       const cid = await ensureCustomerId();
-      const amount = Number(payAmount) || 0;
+      const amount = payType === "Veresiye" ? 0 : Number(payAmount) || 0;
       const isQuote = saleType === "teklif";
 
       if (isQuote) {
@@ -184,6 +221,7 @@ function CreateSaleInner() {
             lines: payloadLines,
           }),
         });
+        setMsg("Teklif kaydedildi");
         router.push(`/quotes/${created.id}`);
         return;
       }
@@ -195,6 +233,7 @@ function CreateSaleInner() {
             ? "perakende"
             : "mağaza";
 
+      // Kapora → deposit_amount (stok↓ + cari/finans order_flow)
       const created = await apiFetch<{ id: number }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
@@ -204,28 +243,13 @@ function CreateSaleInner() {
           channel: orderChannel,
           design_status: "Bekliyor",
           due_date: dueDate || null,
-          deposit_amount: 0,
+          deposit_amount: amount > 0 ? amount : 0,
           discount_amount: 0,
           lines: payloadLines,
         }),
       });
 
-      // Ödeme tipi ile tahsilat (çift kapora yazmamak için deposit=0)
-      if (payType !== "Veresiye" && amount > 0) {
-        await apiFetch(`/api/orders/${created.id}/payments`, {
-          method: "POST",
-          body: JSON.stringify({
-            amount,
-            method: payMethodApi(payType),
-            notes: `${payType} tahsilat`,
-            post_to_cari: Boolean(cid),
-            // Banka hesabı seçimi yok; yalnızca nakit kasaya yazılır
-            post_to_finance: payType === "Nakit" || payType === "EFT" || payType === "Kart",
-            finance_method: payType === "Nakit" ? "cash" : payType === "EFT" || payType === "Kart" ? "bank" : null,
-          }),
-        });
-      }
-
+      setMsg("Satış kaydedildi · stok ve finans güncellendi");
       router.push(`/orders/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kayıt hatası");
@@ -234,26 +258,32 @@ function CreateSaleInner() {
     }
   }
 
+  const meta = SALE_TYPES.find((t) => t.id === saleType) || SALE_TYPES[2];
+
   return (
     <div className="space-y-3 max-w-5xl">
       <div>
-        <h2 className="text-base font-bold">Satış / Teklif Oluştur</h2>
+        <h2 className="text-base font-bold">{meta.title}</h2>
         <p className="text-xs text-baykus-muted">
-          Masaüstü hızlı satış ekranı · tip seçin, satır ekleyin, ödeme alın
+          Satış / Sipariş › {meta.title} · masaüstü hızlı satış diyaloğu
         </p>
       </div>
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+      {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
       <form onSubmit={onSubmit} className="space-y-3">
-        <div className="bk-card p-3">
-          <div className="text-xs font-semibold text-baykus-muted mb-2">Satış tipi</div>
-          <div className="flex flex-wrap gap-2">
+        <fieldset className="rounded border bg-white px-3 py-3">
+          <legend className="px-1 text-xs font-semibold">Satış Bilgileri</legend>
+          <div className="flex flex-wrap gap-2 mb-3">
             {SALE_TYPES.map((t) => (
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setSaleType(t.id)}
+                onClick={() => {
+                  setSaleType(t.id);
+                  router.replace(`/sales/create?type=${t.id}`);
+                }}
                 className={`rounded px-3 py-1.5 text-xs font-semibold border ${
                   saleType === t.id
                     ? "bg-baykus-primary text-white border-baykus-primary"
@@ -264,111 +294,138 @@ function CreateSaleInner() {
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="bk-card p-3 grid md:grid-cols-2 gap-3">
-          {saleType === "yeni_musteri" ? (
-            <>
-              <div>
-                <label className="block text-[11px] text-baykus-muted mb-0.5">Müşteri adı *</label>
-                <input className="bk-input" value={newName} onChange={(e) => setNewName(e.target.value)} required />
-              </div>
-              <div>
-                <label className="block text-[11px] text-baykus-muted mb-0.5">Telefon</label>
-                <input className="bk-input" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-[11px] text-baykus-muted mb-0.5">Firma</label>
-                <input className="bk-input" value={newCompany} onChange={(e) => setNewCompany(e.target.value)} />
-              </div>
-            </>
-          ) : saleType === "perakende" ? (
-            <div className="md:col-span-2 text-sm text-baykus-muted">
-              Perakende satış — müşteri isteğe bağlı.
-              <select
-                className="bk-input mt-2 max-w-md"
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-              >
-                <option value="">— Müşterisiz / perakende —</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.company ? ` (${c.company})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="md:col-span-2">
-              <label className="block text-[11px] text-baykus-muted mb-0.5">
-                {saleType === "teklif" ? "Müşteri (opsiyonel)" : "Kayıtlı müşteri"}
-              </label>
-              <select
-                className="bk-input max-w-lg"
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-                required={saleType === "kayitli"}
-              >
-                <option value="">— Seçin —</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.company ? ` (${c.company})` : ""}
-                  </option>
-                ))}
-              </select>
-              {selectedCustomer && (
-                <div className="mt-2 text-xs text-baykus-muted">
-                  Tel: {selectedCustomer.phone || "—"} · Bakiye:{" "}
-                  <strong className="tabular-nums">{formatMoney(Number(selectedCustomer.balance || 0))}</strong>
-                  {" · "}
-                  <Link href={`/customers/${selectedCustomer.id}`} className="text-baykus-primary hover:underline">
-                    Cari kartı
-                  </Link>
+          <div className="grid md:grid-cols-2 gap-3">
+            {saleType === "yeni" ? (
+              <>
+                <div>
+                  <label className="block text-[11px] text-baykus-muted mb-0.5">Müşteri *</label>
+                  <input className="bk-input" value={newName} onChange={(e) => setNewName(e.target.value)} required />
                 </div>
-              )}
-            </div>
-          )}
+                <div>
+                  <label className="block text-[11px] text-baykus-muted mb-0.5">Telefon</label>
+                  <input className="bk-input" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-[11px] text-baykus-muted mb-0.5">Firma</label>
+                  <input className="bk-input" value={newCompany} onChange={(e) => setNewCompany(e.target.value)} />
+                </div>
+                <p className="md:col-span-2 text-[11px] text-slate-500">
+                  Yeni müşteri kaydı oluşturulur; satış cari + stok + kapora finans hareketi yazar.
+                </p>
+              </>
+            ) : saleType === "kayitli" ? (
+              <>
+                <div className="md:col-span-2">
+                  <label className="block text-[11px] text-baykus-muted mb-0.5">Müşteri Ara</label>
+                  <input
+                    className="bk-input mb-2"
+                    placeholder="Ad / telefon / firma…"
+                    value={customerQ}
+                    onChange={(e) => setCustomerQ(e.target.value)}
+                  />
+                  <label className="block text-[11px] text-baykus-muted mb-0.5">Kayıtlı müşteri *</label>
+                  <select
+                    className="bk-input"
+                    value={customerId}
+                    onChange={(e) => setCustomerId(e.target.value)}
+                    required
+                  >
+                    <option value="">— Seçin —</option>
+                    {filteredCustomers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                        {c.phone ? ` | ${c.phone}` : ""}
+                        {c.company ? ` (${c.company})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedCustomer && (
+                    <div className="mt-2 text-xs text-baykus-muted">
+                      Tel: {selectedCustomer.phone || "—"} · Bakiye:{" "}
+                      <strong className="tabular-nums">{formatMoney(Number(selectedCustomer.balance || 0))}</strong>
+                      {" · "}
+                      <Link href={`/customers/${selectedCustomer.id}`} className="text-baykus-primary hover:underline">
+                        Cari kartı
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : saleType === "perakende" ? (
+              <div className="md:col-span-2 text-sm text-baykus-muted">
+                Perakende satış — müşteri isteğe bağlı (fihrist için önerilir).
+                <select
+                  className="bk-input mt-2 max-w-md"
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                >
+                  <option value="">— Müşterisiz / perakende —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.company ? ` (${c.company})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="md:col-span-2">
+                <label className="block text-[11px] text-baykus-muted mb-0.5">
+                  {saleType === "teklif" ? "Müşteri (opsiyonel)" : "Müşteri"}
+                </label>
+                <select
+                  className="bk-input max-w-lg"
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                >
+                  <option value="">— Seçin —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.company ? ` (${c.company})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-          {saleType === "internet" && (
+            {saleType === "internet" && (
+              <div>
+                <label className="block text-[11px] text-baykus-muted mb-0.5">Kanal</label>
+                <select className="bk-input" value={channel} onChange={(e) => setChannel(e.target.value)}>
+                  {NET_CHANNELS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div>
-              <label className="block text-[11px] text-baykus-muted mb-0.5">Kanal</label>
-              <select className="bk-input" value={channel} onChange={(e) => setChannel(e.target.value)}>
-                {NET_CHANNELS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-[11px] text-baykus-muted mb-0.5">
+                {saleType === "teklif" ? "Geçerlilik" : "Teslim tarihi"}
+              </label>
+              <input type="date" className="bk-input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
-          )}
+            <div>
+              <label className="block text-[11px] text-baykus-muted mb-0.5">Not / Baskı</label>
+              <input className="bk-input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+          </div>
+        </fieldset>
 
-          <div>
-            <label className="block text-[11px] text-baykus-muted mb-0.5">
-              {saleType === "teklif" ? "Geçerlilik" : "Teslim tarihi"}
-            </label>
+        <fieldset className="rounded border bg-white px-3 py-3 space-y-2">
+          <legend className="px-1 text-xs font-semibold">Ürün / Hizmet</legend>
+          <div className="flex flex-wrap items-center gap-2">
             <input
-              type="date"
-              className="bk-input"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+              className="bk-input max-w-xs"
+              placeholder="Ürün ara…"
+              value={productQ}
+              onChange={(e) => setProductQ(e.target.value)}
             />
-          </div>
-          <div className={saleType === "internet" ? "" : ""}>
-            <label className="block text-[11px] text-baykus-muted mb-0.5">Not</label>
-            <input className="bk-input" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="bk-card p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">Ürün satırları</div>
-            <button
-              type="button"
-              className="bk-btn bk-btn-ghost text-xs"
-              onClick={() => setLines((p) => [...p, emptyLine()])}
-            >
+            <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => setLines((p) => [...p, emptyLine()])}>
               Ürün ekle
             </button>
           </div>
@@ -382,187 +439,183 @@ function CreateSaleInner() {
                   <th>Renk</th>
                   <th>Baskı</th>
                   <th>Adet</th>
-                  <th>Fiyat</th>
+                  <th>Birim Fiyat</th>
+                  <th>Toplam</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line) => (
-                  <tr key={line.key}>
-                    <td className="min-w-[160px]">
-                      <select
-                        className="bk-input"
-                        value={line.product_id}
-                        onChange={async (e) => {
-                          const pid = e.target.value;
-                          const prod = products.find((p) => String(p.id) === pid);
-                          updateLine(line.key, {
-                            product_id: pid,
-                            description: prod?.name || line.description,
-                            unit_price: prod ? String(prod.base_price ?? 0) : line.unit_price,
-                            stock_qty: prod?.stock_qty ?? null,
-                          });
-                          if (!pid) return;
-                          try {
-                            const info = await apiFetch<ProductPricingInfo>(`/api/products/${pid}/pricing`);
+                {lines.map((line) => {
+                  const lineTot = (Number(line.quantity) || 0) * (Number(line.unit_price) || 0);
+                  return (
+                    <tr key={line.key}>
+                      <td className="min-w-[160px]">
+                        <select
+                          className="bk-input"
+                          value={line.product_id}
+                          onChange={async (e) => {
+                            const pid = e.target.value;
+                            const prod = products.find((p) => String(p.id) === pid);
                             updateLine(line.key, {
-                              description: info.name || prod?.name || line.description,
-                              unit_price: String(info.unit_price ?? 0),
-                              stock_qty: info.stock_qty,
+                              product_id: pid,
+                              description: prod?.name || line.description,
+                              unit_price: prod ? String(prod.base_price ?? 0) : line.unit_price,
+                              stock_qty: prod?.stock_qty ?? null,
                             });
-                          } catch {
-                            /* keep */
-                          }
-                        }}
-                      >
-                        <option value="">— Manuel —</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.sku} — {p.name}
-                          </option>
-                        ))}
-                      </select>
-                      {line.stock_qty != null && (
-                        <div className="text-[10px] text-baykus-muted mt-0.5">Stok: {line.stock_qty}</div>
-                      )}
-                    </td>
-                    <td>
-                      <input
-                        className="bk-input min-w-[120px]"
-                        value={line.description}
-                        onChange={(e) => updateLine(line.key, { description: e.target.value })}
-                        required
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="bk-input w-16"
-                        value={line.size}
-                        onChange={(e) => updateLine(line.key, { size: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="bk-input w-20"
-                        value={line.color}
-                        onChange={(e) => updateLine(line.key, { color: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        className="bk-input w-28"
-                        value={line.print_type}
-                        onChange={(e) => updateLine(line.key, { print_type: e.target.value })}
-                      >
-                        {PRINT_TYPES.map((pt) => (
-                          <option key={pt || "empty"} value={pt}>
-                            {pt || "—"}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <input
-                        className="bk-input w-16"
-                        type="number"
-                        min={1}
-                        value={line.quantity}
-                        onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="bk-input w-24"
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={line.unit_price}
-                        onChange={(e) => updateLine(line.key, { unit_price: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="text-red-600 text-xs hover:underline"
-                        onClick={() =>
-                          setLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l.key !== line.key)))
-                        }
-                      >
-                        Sil
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                            if (!pid) return;
+                            try {
+                              const info = await apiFetch<ProductPricingInfo>(`/api/products/${pid}/pricing`);
+                              updateLine(line.key, {
+                                description: info.name || prod?.name || line.description,
+                                unit_price: String(info.unit_price ?? 0),
+                                stock_qty: info.stock_qty,
+                              });
+                            } catch {
+                              /* keep */
+                            }
+                          }}
+                        >
+                          <option value="">— Manuel —</option>
+                          {filteredProducts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.sku} — {p.name}
+                            </option>
+                          ))}
+                        </select>
+                        {line.stock_qty != null && (
+                          <div
+                            className={`text-[10px] mt-0.5 ${
+                              Number(line.stock_qty) < Number(line.quantity) ? "text-red-600" : "text-baykus-muted"
+                            }`}
+                          >
+                            Stok: {line.stock_qty}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <input
+                          className="bk-input min-w-[120px]"
+                          value={line.description}
+                          onChange={(e) => updateLine(line.key, { description: e.target.value })}
+                          required
+                        />
+                      </td>
+                      <td>
+                        <input className="bk-input w-16" value={line.size} onChange={(e) => updateLine(line.key, { size: e.target.value })} />
+                      </td>
+                      <td>
+                        <input className="bk-input w-20" value={line.color} onChange={(e) => updateLine(line.key, { color: e.target.value })} />
+                      </td>
+                      <td>
+                        <select className="bk-input w-28" value={line.print_type} onChange={(e) => updateLine(line.key, { print_type: e.target.value })}>
+                          {PRINT_TYPES.map((pt) => (
+                            <option key={pt || "empty"} value={pt}>
+                              {pt || "—"}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          className="bk-input w-16"
+                          type="number"
+                          min={1}
+                          value={line.quantity}
+                          onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="bk-input w-24"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={line.unit_price}
+                          onChange={(e) => updateLine(line.key, { unit_price: e.target.value })}
+                        />
+                      </td>
+                      <td className="tabular-nums text-xs font-semibold">{formatMoney(lineTot)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="text-red-600 text-xs hover:underline"
+                          onClick={() => setLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l.key !== line.key)))}
+                        >
+                          Sil
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          <div className="text-right text-sm font-semibold tabular-nums">
-            Ara toplam: {formatMoney(linesTotal)}
-          </div>
-        </div>
+          <div className="text-right text-sm font-semibold tabular-nums">Ara toplam: {formatMoney(linesTotal)}</div>
+        </fieldset>
 
         {saleType !== "teklif" && (
-          <div className="bk-card p-3 grid sm:grid-cols-3 gap-3 items-end">
-            <div>
-              <label className="block text-[11px] text-baykus-muted mb-0.5">Ödeme tipi</label>
-              <select
-                className="bk-input"
-                value={payType}
-                onChange={(e) => setPayType(e.target.value as (typeof PAY_TYPES)[number])}
-              >
-                {PAY_TYPES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
+          <fieldset className="rounded border bg-white px-3 py-3">
+            <legend className="px-1 text-xs font-semibold">Ödeme / Kapora</legend>
+            <div className="grid sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label className="block text-[11px] text-baykus-muted mb-0.5">Ödeme tipi</label>
+                <select
+                  className="bk-input"
+                  value={payType}
+                  onChange={(e) => {
+                    const v = e.target.value as (typeof PAY_TYPES)[number];
+                    setPayType(v);
+                    if (v === "Veresiye") setPayAmount("0");
+                    else if (!payAmount) setPayAmount(String(linesTotal.toFixed(2)));
+                  }}
+                >
+                  {PAY_TYPES.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] text-baykus-muted mb-0.5">Kapora / ödeme (₺)</label>
+                <input
+                  className="bk-input"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  disabled={payType === "Veresiye"}
+                />
+              </div>
+              <div className="text-xs space-y-0.5 pb-1">
+                <div>
+                  Toplam: <strong className="tabular-nums">{formatMoney(linesTotal)}</strong>
+                </div>
+                <div>
+                  Kapora:{" "}
+                  <strong className="tabular-nums text-emerald-700">
+                    {payType === "Veresiye" ? "0,00 ₺" : formatMoney(Number(payAmount) || 0)}
+                  </strong>
+                </div>
+                <div>
+                  Kalan: <strong className="tabular-nums text-red-700">{formatMoney(remaining)}</strong>
+                </div>
+                <div className="text-[10px] text-baykus-muted">
+                  {payType === "Veresiye"
+                    ? "Veresiye: kapora yok · cari borç + stok↓"
+                    : payType === "Nakit"
+                      ? "Nakit → kasa tahsilat + stok↓"
+                      : "EFT/Kart → kapora kaydı + stok↓"}
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-[11px] text-baykus-muted mb-0.5">Kapora / ödeme (₺)</label>
-              <input
-                className="bk-input"
-                type="number"
-                min={0}
-                step="0.01"
-                value={payAmount}
-                onChange={(e) => setPayAmount(e.target.value)}
-                disabled={payType === "Veresiye"}
-              />
-            </div>
-            <div className="text-xs text-baykus-muted pb-2 space-y-0.5">
-              {payType === "Veresiye" ? (
-                <span>Veresiye: kapora yok, cariye satış borcu yazılır (stok düşer).</span>
-              ) : (
-                <>
-                  <div>
-                    Kapora: <strong className="tabular-nums text-emerald-700">{payAmount || "0"} ₺</strong>
-                  </div>
-                  <div>
-                    Kalan:{" "}
-                    <strong className="tabular-nums text-red-700">
-                      {Math.max(0, linesTotal - (Number(payAmount) || 0)).toFixed(2)} ₺
-                    </strong>
-                  </div>
-                  <div className="text-[10px]">
-                    {payType === "Nakit"
-                      ? "Nakit → kasa tahsilat"
-                      : payType === "EFT" || payType === "Kart"
-                        ? "EFT/Kart → varsayılan banka"
-                        : ""}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          </fieldset>
         )}
 
         <div className="flex flex-wrap gap-2">
-          <button type="submit" disabled={busy} className="bk-btn bk-btn-primary">
-            {busy
-              ? "Kaydediliyor…"
-              : saleType === "teklif"
-                ? "Teklifi Kaydet"
-                : "Siparişi Kaydet"}
+          <button type="submit" disabled={busy} className="bk-btn bk-btn-primary" style={{ background: "#198754" }}>
+            {busy ? "Kaydediliyor…" : saleType === "teklif" ? "Teklifi Kaydet" : "Satışı Kaydet"}
           </button>
           <Link href="/sales" className="bk-btn bk-btn-ghost">
             Vazgeç

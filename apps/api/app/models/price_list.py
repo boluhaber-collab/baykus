@@ -42,6 +42,12 @@ class PriceListItem(Base):
     )
     description: Mapped[str] = mapped_column(String(255), nullable=False)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    # Desktop fiyat listesi alanları
+    supplier_name: Mapped[str | None] = mapped_column(String(255))
+    purchase_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    blank_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # Baskısız
+    printed_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # Baskılı
+    embroidered_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))  # Nakışlı
     valid_from: Mapped[date | None] = mapped_column(Date)
     valid_to: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)

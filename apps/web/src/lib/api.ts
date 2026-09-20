@@ -1052,6 +1052,11 @@ export type PriceListItem = {
   variant_id?: number | null;
   description: string;
   unit_price: number;
+  supplier_name?: string | null;
+  purchase_price?: number | null;
+  blank_price?: number | null;
+  printed_price?: number | null;
+  embroidered_price?: number | null;
   valid_from?: string | null;
   valid_to?: string | null;
   notes?: string | null;
@@ -1235,6 +1240,25 @@ export type DtfCalcResult = {
   total_cost: number;
   unit_cost: number;
   quantity: number;
+};
+
+export type DtfDesktopCalcResult = {
+  metretul: number;
+  alis_usd: number;
+  satis_usd: number;
+  kar_usd: number;
+  alis_tl: number;
+  satis_tl: number;
+  kar_tl: number;
+  kar_marji: number;
+  birim_alis_tl: number;
+};
+
+export type DtfDesktopSettings = {
+  metretul: number;
+  alis_usd_mt: number;
+  satis_usd_mt: number;
+  kur: number;
 };
 
 export type DtfScenario = {

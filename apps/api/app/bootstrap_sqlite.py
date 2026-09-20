@@ -98,6 +98,23 @@ def bootstrap() -> None:
             if "maintenance_date" not in acols:
                 conn.execute(text("ALTER TABLE assets ADD COLUMN maintenance_date DATE"))
                 print("  + assets.maintenance_date")
+        if "price_list_items" in insp.get_table_names():
+            pcols = {c["name"] for c in insp.get_columns("price_list_items")}
+            for col, sql in (
+                ("supplier_name", "ALTER TABLE price_list_items ADD COLUMN supplier_name VARCHAR(255)"),
+                ("purchase_price", "ALTER TABLE price_list_items ADD COLUMN purchase_price NUMERIC(12,2)"),
+                ("blank_price", "ALTER TABLE price_list_items ADD COLUMN blank_price NUMERIC(12,2)"),
+                ("printed_price", "ALTER TABLE price_list_items ADD COLUMN printed_price NUMERIC(12,2)"),
+                ("embroidered_price", "ALTER TABLE price_list_items ADD COLUMN embroidered_price NUMERIC(12,2)"),
+            ):
+                if col not in pcols:
+                    conn.execute(text(sql))
+                    print(f"  + price_list_items.{col}")
+        if "sublimation_print_times" in insp.get_table_names():
+            scols = {c["name"] for c in insp.get_columns("sublimation_print_times")}
+            if "duration_text" not in scols:
+                conn.execute(text("ALTER TABLE sublimation_print_times ADD COLUMN duration_text VARCHAR(120)"))
+                print("  + sublimation_print_times.duration_text")
             # Remap legacy design_status labels
             for old_v, new_v in (
                 ("bekliyor", "Bekliyor"),
