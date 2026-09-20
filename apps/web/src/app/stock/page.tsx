@@ -59,6 +59,12 @@ export default function StockPage() {
           <p className="text-slate-500 text-sm">Özet, kritik kalemler, Excel/CSV içe-dışa aktarma</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/stock/count" className="rounded-lg text-white px-4 py-2 text-sm" style={{ backgroundColor: "#22a447" }}>
+            Stok Sayımı
+          </Link>
+          <Link href="/tools/import" className="rounded-lg px-4 py-2 text-sm text-white" style={{ backgroundColor: "#e2b44d" }}>
+            Excel Aktar
+          </Link>
           <Link href="/stock/warehouses" className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50">
             Depolar
           </Link>

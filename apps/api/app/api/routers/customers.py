@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -326,6 +327,196 @@ def create_customer(
         detail={"name": customer.name},
     )
     return _customer_out(customer, customer.opening_balance or Decimal("0"))
+
+
+@router.get("/import-template")
+def customer_import_template(
+    _: User = Depends(require_roles(*WRITE_ROLES)),
+    fmt: str = Query(default="csv", pattern="^(csv|xlsx)$"),
+):
+    """Excelden Müşteri — boş şablon (adı zorunlu)."""
+    import csv
+    import io
+
+    headers = [
+        "Ad",
+        "Firma",
+        "Telefon",
+        "E-posta",
+        "Şehir",
+        "Adres",
+        "Vergi No",
+        "Vergi Dairesi",
+        "Kod",
+        "Not",
+    ]
+    if fmt == "xlsx":
+        try:
+            from openpyxl import Workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Musteriler"
+        ws.append(headers)
+        buf = io.BytesIO()
+        wb.save(buf)
+        return Response(
+            buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="musteri-sablon.xlsx"'},
+        )
+    buf = io.StringIO()
+    csv.writer(buf).writerow(headers)
+    return Response(
+        buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="musteri-sablon.csv"'},
+    )
+
+
+@router.post("/import")
+async def import_customers(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*WRITE_ROLES)),
+) -> dict:
+    """Excel/CSV müşteri içe aktarma — şifre/sır yok."""
+    import csv
+    import io
+
+    raw = await file.read()
+    name = (file.filename or "").lower()
+    rows: list[dict] = []
+    if name.endswith((".xlsx", ".xlsm")):
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb.active
+        data = list(ws.iter_rows(values_only=True))
+        if not data:
+            raise HTTPException(status_code=400, detail="Boş dosya")
+        headers = [str(h or "").strip() for h in data[0]]
+        for line in data[1:]:
+            rows.append({headers[i]: line[i] if i < len(line) else None for i in range(len(headers))})
+    else:
+        text = raw.decode("utf-8-sig", errors="replace")
+        reader = csv.DictReader(io.StringIO(text))
+        rows = list(reader)
+
+    def cell(row: dict, *keys: str) -> str:
+        lower = {str(k).strip().casefold(): v for k, v in row.items() if k is not None}
+        aliases = {
+            "ad": ("ad", "adı", "adi", "name", "müşteri", "musteri", "ünvan", "unvan"),
+            "firma": ("firma", "şirket", "sirket", "company"),
+            "telefon": ("telefon", "tel", "phone", "gsm", "cep"),
+            "email": ("e-posta", "eposta", "email", "mail"),
+            "şehir": ("şehir", "sehir", "city"),
+            "adres": ("adres", "address"),
+            "vergi_no": ("vergi no", "vergi_no", "vkn", "tax_number", "tc"),
+            "vergi_dairesi": ("vergi dairesi", "vergi_dairesi", "tax_office"),
+            "kod": ("kod", "code", "cari kod", "müşteri kodu"),
+            "not": ("not", "notes", "açıklama", "aciklama"),
+        }
+        for canon in keys:
+            for alias in aliases.get(canon, (canon,)):
+                if alias.casefold() in lower:
+                    v = lower[alias.casefold()]
+                    if v is None:
+                        return ""
+                    return str(v).strip()
+        return ""
+
+    created = updated = skipped = 0
+    errors: list[str] = []
+    for idx, row in enumerate(rows, start=2):
+        ad = cell(row, "ad")
+        if not ad or ad.casefold() in ("nan", "none"):
+            skipped += 1
+            continue
+        telefon = cell(row, "telefon")
+        email = cell(row, "email") or None
+        if email and "@" not in email:
+            email = None
+        firma = cell(row, "firma") or None
+        sehir = cell(row, "şehir") or None
+        adres = cell(row, "adres") or None
+        vergi_no = cell(row, "vergi_no") or None
+        vergi_d = cell(row, "vergi_dairesi") or None
+        kod = cell(row, "kod") or None
+        notu = cell(row, "not") or None
+
+        existing = None
+        if telefon:
+            existing = (
+                db.query(Customer)
+                .filter(Customer.phone == telefon)
+                .first()
+            )
+        if not existing and kod:
+            existing = db.query(Customer).filter(Customer.code == kod).first()
+        if not existing:
+            # name+phone soft match
+            q = db.query(Customer).filter(Customer.name == ad)
+            if telefon:
+                q = q.filter(Customer.phone == telefon)
+            existing = q.first()
+
+        if existing:
+            existing.name = ad
+            if firma:
+                existing.company = firma
+            if telefon:
+                existing.phone = telefon
+            if email:
+                existing.email = email
+            if sehir:
+                existing.city = sehir
+            if adres:
+                existing.address = adres
+            if vergi_no:
+                existing.tax_number = vergi_no
+            if vergi_d:
+                existing.tax_office = vergi_d
+            if kod and not existing.code:
+                existing.code = kod
+            if notu:
+                existing.notes = ((existing.notes or "") + " | " + notu).strip(" |")
+            updated += 1
+        else:
+            db.add(
+                Customer(
+                    name=ad,
+                    company=firma,
+                    phone=telefon or None,
+                    email=email,
+                    city=sehir,
+                    address=adres,
+                    tax_number=vergi_no,
+                    tax_office=vergi_d,
+                    code=kod,
+                    notes=notu,
+                    is_active=True,
+                )
+            )
+            created += 1
+
+    db.commit()
+    write_audit(
+        user_id=user.id if user else None,
+        action="customer_import",
+        entity_type="customers",
+        detail=f"created={created} updated={updated} skipped={skipped}",
+    )
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors[:20],
+        "message": f"Eklenen: {created} · Güncellenen: {updated} · Atlanan: {skipped}",
+    }
 
 
 @router.get("/{customer_id}", response_model=CustomerDetailOut)
@@ -658,3 +849,4 @@ def customer_statement(
         closing_balance=running,
         movements=out_rows,
     )
+

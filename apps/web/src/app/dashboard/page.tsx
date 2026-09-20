@@ -545,6 +545,44 @@ export default function DashboardPage() {
               </Link>
             </div>
 
+            <div className="bk-card overflow-hidden">
+              <div className="bg-[#2563eb] text-white text-xs font-bold px-3 py-2 tracking-wide flex items-center justify-between">
+                <span>BUGÜNKÜ GÖREVLER</span>
+                <Link href="/tasks" className="rounded bg-white text-[#1e3a8a] px-2 py-0.5 text-[10px] font-bold">
+                  Görev Ekle
+                </Link>
+              </div>
+              <div className="p-2 max-h-40 overflow-auto">
+                {(data.today_tasks || []).length === 0 ? (
+                  <p className="text-xs text-emerald-600 px-1 py-2">Bugün için açık görev bulunmuyor.</p>
+                ) : (
+                  <ul className="text-xs space-y-1.5">
+                    {(data.today_tasks || []).slice(0, 5).map((t) => (
+                      <li key={t.id}>
+                        <Link href="/tasks" className="hover:underline">
+                          <span
+                            className="font-semibold"
+                            style={{ color: (t.priority || "").toLocaleLowerCase("tr") === "yüksek" ? "#be123c" : "#475569" }}
+                          >
+                            {[t.due_time, t.title].filter(Boolean).join(" · ")}
+                          </span>
+                          <span className="block text-baykus-muted">
+                            {t.task_type}
+                            {t.customer_name ? ` · ${t.customer_name}` : ""}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {(data.today_tasks_count ?? 0) > 5 && (
+                  <Link href="/tasks" className="text-[10px] text-baykus-primary px-1">
+                    +{(data.today_tasks_count || 0) - 5} daha
+                  </Link>
+                )}
+              </div>
+            </div>
+
             {/* STOK UYARISI */}
             <div className="bk-card overflow-hidden">
               <div className="bg-[#1d4ed8] text-white text-xs font-bold px-3 py-2 tracking-wide">
@@ -736,6 +774,13 @@ export default function DashboardPage() {
           <button type="button" onClick={load} className="bk-btn bk-btn-ghost text-xs">
             ↻ Yenile
           </button>
+          <Link
+            href="/tasks"
+            className="bk-btn text-xs font-semibold text-white"
+            style={{ backgroundColor: "#2563eb" }}
+          >
+            ✓ Görevler
+          </Link>
           <Link
             href="/orders/weekly-plan"
             className="bk-btn text-xs font-semibold text-white"

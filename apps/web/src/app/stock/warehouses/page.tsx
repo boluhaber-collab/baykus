@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -178,15 +179,24 @@ export default function WarehousesPage() {
             Depo Tanımı · stok görünümü · Depolar Arası Transfer
           </p>
         </div>
-        {selected && (
-          <button
-            type="button"
-            className="rounded-lg bg-[#ef4444] text-white px-4 py-2 text-sm font-bold shadow-sm"
-            onClick={() => openTransfer()}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={selected ? `/stock/count?warehouse=${selected.id}` : "/stock/count"}
+            className="rounded-lg text-white px-4 py-2 text-sm font-bold shadow-sm"
+            style={{ backgroundColor: "#22a447" }}
           >
-            Depolar Arası Transfer
-          </button>
-        )}
+            Stok Sayımı Yap
+          </Link>
+          {selected && (
+            <button
+              type="button"
+              className="rounded-lg bg-[#ef4444] text-white px-4 py-2 text-sm font-bold shadow-sm"
+              onClick={() => openTransfer()}
+            >
+              Depolar Arası Transfer
+            </button>
+          )}
+        </div>
       </div>
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
       {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}

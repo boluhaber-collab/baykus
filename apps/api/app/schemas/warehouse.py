@@ -56,3 +56,20 @@ class WarehouseTransferResult(BaseModel):
     source_qty_after: int
     target_qty_after: int
     note: str | None = None
+
+
+class StockCountItem(BaseModel):
+    product_id: int
+    variant_id: int | None = None
+    counted_qty: int = Field(ge=0)
+
+
+class StockCountApply(BaseModel):
+    items: list[StockCountItem] = Field(min_length=1)
+
+
+class StockCountResult(BaseModel):
+    ok: bool = True
+    warehouse: str
+    updated: int
+    message: str

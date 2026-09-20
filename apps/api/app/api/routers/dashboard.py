@@ -36,6 +36,7 @@ from app.schemas.common import (
     RecentOrderBrief,
     StatusCount,
     UpcomingSpecialDayBrief,
+    TaskBrief,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -547,6 +548,43 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
 
     upcoming = _upcoming_special_days(db, within_days=30)
 
+    # ── Today's open tasks ────────────────────────────────────────────────
+    today_tasks: list[TaskBrief] = []
+    today_tasks_count = 0
+    try:
+        from datetime import date as date_cls
+        from app.models.task import Task
+
+        today_d = date_cls.today()
+        trows = (
+            db.query(Task)
+            .filter(Task.status != "Tamamlandı", Task.due_date == today_d)
+            .order_by(Task.priority.desc(), Task.id.asc())
+            .limit(8)
+            .all()
+        )
+        today_tasks = [
+            TaskBrief(
+                id=r.id,
+                title=r.title,
+                task_type=r.task_type or "",
+                due_date=r.due_date,
+                due_time=r.due_time,
+                customer_name=r.customer_name,
+                priority=r.priority or "Normal",
+            )
+            for r in trows
+        ]
+        today_tasks_count = (
+            db.query(Task)
+            .filter(Task.status != "Tamamlandı", Task.due_date == today_d)
+            .count()
+        )
+    except Exception:
+        today_tasks = []
+        today_tasks_count = 0
+
+
     # Internet sales today
     net_channels = ("internet", "Trendyol", "Hepsiburada", "N11")
     net_row = (
@@ -628,7 +666,7 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
     except Exception:
         top_selling_product = None
 
-        return DashboardSummary(
+    return DashboardSummary(
         orders_today_count=int(today_row[0] or 0),
         orders_today_revenue=_f(today_row[1]),
         orders_month_count=int(month_row[0] or 0),
@@ -664,6 +702,8 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         recent_finance_movements=recent_fin,
         products_count=int(products_count),
         upcoming_special_days=upcoming,
+        today_tasks_count=today_tasks_count,
+        today_tasks=today_tasks,
     )
 
 

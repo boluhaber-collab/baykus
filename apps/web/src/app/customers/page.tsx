@@ -110,6 +110,7 @@ function CustomersHubPageInner() {
         columns={4}
         actions={[
           { href: "/customers?tab=musteriler", label: "Müşteri Listesi", color: "#198754" },
+          { href: "/tools/import", label: "Excelden Müşteri", color: "#e2b44d" },
           { href: "/customers/new", label: "Yeni Müşteri", color: "#0f766e" },
           { href: "/customers/track", label: "Müşteri Takibi", color: "#0f766e" },
           { href: "/customers/receivables", label: "Açık Alacaklar", color: "#be123c" },

@@ -49,6 +49,13 @@ export default function StatusFooter({
           ↻ Yenile
         </button>
         <Link
+          href="/tasks"
+          className="bk-btn text-xs font-semibold text-white"
+          style={{ backgroundColor: "#2563eb" }}
+        >
+          ✓ Görevler
+        </Link>
+        <Link
           href="/orders/weekly-plan"
           className="bk-btn text-xs font-semibold text-white"
           style={{ backgroundColor: "#f59e0b" }}

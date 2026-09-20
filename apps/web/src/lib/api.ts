@@ -270,6 +270,16 @@ export type DashboardSummary = {
   recent_finance_movements: DashboardFinanceMovement[];
   products_count: number;
   upcoming_special_days?: UpcomingSpecialDay[];
+  today_tasks_count?: number;
+  today_tasks?: {
+    id: number;
+    title: string;
+    task_type?: string;
+    due_date?: string | null;
+    due_time?: string | null;
+    customer_name?: string | null;
+    priority?: string;
+  }[];
 };
 
 export const ORDER_STATUSES = [

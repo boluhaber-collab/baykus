@@ -86,6 +86,16 @@ class LoanDueBrief(BaseModel):
     days_until: int
 
 
+
+class TaskBrief(BaseModel):
+    id: int
+    title: str
+    task_type: str = ""
+    due_date: date | None = None
+    due_time: str | None = None
+    customer_name: str | None = None
+    priority: str = "Normal"
+
 class DashboardSummary(BaseModel):
     """Real aggregates for the home dashboard."""
 
@@ -143,3 +153,7 @@ class DashboardSummary(BaseModel):
 
     # CRM
     upcoming_special_days: list[UpcomingSpecialDayBrief] = []
+
+    # Tasks
+    today_tasks_count: int = 0
+    today_tasks: list[TaskBrief] = []

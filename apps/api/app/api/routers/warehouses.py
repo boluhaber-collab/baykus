@@ -15,6 +15,8 @@ from app.schemas.warehouse import (
     WarehouseTransfer,
     WarehouseTransferResult,
     WarehouseUpdate,
+    StockCountApply,
+    StockCountResult,
 )
 
 router = APIRouter(prefix="/stock/warehouses", tags=["warehouses"])
@@ -469,3 +471,162 @@ def warehouse_stock(
                 }
             )
     return out
+
+
+@router.get("/{warehouse_id}/count-lines")
+def warehouse_count_lines(
+    warehouse_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ)),
+    q: str | None = Query(default=None),
+) -> list[dict]:
+    """Stok sayımı satırları — warehouse_stocks (+ legacy), sıfır dahil."""
+    row = db.get(Warehouse, warehouse_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Depo bulunamadı")
+
+    out: list[dict] = []
+    balances = (
+        db.query(WarehouseStock).filter(WarehouseStock.warehouse == row.name).all()
+    )
+    seen: set[tuple[int, int]] = set()
+    for b in balances:
+        product = db.get(Product, b.product_id)
+        if not product:
+            continue
+        vid = b.variant_id
+        key = (product.id, int(vid or 0))
+        seen.add(key)
+        cost = float(product.purchase_price or product.cost or 0)
+        if vid:
+            v = db.get(ProductVariant, vid)
+            if not v:
+                continue
+            name = f"{product.name} / {v.name}"
+            sku = v.sku
+        else:
+            name = product.name
+            sku = product.sku
+        out.append(
+            {
+                "product_id": product.id,
+                "variant_id": vid,
+                "sku": sku,
+                "name": name,
+                "system_qty": int(b.quantity or 0),
+                "unit_cost": cost,
+                "warehouse": row.name,
+            }
+        )
+
+    # Legacy products tagged to this warehouse without balance row
+    products = (
+        db.query(Product)
+        .filter(Product.warehouse == row.name)
+        .order_by(Product.name)
+        .all()
+    )
+    for p in products:
+        cost = float(p.purchase_price or p.cost or 0)
+        if p.variants:
+            for v in p.variants:
+                key = (p.id, v.id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(
+                    {
+                        "product_id": p.id,
+                        "variant_id": v.id,
+                        "sku": v.sku,
+                        "name": f"{p.name} / {v.name}",
+                        "system_qty": int(v.stock_qty or 0),
+                        "unit_cost": cost,
+                        "warehouse": row.name,
+                    }
+                )
+        else:
+            key = (p.id, 0)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(
+                {
+                    "product_id": p.id,
+                    "variant_id": None,
+                    "sku": p.sku,
+                    "name": p.name,
+                    "system_qty": int(p.stock_qty or 0),
+                    "unit_cost": cost,
+                    "warehouse": row.name,
+                }
+            )
+
+    out.sort(key=lambda x: (x["name"] or "").casefold())
+    if q and q.strip():
+        needle = q.strip().casefold()
+        out = [r for r in out if needle in f'{r["name"]} {r["sku"]}'.casefold()]
+    return out
+
+
+@router.post("/{warehouse_id}/count", response_model=StockCountResult)
+def apply_stock_count(
+    warehouse_id: int,
+    payload: StockCountApply,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*WRITE)),
+) -> StockCountResult:
+    """Sayılan miktarları depoya uygula (sistem stokunu ayarla)."""
+    row = db.get(Warehouse, warehouse_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Depo bulunamadı")
+
+    updated = 0
+    for item in payload.items:
+        product = db.get(Product, item.product_id)
+        if not product:
+            continue
+        variant: ProductVariant | None = None
+        if item.variant_id:
+            variant = db.get(ProductVariant, item.variant_id)
+            if not variant or variant.product_id != product.id:
+                continue
+
+        bal = _ensure_balance(db, product, variant, row.name, bootstrap_qty=0)
+        before = int(bal.quantity or 0)
+        after = int(item.counted_qty)
+        if before == after:
+            # still sync aggregate
+            bal.quantity = after
+            _sync_aggregate(db, product, variant)
+            updated += 1
+            continue
+
+        bal.quantity = after
+        _sync_aggregate(db, product, variant)
+        product.warehouse = row.name
+        delta = after - before
+        direction = "increase" if delta > 0 else "decrease"
+        db.add(
+            StockMovement(
+                product_id=product.id,
+                variant_id=variant.id if variant else None,
+                direction=direction,
+                quantity=abs(delta),
+                qty_before=before,
+                qty_after=after,
+                reason="stok_sayimi",
+                note=f"Stok sayımı · {row.name}",
+                warehouse=row.name,
+                created_by_user_id=user.id if user else None,
+            )
+        )
+        updated += 1
+
+    db.commit()
+    return StockCountResult(
+        ok=True,
+        warehouse=row.name,
+        updated=updated,
+        message=f"{row.name}: {updated} satır güncellendi",
+    )

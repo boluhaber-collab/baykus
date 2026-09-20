@@ -280,3 +280,22 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.
 API: `CriticalStockItem` + supplier/purchase/size/color/print; weekly-plan dashboard endpoint. Alembic yok.
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.
+
+
+## Batch 13 — Stok Sayımı / Görevler / Yedek / Rapor hub / Yeni formlar / Excel (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Stok Sayımı (`depo_stok_sayimi_penceresi`) | `/stock/count` — depo seç · warehouse_stocks satırları · sayılan miktar · `POST /api/stock/warehouses/{id}/count` | done |
+| Ürün&Stok + Depolar link | hub CTA + `/stock/warehouses` «Stok Sayımı Yap» | done |
+| Görev / Hatırlatma (`gorev_yonetimi_penceresi`) | `/tasks` CRUD · tür/öncelik/vade · filtre Açık/Bugün/Tümü/Tamamlanan | done |
+| Dashboard BUGÜNKÜ GÖREVLER | `today_tasks` / `today_tasks_count` + StatusFooter Görevler | done |
+| Yedekleme derinleştirme | `/settings/backups` — zip liste · Yedek Al · İndir · Yedek Test Et · restore checklist UI (otomatik restore/DPAPI yok) | done |
+| Raporlar hub | `/reports` masaüstü renkli büyük düğmeler; satış/kâr/finans filtre+CSV | done |
+| `/products/new` | ProductForm tam kart (SKU/fiyat/depo/varyant) + Excel link | done |
+| `/orders/new` | Satış/Teklif / perakende / teklif yönlendirme kartları + isteğe bağlı OrderForm | done |
+| Excelden Müşteri / Toplu Stok | `/tools/import` şablon + openpyxl/csv parse · `POST /api/customers/import` · stok import mevcut | done |
+
+API: Alembic **017** (`tasks`). SQLite: `python -m app.bootstrap_sqlite` (create_all).
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI / otomatik restore.

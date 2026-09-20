@@ -117,6 +117,8 @@ function ProductsHubPageInner() {
           { href: "/reports/stock", label: "Stok Raporu", color: "#2563eb" },
           { href: "/products/new", label: "Hızlı Varyant", color: "#f59e0b" },
           { href: "/stock/warehouses", label: "Depolar", color: "#14b8a6" },
+          { href: "/stock/count", label: "Stok Sayımı", color: "#22a447" },
+          { href: "/tools/import", label: "Excel İçe Aktar", color: "#e2b44d" },
         ]}
       />
 
@@ -254,9 +256,11 @@ function ProductsHubPageInner() {
             actions={[
               { href: "/reports/stock", label: "Stok Durumu Raporu", color: "#2563eb" },
               { href: "/stock/critical", label: "Kritik Stok Listesini Göster", color: "#be123c" },
-              { href: "/products?tab=urunler", label: "Toplu Ürün / Stok Aktarımı", color: "#0ea5e9" },
+              { href: "/tools/import", label: "Toplu Ürün / Stok Aktarımı", color: "#0ea5e9" },
               { href: "/stock", label: "Stok Yönetimi", color: "#0369a1" },
               { href: "/stock/warehouses", label: "Depolar", color: "#14b8a6" },
+              { href: "/stock/count", label: "Stok Sayımı", color: "#22a447" },
+              { href: "/tools/import", label: "Toplu Ürün / Stok Aktarımı", color: "#0ea5e9" },
             ]}
           />
         </div>

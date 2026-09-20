@@ -100,6 +100,39 @@ def create_backup(
     )
 
 
+@router.get("/restore-checklist")
+def restore_checklist(
+    _: User = Depends(require_roles("admin")),
+) -> dict:
+    """Güvenli geri yükleme kontrol listesi (otomatik restore yok — DPAPI yok)."""
+    d = _ensure_dir()
+    zips = sorted(d.glob("*.zip"), key=lambda x: x.stat().st_mtime, reverse=True)
+    db_path = _db_file_path()
+    return {
+        "ok": True,
+        "backup_dir": str(d),
+        "backup_count": len(zips),
+        "latest": zips[0].name if zips else None,
+        "db_engine": "sqlite" if db_path else "postgres",
+        "db_file": str(db_path) if db_path else None,
+        "uploads_dir": str(UPLOADS_DIR),
+        "uploads_exists": UPLOADS_DIR.is_dir(),
+        "checklist": [
+            {"step": 1, "title": "Yedek oluştur / indir", "detail": "Önce güncel zip yedek alın ve bilgisayarınıza indirin."},
+            {"step": 2, "title": "Yedek Test Et", "detail": "Listeden zip için «Yedek Test Et» — zip bütünlüğü (testzip)."},
+            {"step": 3, "title": "Uygulamayı durdurun", "detail": "API ve web süreçlerini güvenli şekilde kapatın."},
+            {"step": 4, "title": "DB geri koy", "detail": "Zip içindeki db/*.db dosyasını apps/api/ altına kopyalayın (SQLite). Postgres: pg_restore / psql."},
+            {"step": 5, "title": "Uploads birleştir", "detail": "Zip uploads/ içeriğini apps/api/uploads/ ile birleştirin."},
+            {"step": 6, "title": "Yeniden başlat", "detail": "Uygulamayı başlatıp /settings/health ve giriş kontrolü yapın."},
+        ],
+        "warnings": [
+            "Web otomatik geri yükleme yapmaz (güvenlik).",
+            "DPAPI / .bksenc şifreli masaüstü yedekleri desteklenmez.",
+            "BizimHesap API anahtarları yedekte taşınmaz.",
+        ],
+    }
+
+
 @router.get("/{filename}")
 def download_backup(
     filename: str,

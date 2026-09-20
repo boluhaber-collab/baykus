@@ -4,6 +4,7 @@ from app.models.contact import DirectoryContact
 from app.models.cost_item import CostItem
 from app.models.sublimation import SublimationPrintTime
 from app.models.crm import Campaign, SpecialDay
+from app.models.task import Task
 from app.models.customer import CariMovement, Customer
 from app.models.document import Document
 from app.models.dtf import DtfScenario
@@ -37,6 +38,7 @@ __all__ = [
     "Asset",
     "DtfScenario",
     "SpecialDay", "Campaign",
+    "Task",
     "Warehouse", "WarehouseStock",
     "VariantOption",
     "DirectoryContact",
