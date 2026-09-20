@@ -198,3 +198,30 @@ Spec: `docs/DIRECT_SALES_SPEC.md` · ekran görüntüleri: `docs/parity-shots/`
 | DPAPI yedek şifresi | stub — web zip yedek | stub |
 
 
+
+## Batch 9 — Finans + Üretim + ince stub derinleştirme (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Günlük Kasa masaüstü özet | `/finance/cash` — Kasa Özeti kartları + sipariş tablosu + Kasa/Banka hareketleri (Giriş/Çıkış) · `GET /api/finance/cash/daily` | done |
+| Açık Bakiyeler sipariş satırları | `/finance/open-balances` — Ara/Durum filtre · geciken/teslim satır renkleri · cari sekmesi | done |
+| Hesaplarım tür grupları | `/finance/banks` — Banka/POS/Kart/Ortak paneller + kasa devir · `account_type`/`institution` | done |
+| Masraflar masaüstü filtre | `/finance/expenses` — dönem · Ödenmiş/Ödenecek/Gecikmiş · belge/vade · kalem CRUD | done |
+| Krediler / Demirbaşlar | mevcut CRUD korunur (özet kartlar önceki batch) | done |
+| Üretim aşama sütunları | `/production` — stage chips + kanban sütunları + ilerlet/PDF | done |
+| İş Emirleri | `/production/work-orders` — filtre · seçimli PDF · ilerlet | done |
+| Teslim Alarmı / Geciken | `/orders/delivery-alarm`, `/orders/overdue` — özet + WA + PDF + gecikme günü | done |
+| Açık Alacaklar (stub→ekran) | `/customers/receivables` — sipariş + cari sekmeleri (re-export kaldırıldı) | done |
+| Açık Borçlar (stub→ekran) | `/suppliers/payables` — arama · CTA · ekstre | done |
+| İletişim hub | `/communication` — canlı sayaçlar (WA kuyruk + fihrist) | done |
+| WhatsApp Takip | `/whatsapp/track` — 3 kuyruk (Selenium yok) | done |
+| İnternet Satışları | `/ecommerce` — kanal chip · tahsil/kalan kartları | done |
+| Raporlar (masraf/alış/cari/arşiv) | filtre + CSV (auth) + özet kartlar; arşiv sil | done |
+| Fiyat Listesi | `/price-lists` — özet kartlar + ara + aktif filtre | done |
+| Evrak Dolabı | `/documents` — upload/list/delete (önceki) | done |
+
+API: Alembic **014** (`bank_accounts.account_type/institution`, `expenses.due_date/document_no`). SQLite: `python -m app.bootstrap_sqlite` kolon yamaları.
+
+Spec: `docs/FINANCE_PROD_SPEC_SNIPPETS.md`
+
+Bilinçli boşluklar (karşılaştırmalı kontrol için): BizimHesap canlı sync, Selenium WA Desktop, DPAPI, cari PDF (ReportLab), sipariş maliyeti alanı (Kasa Özeti Maliyet=0 iskelet).

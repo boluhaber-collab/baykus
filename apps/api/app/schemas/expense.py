@@ -25,6 +25,8 @@ class ExpenseCreate(BaseModel):
     category_id: int
     amount: Decimal = Field(gt=0)
     expense_date: date
+    due_date: date | None = None
+    document_no: str | None = Field(default=None, max_length=50)
     payment_method: str = "nakit"
     note: str | None = None
     cash_register_id: int | None = None
@@ -45,11 +47,14 @@ class ExpenseOut(BaseModel):
     category_name: str | None = None
     amount: Decimal
     expense_date: date
+    due_date: date | None = None
+    document_no: str | None = None
     payment_method: str
     note: str | None
     cash_register_id: int | None
     bank_account_id: int | None
     is_posted: bool
+    status_label: str | None = None  # Ödenmiş | Ödenecek | Gecikmiş
     created_by_user_id: int | None
     created_at: datetime
 

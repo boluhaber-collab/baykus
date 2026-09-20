@@ -32,6 +32,8 @@ class Expense(Base):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     expense_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    due_date: Mapped[date | None] = mapped_column(Date, index=True)
+    document_no: Mapped[str | None] = mapped_column(String(50))
     payment_method: Mapped[str] = mapped_column(String(20), default="nakit")  # nakit | banka
     note: Mapped[str | None] = mapped_column(Text)
     cash_register_id: Mapped[int | None] = mapped_column(

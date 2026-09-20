@@ -24,6 +24,15 @@ READ = ("admin", "muhasebe")
 WRITE = ("admin", "muhasebe")
 
 
+def _status_label(e: Expense) -> str:
+    if e.is_posted:
+        return "Ödenmiş"
+    from datetime import date as _date
+    if e.due_date and e.due_date < _date.today():
+        return "Gecikmiş"
+    return "Ödenecek"
+
+
 def _out(e: Expense) -> ExpenseOut:
     return ExpenseOut(
         id=e.id,
@@ -31,11 +40,14 @@ def _out(e: Expense) -> ExpenseOut:
         category_name=e.category.name if e.category else None,
         amount=e.amount,
         expense_date=e.expense_date,
+        due_date=getattr(e, "due_date", None),
+        document_no=getattr(e, "document_no", None),
         payment_method=e.payment_method,
         note=e.note,
         cash_register_id=e.cash_register_id,
         bank_account_id=e.bank_account_id,
         is_posted=e.is_posted,
+        status_label=_status_label(e),
         created_by_user_id=e.created_by_user_id,
         created_at=e.created_at,
     )
@@ -120,14 +132,40 @@ def list_expenses(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ)),
     category_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    status_filter: str | None = None,
+    q: str | None = None,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 200,
 ) -> list[ExpenseOut]:
-    q = db.query(Expense).options(joinedload(Expense.category))
+    query = db.query(Expense).options(joinedload(Expense.category))
     if category_id:
-        q = q.filter(Expense.category_id == category_id)
-    rows = q.order_by(Expense.expense_date.desc(), Expense.id.desc()).offset(skip).limit(limit).all()
-    return [_out(r) for r in rows]
+        query = query.filter(Expense.category_id == category_id)
+    if date_from:
+        query = query.filter(Expense.expense_date >= date_from)
+    if date_to:
+        query = query.filter(Expense.expense_date <= date_to)
+    rows = query.order_by(Expense.expense_date.desc(), Expense.id.desc()).offset(skip).limit(limit).all()
+    out = [_out(r) for r in rows]
+    if status_filter and status_filter != "Tümü":
+        out = [r for r in out if r.status_label == status_filter]
+    if q:
+        needle = q.strip().casefold()
+        out = [
+            r
+            for r in out
+            if needle
+            in " ".join(
+                [
+                    str(r.category_name or ""),
+                    str(r.note or ""),
+                    str(r.document_no or ""),
+                    str(r.payment_method or ""),
+                ]
+            ).casefold()
+        ]
+    return out
 
 
 @router.post("", response_model=ExpenseOut, status_code=status.HTTP_201_CREATED)
@@ -145,6 +183,8 @@ def create_expense(
         category_id=payload.category_id,
         amount=Decimal(str(payload.amount)),
         expense_date=payload.expense_date,
+        due_date=payload.due_date,
+        document_no=(payload.document_no.strip() if payload.document_no else None),
         payment_method=payload.payment_method,
         note=payload.note,
         cash_register_id=payload.cash_register_id,

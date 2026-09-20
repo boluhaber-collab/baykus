@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
 from app.models.customer import CariMovement, Customer
+from app.models.expense import Expense
+from app.models.order import Order
 from app.models.supplier import Supplier, SupplierMovement
 from app.models.finance import (
     BANK_IN_TYPES,
@@ -130,6 +132,8 @@ def _bank_out(db: Session, acc: BankAccount) -> BankAccountOut:
     return BankAccountOut(
         id=acc.id,
         name=acc.name,
+        account_type=getattr(acc, "account_type", None) or "Banka",
+        institution=getattr(acc, "institution", None),
         iban=acc.iban,
         currency=acc.currency or "TRY",
         opening_balance=_dec(acc.opening_balance),
@@ -281,6 +285,58 @@ def open_balances(
             )
     payables.sort(key=lambda x: x["balance"], reverse=True)
 
+
+    # Desktop acik_bakiyeler: order-level open balances
+    from sqlalchemy.orm import joinedload
+
+    cancelled = {"Sipariş İptali", "İptal", "İptal Edildi", "siparis iptali"}
+    order_rows = (
+        db.query(Order)
+        .options(joinedload(Order.customer), joinedload(Order.payments), joinedload(Order.lines))
+        .filter(~Order.status.in_(list(cancelled)))
+        .order_by(Order.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    open_orders = []
+    open_orders_total = Decimal("0")
+    today = date.today()
+    for o in order_rows:
+        paid = sum((_dec(p.amount) for p in (o.payments or [])), Decimal("0"))
+        effective_paid = paid if paid > 0 else _dec(o.deposit_amount)
+        remaining = max(_dec(o.total_amount) - effective_paid, Decimal("0"))
+        if remaining <= 0:
+            continue
+        open_orders_total += remaining
+        products = ", ".join(
+            (ln.description or "")[:40] for ln in (o.lines or [])[:4] if ln.description
+        )
+        due = o.due_date or getattr(o, "delivery_date", None)
+        tag = "normal"
+        if due and due < today and o.status != "Teslim Edildi":
+            tag = "geciken"
+        elif o.status == "Teslim Edildi":
+            tag = "teslim"
+        phone = o.customer.phone if o.customer is not None else None
+        open_orders.append(
+            {
+                "order_id": o.id,
+                "order_number": o.order_number,
+                "customer_id": o.customer_id,
+                "customer_name": o.customer.name if o.customer is not None else None,
+                "customer_phone": phone,
+                "order_date": o.created_at.date().isoformat() if o.created_at else None,
+                "due_date": due.isoformat() if due else None,
+                "status": o.status,
+                "total_amount": float(_dec(o.total_amount)),
+                "paid_amount": float(effective_paid),
+                "open_balance": float(remaining),
+                "products": products,
+                "row_tag": tag,
+                "href": f"/orders/{o.id}",
+            }
+        )
+
     return {
         "receivables_total": float(recv_total),
         "payables_total": float(pay_total),
@@ -289,6 +345,9 @@ def open_balances(
         "payables_count": len(payables),
         "receivables": receivables,
         "payables": payables,
+        "open_orders_total": float(open_orders_total),
+        "open_orders_count": len(open_orders),
+        "open_orders": open_orders,
     }
 
 @router.get("/summary", response_model=FinanceSummary)
@@ -397,6 +456,175 @@ def finance_summary(
 
 
 # ─── Cash ──────────────────────────────────────────────────────────────────
+
+
+
+@router.get("/cash/daily")
+def cash_daily_panel(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
+) -> dict:
+    """Desktop gunluk_kasa_paneli — özet kartlar + siparişler + kasa/banka hareketleri."""
+    from sqlalchemy.orm import joinedload
+
+    today = date.today()
+    d0 = from_date or today
+    d1 = to_date or today
+    cancelled = {"Sipariş İptali", "İptal", "İptal Edildi"}
+    quote_like = {"Teklif", "teklif"}
+
+    orders = (
+        db.query(Order)
+        .options(joinedload(Order.customer), joinedload(Order.payments), joinedload(Order.lines))
+        .filter(
+            func.date(Order.created_at) >= d0,
+            func.date(Order.created_at) <= d1,
+        )
+        .order_by(Order.created_at.desc())
+        .limit(500)
+        .all()
+    )
+
+    order_count = 0
+    revenue = Decimal("0")
+    collections = Decimal("0")
+    remaining_sum = Decimal("0")
+    delivered = 0
+    quote_count = 0
+    product_qty: dict[str, int] = {}
+    order_rows = []
+    for o in orders:
+        ch = (getattr(o, "channel", None) or "")
+        st = o.status or ""
+        if st in quote_like or ch.lower() == "teklif":
+            quote_count += 1
+            continue
+        if st in cancelled:
+            continue
+        order_count += 1
+        total = _dec(o.total_amount)
+        paid = sum((_dec(p.amount) for p in (o.payments or [])), Decimal("0"))
+        effective_paid = paid if paid > 0 else _dec(o.deposit_amount)
+        rem = max(total - effective_paid, Decimal("0"))
+        revenue += total
+        collections += effective_paid
+        remaining_sum += rem
+        if st == "Teslim Edildi":
+            delivered += 1
+        products = []
+        for ln in o.lines or []:
+            name = (ln.description or "Ürün").strip()
+            qty = int(ln.quantity or 0)
+            product_qty[name] = product_qty.get(name, 0) + qty
+            products.append(f"{name}×{qty}" if qty else name)
+        order_rows.append(
+            {
+                "id": o.id,
+                "order_number": o.order_number,
+                "document_type": "Sipariş",
+                "date": o.created_at.date().isoformat() if o.created_at else None,
+                "customer_name": o.customer.name if o.customer is not None else None,
+                "customer_phone": getattr(o.customer, "phone", None) if o.customer is not None else None,
+                "products": ", ".join(products[:3]),
+                "qty": sum(int(ln.quantity or 0) for ln in (o.lines or [])),
+                "total_amount": float(total),
+                "deposit_amount": float(effective_paid),
+                "remaining_amount": float(rem),
+                "profit": None,
+                "status": st,
+                "href": f"/orders/{o.id}",
+            }
+        )
+
+    top_product = "-"
+    if product_qty:
+        top_product = max(product_qty.items(), key=lambda x: x[1])[0]
+
+    # Expenses in range
+    expense_total = _dec(
+        db.query(func.coalesce(func.sum(Expense.amount), 0))
+        .filter(Expense.expense_date >= d0, Expense.expense_date <= d1)
+        .scalar()
+    )
+
+    # Combined movements
+    cash_movs = (
+        db.query(CashMovement)
+        .filter(CashMovement.movement_date >= d0, CashMovement.movement_date <= d1)
+        .order_by(CashMovement.movement_date.desc(), CashMovement.id.desc())
+        .limit(300)
+        .all()
+    )
+    bank_movs = (
+        db.query(BankMovement)
+        .filter(BankMovement.movement_date >= d0, BankMovement.movement_date <= d1)
+        .order_by(BankMovement.movement_date.desc(), BankMovement.id.desc())
+        .limit(300)
+        .all()
+    )
+    movements = []
+    for m in cash_movs:
+        direction = _cash_direction(m.movement_type)
+        amt = float(_dec(m.amount))
+        movements.append(
+            {
+                "date": m.movement_date.isoformat(),
+                "source": "Kasa",
+                "account": "Ana Kasa",
+                "movement_type": m.movement_type,
+                "note": m.note or m.category,
+                "in_amount": amt if direction == "in" else 0,
+                "out_amount": amt if direction == "out" else 0,
+                "payment_type": m.category or m.movement_type,
+            }
+        )
+    for m in bank_movs:
+        direction = _bank_direction(m.movement_type)
+        amt = float(_dec(m.amount))
+        acc_name = m.bank_account.name if m.bank_account is not None else "Banka"
+        movements.append(
+            {
+                "date": m.movement_date.isoformat(),
+                "source": "Banka",
+                "account": acc_name,
+                "movement_type": m.movement_type,
+                "note": m.note or m.category,
+                "in_amount": amt if direction == "in" else 0,
+                "out_amount": amt if direction == "out" else 0,
+                "payment_type": m.category or m.movement_type,
+            }
+        )
+    movements.sort(key=lambda x: x["date"], reverse=True)
+
+    cost = Decimal("0")  # maliyet ayrı maliyet modülünde; masaüstü Excel alanı
+    gross = revenue - cost
+    net = gross - expense_total
+    registers = db.query(CashRegister).order_by(CashRegister.id).all()
+    main = _register_out(db, registers[0]) if registers else None
+
+    return {
+        "from_date": d0.isoformat(),
+        "to_date": d1.isoformat(),
+        "cash_register": main.model_dump(mode="json") if main else None,
+        "summary": {
+            "order_count": order_count,
+            "revenue": float(revenue),
+            "collections": float(collections),
+            "remaining": float(remaining_sum),
+            "cost": float(cost),
+            "gross_profit": float(gross),
+            "expense": float(expense_total),
+            "net_profit": float(net),
+            "quote_count": quote_count,
+            "delivered_count": delivered,
+            "top_product": top_product,
+            "top_category": "-",
+        },
+        "orders": order_rows,
+        "movements": movements,
+    }
 
 
 @router.get("/cash", response_model=list[CashRegisterOut])
@@ -556,6 +784,8 @@ def create_bank(
 ) -> BankAccountOut:
     acc = BankAccount(
         name=payload.name.strip(),
+        account_type=(payload.account_type or "Banka").strip() or "Banka",
+        institution=(payload.institution.strip() if payload.institution else None),
         iban=(payload.iban.strip().replace(" ", "") if payload.iban else None),
         currency=(payload.currency or "TRY").upper(),
         opening_balance=payload.opening_balance,

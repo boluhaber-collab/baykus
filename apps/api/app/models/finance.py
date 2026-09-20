@@ -41,6 +41,8 @@ class BankAccount(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
+    account_type: Mapped[str] = mapped_column(String(40), default="Banka", index=True)
+    institution: Mapped[str | None] = mapped_column(String(150))  # Banka / Kurum
     iban: Mapped[str | None] = mapped_column(String(34))
     currency: Mapped[str] = mapped_column(String(3), default="TRY")
     opening_balance: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
@@ -132,3 +134,6 @@ class BankMovement(Base):
         back_populates="movements", foreign_keys=[bank_account_id]
     )
     customer = relationship("Customer", lazy="joined")
+
+# Account types mirror desktop banka_hesaplari_paneli
+BANK_ACCOUNT_TYPES = ("Banka", "POS", "Kredi Kartı", "Şirket Ortağı")

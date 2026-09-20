@@ -68,6 +68,22 @@ def bootstrap() -> None:
             if "design_whatsapp_at" not in ocols:
                 conn.execute(text("ALTER TABLE orders ADD COLUMN design_whatsapp_at DATETIME"))
                 print("  + orders.design_whatsapp_at")
+        if "bank_accounts" in insp.get_table_names():
+            bcols = {c["name"] for c in insp.get_columns("bank_accounts")}
+            if "account_type" not in bcols:
+                conn.execute(text("ALTER TABLE bank_accounts ADD COLUMN account_type VARCHAR(40) DEFAULT 'Banka'"))
+                print("  + bank_accounts.account_type")
+            if "institution" not in bcols:
+                conn.execute(text("ALTER TABLE bank_accounts ADD COLUMN institution VARCHAR(150)"))
+                print("  + bank_accounts.institution")
+        if "expenses" in insp.get_table_names():
+            ecols = {c["name"] for c in insp.get_columns("expenses")}
+            if "due_date" not in ecols:
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN due_date DATE"))
+                print("  + expenses.due_date")
+            if "document_no" not in ecols:
+                conn.execute(text("ALTER TABLE expenses ADD COLUMN document_no VARCHAR(50)"))
+                print("  + expenses.document_no")
             # Remap legacy design_status labels
             for old_v, new_v in (
                 ("bekliyor", "Bekliyor"),

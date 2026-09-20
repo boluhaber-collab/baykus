@@ -51,6 +51,16 @@ export default function ArchiveCenterPage() {
     }
   }
 
+  async function remove(id: number) {
+    if (!confirm("Arşivden silinsin mi?")) return;
+    try {
+      await apiFetch(`/api/documents/${id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Silme hatası");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap justify-between gap-2">
@@ -76,9 +86,10 @@ export default function ArchiveCenterPage() {
                 <td><span className="rounded bg-slate-100 px-2 py-0.5 text-[11px]">{d.archive_tag || d.category || "—"}</span></td>
                 <td className="text-xs">{d.original_filename}</td>
                 <td className="text-xs">{d.created_at ? new Date(d.created_at).toLocaleDateString("tr-TR") : "—"}</td>
-                <td className="text-right">
-                  <button type="button" className="text-baykus-primary text-xs hover:underline"
+                <td className="text-right space-x-2 text-xs whitespace-nowrap">
+                  <button type="button" className="text-baykus-primary hover:underline"
                     onClick={() => downloadAuthFile(`/api/documents/${d.id}/download`, d.original_filename)}>İndir</button>
+                  <button type="button" className="text-red-600 hover:underline" onClick={() => remove(d.id)}>Sil</button>
                 </td>
               </tr>
             ))}

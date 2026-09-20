@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PriceList, apiFetch } from "@/lib/api";
 
 export default function PriceListsPage() {
@@ -9,6 +9,8 @@ export default function PriceListsPage() {
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [q, setQ] = useState("");
+  const [onlyActive, setOnlyActive] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
@@ -22,6 +24,16 @@ export default function PriceListsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const filtered = useMemo(() => {
+    let rows = items;
+    if (onlyActive) rows = rows.filter((p) => p.is_active);
+    const needle = q.trim().toLowerCase();
+    if (needle) {
+      rows = rows.filter((p) => [p.name, p.description].join(" ").toLowerCase().includes(needle));
+    }
+    return rows;
+  }, [items, q, onlyActive]);
 
   async function createList(e: FormEvent) {
     e.preventDefault();
@@ -44,73 +56,109 @@ export default function PriceListsPage() {
     }
   }
 
+  const activeCount = items.filter((p) => p.is_active).length;
+  const itemSum = items.reduce((s, p) => s + Number(p.item_count ?? p.items?.length ?? 0), 0);
+
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Fiyat listeleri</h1>
-        <p className="text-sm text-slate-500">Ürün / varyant bazlı fiyat tanımları</p>
-      </div>
-      {error && <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
-
-      <form onSubmit={createList} className="mb-6 rounded-xl border bg-white p-4 shadow-sm flex flex-wrap gap-2 items-end">
-        <label className="text-sm">
-          <span className="text-slate-500">Yeni liste adı</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="mt-1 block rounded-lg border px-3 py-2"
-            required
-          />
-        </label>
-        <label className="text-sm grow min-w-[200px]">
-          <span className="text-slate-500">Açıklama</span>
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="mt-1 block w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-        <button type="submit" className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm">
-          Oluştur
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold">Fiyat Listesi</h2>
+          <p className="text-xs text-baykus-muted">Fiyat / Maliyet › Fiyat Listesi · ürün/varyant kalemleri</p>
+        </div>
+        <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={load}>
+          Yenile
         </button>
-      </form>
+      </div>
 
-      <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+      {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+
+      <div className="grid sm:grid-cols-3 gap-2">
+        <div className="bk-card px-3 py-2">
+          <div className="text-[11px] text-baykus-muted">Liste</div>
+          <div className="text-xl font-bold">{items.length}</div>
+        </div>
+        <div className="bk-card px-3 py-2">
+          <div className="text-[11px] text-baykus-muted">Aktif</div>
+          <div className="text-xl font-bold text-emerald-700">{activeCount}</div>
+        </div>
+        <div className="bk-card px-3 py-2">
+          <div className="text-[11px] text-baykus-muted">Toplam kalem</div>
+          <div className="text-xl font-bold">{itemSum}</div>
+        </div>
+      </div>
+
+      <fieldset className="rounded border bg-white px-3 py-3">
+        <legend className="px-1 text-xs font-semibold">Yeni fiyat listesi</legend>
+        <form onSubmit={createList} className="flex flex-wrap gap-2 items-end text-sm">
+          <label>
+            <span className="text-[11px] text-baykus-muted">Liste adı *</span>
+            <input required className="bk-input" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="grow min-w-[200px]">
+            <span className="text-[11px] text-baykus-muted">Açıklama</span>
+            <input className="bk-input" value={description} onChange={(e) => setDescription(e.target.value)} />
+          </label>
+          <button type="submit" className="bk-btn text-white text-xs" style={{ background: "#198754" }}>
+            Oluştur
+          </button>
+        </form>
+      </fieldset>
+
+      <div className="bk-filter-bar">
+        <input className="bk-input max-w-[220px]" placeholder="Ara…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <label className="flex items-center gap-1 text-xs">
+          <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
+          Sadece aktif
+        </label>
+      </div>
+
+      <div className="bk-table-wrap">
+        <table className="bk-table">
+          <thead>
             <tr>
-              <th className="px-4 py-3">Ad</th>
-              <th className="px-4 py-3">Para birimi</th>
-              <th className="px-4 py-3">Kalem</th>
-              <th className="px-4 py-3">Durum</th>
-              <th className="px-4 py-3">Geçerlilik</th>
-              <th className="px-4 py-3"></th>
+              <th>Ad</th>
+              <th>Açıklama</th>
+              <th>Para birimi</th>
+              <th className="text-right">Kalem</th>
+              <th>Durum</th>
+              <th>Geçerlilik</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {items.map((pl) => (
-              <tr key={pl.id} className="border-t border-slate-100">
-                <td className="px-4 py-3 font-medium">
-                  <Link href={`/price-lists/${pl.id}`} className="text-baykus-700 hover:underline">
+            {filtered.map((pl) => (
+              <tr key={pl.id}>
+                <td className="font-medium">
+                  <Link href={`/price-lists/${pl.id}`} className="text-baykus-primary hover:underline">
                     {pl.name}
                   </Link>
                 </td>
-                <td className="px-4 py-3">{pl.currency}</td>
-                <td className="px-4 py-3">{pl.item_count ?? pl.items?.length ?? 0}</td>
-                <td className="px-4 py-3">{pl.is_active ? "Aktif" : "Pasif"}</td>
-                <td className="px-4 py-3 text-slate-500">
+                <td className="text-xs text-baykus-muted max-w-[200px] truncate">{pl.description || "—"}</td>
+                <td>{pl.currency}</td>
+                <td className="text-right tabular-nums">{pl.item_count ?? pl.items?.length ?? 0}</td>
+                <td>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                      pl.is_active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {pl.is_active ? "Aktif" : "Pasif"}
+                  </span>
+                </td>
+                <td className="text-xs text-slate-500">
                   {[pl.valid_from, pl.valid_to].filter(Boolean).join(" → ") || "—"}
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <Link href={`/price-lists/${pl.id}`} className="text-baykus-600 hover:underline">
-                    Aç
+                <td className="text-right text-xs">
+                  <Link href={`/price-lists/${pl.id}`} className="text-baykus-primary hover:underline">
+                    Kalemler
                   </Link>
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={7} className="text-center text-baykus-muted py-8">
                   Liste yok
                 </td>
               </tr>

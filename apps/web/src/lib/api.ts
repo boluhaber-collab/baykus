@@ -513,6 +513,8 @@ export type CashRegister = {
 export type BankAccount = {
   id: number;
   name: string;
+  account_type?: string;
+  institution?: string | null;
   iban?: string | null;
   currency: string;
   opening_balance: number;
@@ -521,6 +523,70 @@ export type BankAccount = {
   balance: number;
   created_at: string;
   updated_at: string;
+};
+
+export const BANK_ACCOUNT_TYPES = ["Banka", "POS", "Kredi Kartı", "Şirket Ortağı"] as const;
+
+export type CashDailyPanel = {
+  from_date: string;
+  to_date: string;
+  cash_register: CashRegister | null;
+  summary: {
+    order_count: number;
+    revenue: number;
+    collections: number;
+    remaining: number;
+    cost: number;
+    gross_profit: number;
+    expense: number;
+    net_profit: number;
+    quote_count: number;
+    delivered_count: number;
+    top_product: string;
+    top_category: string;
+  };
+  orders: {
+    id: number;
+    order_number: string;
+    document_type: string;
+    date: string | null;
+    customer_name: string | null;
+    customer_phone: string | null;
+    products: string;
+    qty: number;
+    total_amount: number;
+    deposit_amount: number;
+    remaining_amount: number;
+    status: string;
+    href: string;
+  }[];
+  movements: {
+    date: string;
+    source: string;
+    account: string;
+    movement_type: string;
+    note: string | null;
+    in_amount: number;
+    out_amount: number;
+    payment_type: string;
+  }[];
+};
+
+export type OpenBalanceOrder = {
+  order_id: number;
+  order_number: string;
+  customer_id: number | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  order_date: string | null;
+  due_date: string | null;
+  status: string;
+  total_amount: number;
+  paid_amount: number;
+  open_balance: number;
+  products: string;
+  row_tag: string;
+  href: string;
 };
 
 export type CashMovement = {
@@ -895,11 +961,14 @@ export type Expense = {
   category_name?: string | null;
   amount: number;
   expense_date: string;
+  due_date?: string | null;
+  document_no?: string | null;
   payment_method: string;
   note?: string | null;
   cash_register_id?: number | null;
   bank_account_id?: number | null;
   is_posted: boolean;
+  status_label?: string | null;
   created_by_user_id?: number | null;
   created_at: string;
 };

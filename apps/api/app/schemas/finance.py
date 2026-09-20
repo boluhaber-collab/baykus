@@ -56,6 +56,8 @@ class CashMovementOut(BaseModel):
 
 class BankAccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
+    account_type: str = Field(default="Banka", max_length=40)
+    institution: str | None = Field(default=None, max_length=150)
     iban: str | None = Field(default=None, max_length=34)
     currency: str = Field(default="TRY", max_length=3)
     opening_balance: Decimal = Decimal("0")
@@ -65,6 +67,8 @@ class BankAccountCreate(BaseModel):
 
 class BankAccountUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=150)
+    account_type: str | None = Field(default=None, max_length=40)
+    institution: str | None = Field(default=None, max_length=150)
     iban: str | None = Field(default=None, max_length=34)
     currency: str | None = Field(default=None, max_length=3)
     opening_balance: Decimal | None = None
@@ -75,6 +79,8 @@ class BankAccountUpdate(BaseModel):
 class BankAccountOut(BaseModel):
     id: int
     name: str
+    account_type: str = "Banka"
+    institution: str | None = None
     iban: str | None = None
     currency: str
     opening_balance: Decimal
