@@ -1,0 +1,16 @@
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.next/
+.env
+*.egg-info/
+dist/
+build/
+.DS_Store
+*.log
+.pytest_cache/
+.ruff_cache/
+apps/web/.turbo/
+*.zip
