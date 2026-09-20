@@ -300,6 +300,8 @@ export type KanbanBoard = {
       total_amount: number;
       remaining_amount: number;
       due_date?: string | null;
+      channel?: string | null;
+      design_status?: string | null;
     }[];
   }[];
 };
@@ -793,6 +795,127 @@ export async function downloadPdf(path: string, filename: string): Promise<void>
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || data.message || `PDF hatası: ${res.status}`);
+  }
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+
+export type OrderDesignFile = {
+  id: number;
+  order_id: number;
+  original_filename: string;
+  stored_filename: string;
+  content_type?: string | null;
+  size_bytes: number;
+  uploaded_by_user_id?: number | null;
+  created_at: string;
+};
+
+export type PriceListItem = {
+  id?: number;
+  price_list_id?: number;
+  product_id?: number | null;
+  variant_id?: number | null;
+  description: string;
+  unit_price: number;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  notes?: string | null;
+};
+
+export type PriceList = {
+  id: number;
+  name: string;
+  description?: string | null;
+  currency: string;
+  is_active: boolean;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  item_count?: number;
+  created_at: string;
+  updated_at: string;
+  items?: PriceListItem[];
+};
+
+export type LoanInstallment = {
+  id: number;
+  loan_id: number;
+  sequence: number;
+  due_date: string;
+  amount: number;
+  is_paid: boolean;
+  paid_at?: string | null;
+  payment_method?: string | null;
+  cash_register_id?: number | null;
+  bank_account_id?: number | null;
+  notes?: string | null;
+};
+
+export type Loan = {
+  id: number;
+  title: string;
+  lender?: string | null;
+  principal_amount: number;
+  interest_rate?: number | null;
+  start_date: string;
+  installment_count: number;
+  status: string;
+  notes?: string | null;
+  paid_count: number;
+  unpaid_count: number;
+  paid_amount: number;
+  remaining_amount: number;
+  created_at: string;
+  updated_at: string;
+  installments?: LoanInstallment[];
+};
+
+export type AuditLog = {
+  id: number;
+  user_id?: number | null;
+  user_email?: string | null;
+  user_name?: string | null;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  detail?: string | null;
+  created_at: string;
+};
+
+export function designStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "bekliyor":
+      return "bg-amber-100 text-amber-800";
+    case "onaylandı":
+      return "bg-emerald-100 text-emerald-800";
+    case "revizyon":
+      return "bg-orange-100 text-orange-800";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
+/** Authenticated binary download (design files etc.). */
+export async function downloadAuthFile(path: string, filename: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 401) {
+    clearToken();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("Yetkisiz");
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || data.message || `İndirme hatası: ${res.status}`);
   }
   const blob = await res.blob();
   const a = document.createElement("a");

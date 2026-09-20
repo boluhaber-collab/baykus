@@ -10,6 +10,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/cari", label: "Cari / Alacaklar", icon: "📒" },
   { href: "/products", label: "Ürünler", icon: "📦" },
   { href: "/stock", label: "Stok", icon: "📥" },
+  { href: "/price-lists", label: "Fiyat listeleri", icon: "🏷️" },
   { href: "/quotes", label: "Teklifler", icon: "📝" },
   { href: "/orders", label: "Siparişler", icon: "🛒" },
   { href: "/orders/kanban", label: "Kanban", icon: "📋" },
@@ -20,7 +21,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/finance/cash", label: "Kasa", icon: "💵" },
   { href: "/finance/banks", label: "Banka", icon: "🏦" },
   { href: "/finance/expenses", label: "Giderler", icon: "🧾" },
+  { href: "/finance/loans", label: "Kredi / Taksit", icon: "💳" },
   { href: "/reports", label: "Raporlar", icon: "📈" },
   { href: "/whatsapp", label: "WhatsApp Şablonları", icon: "💬" },
   { href: "/settings", label: "Ayarlar / Kullanıcılar", icon: "⚙️" },
+  { href: "/settings/audit", label: "Denetim kaydı", icon: "📜" },
 ];

@@ -21,6 +21,7 @@ from app.schemas.quote import (
     QuoteOut,
     QuoteUpdate,
 )
+from app.services.audit import write_audit
 from app.services.pdf import build_quote_pdf
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
@@ -187,7 +188,7 @@ def list_quotes(
 def create_quote(
     payload: QuoteCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "satış")),
+    user: User = Depends(require_roles("admin", "satış")),
 ) -> QuoteOut:
     if payload.customer_id is not None and not db.get(Customer, payload.customer_id):
         raise HTTPException(status_code=400, detail="Müşteri bulunamadı")
@@ -207,6 +208,13 @@ def create_quote(
     db.flush()
     replace_lines(quote, payload.lines)
     db.commit()
+    write_audit(
+        user_id=user.id,
+        action="create",
+        entity_type="quote",
+        entity_id=quote.id,
+        detail={"quote_number": quote.quote_number},
+    )
     return to_out(load_quote(db, quote.id))
 
 
@@ -224,7 +232,7 @@ def update_quote(
     quote_id: int,
     payload: QuoteUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "satış")),
+    user: User = Depends(require_roles("admin", "satış")),
 ) -> QuoteOut:
     quote = load_quote(db, quote_id)
     if quote.is_cancelled or quote.status == "Siparişe Dönüştü":
@@ -260,6 +268,13 @@ def update_quote(
         recompute(quote)
     quote.updated_at = datetime.utcnow()
     db.commit()
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="quote",
+        entity_id=quote.id,
+        detail={"quote_number": quote.quote_number},
+    )
     return to_out(load_quote(db, quote.id))
 
 
@@ -267,7 +282,7 @@ def update_quote(
 def soft_cancel_quote(
     quote_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "satış")),
+    user: User = Depends(require_roles("admin", "satış")),
 ) -> None:
     quote = load_quote(db, quote_id)
     if quote.status == "Siparişe Dönüştü":
@@ -276,6 +291,13 @@ def soft_cancel_quote(
     quote.status = "Reddedildi"
     quote.updated_at = datetime.utcnow()
     db.commit()
+    write_audit(
+        user_id=user.id,
+        action="delete",
+        entity_type="quote",
+        entity_id=quote.id,
+        detail={"soft": True, "quote_number": quote.quote_number},
+    )
 
 
 @router.post("/{quote_id}/convert", response_model=QuoteConvertOut)

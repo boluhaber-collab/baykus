@@ -6,8 +6,10 @@ import { useCallback, useEffect, useState } from "react";
 import OrderForm, { OrderFormPayload } from "@/components/OrderForm";
 import {
   ORDER_STATUSES,
+  OrderDesignFile,
   OrderDetail,
   apiFetch,
+  downloadAuthFile,
   downloadPdf,
   formatMoney,
   statusBadgeClass,
@@ -20,16 +22,40 @@ export default function OrderDetailPage() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [designFiles, setDesignFiles] = useState<OrderDesignFile[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
     try {
       const data = await apiFetch<OrderDetail>(`/api/orders/${id}`);
       setOrder(data);
+      try {
+        const files = await apiFetch<OrderDesignFile[]>(`/api/orders/${id}/design-files`);
+        setDesignFiles(files);
+      } catch {
+        setDesignFiles([]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
   }, [id]);
+
+  async function uploadDesign(file: File) {
+    setUploading(true);
+    setError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      await apiFetch(`/api/orders/${id}/design-files`, { method: "POST", body: fd });
+      const files = await apiFetch<OrderDesignFile[]>(`/api/orders/${id}/design-files`);
+      setDesignFiles(files);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Yükleme hatası");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   useEffect(() => {
     if (!Number.isFinite(id)) return;
@@ -217,6 +243,53 @@ export default function OrderDetailPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h2 className="font-semibold text-sm">Tasarım Dosyaları</h2>
+              <label className="rounded-lg border px-3 py-1.5 text-xs cursor-pointer hover:bg-slate-50">
+                {uploading ? "Yükleniyor…" : "+ Dosya yükle"}
+                <input
+                  type="file"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadDesign(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+            {designFiles.length === 0 ? (
+              <p className="text-sm text-slate-400">Henüz dosya yok</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {designFiles.map((f) => (
+                  <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
+                    <span className="text-slate-700">
+                      {f.original_filename}{" "}
+                      <span className="text-xs text-slate-400">
+                        ({Math.round((f.size_bytes || 0) / 1024)} KB)
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      className="text-baykus-600 hover:underline text-xs"
+                      onClick={() =>
+                        downloadAuthFile(
+                          `/api/orders/${id}/design-files/${f.id}/download`,
+                          f.original_filename,
+                        ).catch((e) => setError(e instanceof Error ? e.message : "İndirme hatası"))
+                      }
+                    >
+                      İndir
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {order.status_history?.length > 0 && (

@@ -62,6 +62,9 @@ class Order(Base):
     status_history: Mapped[list["OrderStatusHistory"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", order_by="OrderStatusHistory.id"
     )
+    design_files: Mapped[list["OrderDesignFile"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan", order_by="OrderDesignFile.id"
+    )
 
 
 class OrderLine(Base):
@@ -110,3 +113,24 @@ class OrderStatusHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     order: Mapped[Order] = relationship(back_populates="status_history")
+
+
+class OrderDesignFile(Base):
+    """Uploaded design asset metadata for an order (files on disk under uploads/designs/)."""
+
+    __tablename__ = "order_design_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(120))
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    order: Mapped[Order] = relationship(back_populates="design_files")

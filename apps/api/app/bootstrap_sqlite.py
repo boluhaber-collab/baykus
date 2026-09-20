@@ -47,12 +47,13 @@ def bootstrap() -> None:
         )
         return
 
+    # create_all is additive — creates any missing tables (price_lists, loans, audit, …)
+    print("SQLite — Base.metadata.create_all (eksik tablolar eklenir)...")
+    Base.metadata.create_all(bind=engine)
     if tables_missing():
-        print("SQLite tabloları yok — Base.metadata.create_all çalışıyor...")
-        Base.metadata.create_all(bind=engine)
-        print("Tablolar oluşturuldu.")
+        print("Uyarı: users tablosu hâlâ yok.")
     else:
-        print("SQLite tabloları mevcut — create_all atlandı.")
+        print("Tablolar hazır.")
 
     db = SessionLocal()
     try:

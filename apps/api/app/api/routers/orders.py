@@ -1,7 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
@@ -9,12 +10,18 @@ from app.models.customer import Customer
 from app.models.order import (
     DEFAULT_ORDER_STATUS,
     ORDER_STATUSES,
+    DESIGN_STATUSES,
+    ORDER_CHANNELS,
     Order,
+    OrderDesignFile,
     OrderLine,
     OrderStatusHistory,
     Payment,
 )
 from app.models.user import User
+from app.schemas.design_file import OrderDesignFileOut
+from app.services.audit import write_audit
+from app.services import design_files as design_store
 from app.schemas.order import (
     KanbanBoard,
     KanbanCard,
@@ -181,6 +188,20 @@ def _load_order(db: Session, order_id: int) -> Order:
     return order
 
 
+@router.get("/channels")
+def list_channels(
+    _: User = Depends(require_roles("admin", "satış", "üretim", "muhasebe")),
+) -> list[str]:
+    return list(ORDER_CHANNELS)
+
+
+@router.get("/design-statuses")
+def list_design_statuses(
+    _: User = Depends(require_roles("admin", "satış", "üretim")),
+) -> list[str]:
+    return list(DESIGN_STATUSES)
+
+
 @router.get("/statuses")
 def list_statuses(
     _: User = Depends(require_roles("admin", "satış", "üretim")),
@@ -225,6 +246,8 @@ def list_orders(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış", "üretim", "muhasebe")),
     status_filter: str | None = Query(default=None, alias="status"),
+    channel: str | None = Query(default=None),
+    design_status: str | None = Query(default=None),
     q: str | None = Query(default=None),
     skip: int = 0,
     limit: int = 100,
@@ -234,6 +257,14 @@ def list_orders(
         if status_filter not in ORDER_STATUSES:
             raise HTTPException(status_code=400, detail="Geçersiz durum filtresi")
         query = query.filter(Order.status == status_filter)
+    if channel:
+        if channel not in ORDER_CHANNELS:
+            raise HTTPException(status_code=400, detail="Geçersiz kanal filtresi")
+        query = query.filter(Order.channel == channel)
+    if design_status:
+        if design_status not in DESIGN_STATUSES:
+            raise HTTPException(status_code=400, detail="Geçersiz tasarım durumu")
+        query = query.filter(Order.design_status == design_status)
     if q:
         like = f"%{q}%"
         query = query.outerjoin(Customer).filter(
@@ -290,6 +321,13 @@ def create_order(
 
     _record_status(db, order, None, order.status, user, note="Sipariş oluşturuldu")
     db.commit()
+    write_audit(
+        user_id=user.id,
+        action="create",
+        entity_type="order",
+        entity_id=order.id,
+        detail={"order_number": order.order_number},
+    )
     return _to_out(_load_order(db, order.id))
 
 
@@ -350,6 +388,13 @@ def update_order(
 
     order.updated_at = datetime.utcnow()
     db.commit()
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="order",
+        entity_id=order.id,
+        detail={"order_number": order.order_number},
+    )
     return _to_out(_load_order(db, order.id))
 
 
@@ -389,13 +434,28 @@ def delete_order(
             order.updated_at = datetime.utcnow()
             _record_status(db, order, old, "Sipariş İptali", user, note="Soft cancel")
             db.commit()
+            write_audit(
+                user_id=user.id,
+                action="delete",
+                entity_type="order",
+                entity_id=order.id,
+                detail={"soft": True, "order_number": order.order_number},
+            )
         return
     # Hard delete only for admin
     role_names = {r.name for r in user.roles}
     if "admin" not in role_names:
         raise HTTPException(status_code=403, detail="Kalıcı silme yalnızca admin")
+    number = order.order_number
     db.delete(order)
     db.commit()
+    write_audit(
+        user_id=user.id,
+        action="delete",
+        entity_type="order",
+        entity_id=order_id,
+        detail={"soft": False, "order_number": number},
+    )
 
 
 @router.get("/{order_id}/work-order-pdf")
@@ -419,4 +479,119 @@ def work_order_pdf(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{order.order_number}-is-emri.pdf"'},
+    )
+
+
+
+@router.get("/{order_id}/design-files", response_model=list[OrderDesignFileOut])
+def list_design_files(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "üretim")),
+) -> list[OrderDesignFileOut]:
+    _load_order(db, order_id)
+    rows = (
+        db.query(OrderDesignFile)
+        .filter(OrderDesignFile.order_id == order_id)
+        .order_by(OrderDesignFile.id.desc())
+        .all()
+    )
+    return [OrderDesignFileOut.model_validate(r) for r in rows]
+
+
+@router.post(
+    "/{order_id}/design-files",
+    response_model=OrderDesignFileOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_design_file(
+    order_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin", "satış", "üretim")),
+) -> OrderDesignFileOut:
+    _load_order(db, order_id)
+    original = design_store.safe_original_name(file.filename or "dosya")
+    stored = design_store.make_stored_name(original)
+    dest = design_store.absolute_path(stored)
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Boş dosya")
+    if len(content) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Dosya 25MB sınırını aşıyor")
+    dest.write_bytes(content)
+    row = OrderDesignFile(
+        order_id=order_id,
+        original_filename=original,
+        stored_filename=stored,
+        content_type=file.content_type,
+        size_bytes=len(content),
+        uploaded_by_user_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    write_audit(
+        user_id=user.id,
+        action="create",
+        entity_type="order_design_file",
+        entity_id=row.id,
+        detail={"order_id": order_id, "filename": original},
+    )
+    return OrderDesignFileOut.model_validate(row)
+
+
+@router.get("/{order_id}/design-files/{file_id}/download")
+def download_design_file(
+    order_id: int,
+    file_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "üretim")),
+):
+    row = (
+        db.query(OrderDesignFile)
+        .filter(OrderDesignFile.id == file_id, OrderDesignFile.order_id == order_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı")
+    path = design_store.absolute_path(row.stored_filename)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Dosya diskte yok")
+    return FileResponse(
+        path,
+        media_type=row.content_type or "application/octet-stream",
+        filename=row.original_filename,
+    )
+
+
+@router.delete("/{order_id}/design-files/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_design_file(
+    order_id: int,
+    file_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin", "satış")),
+) -> None:
+    row = (
+        db.query(OrderDesignFile)
+        .filter(OrderDesignFile.id == file_id, OrderDesignFile.order_id == order_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Dosya bulunamadı")
+    path = design_store.absolute_path(row.stored_filename)
+    name = row.original_filename
+    db.delete(row)
+    db.commit()
+    try:
+        if path.is_file():
+            path.unlink()
+    except OSError:
+        pass
+    write_audit(
+        user_id=user.id,
+        action="delete",
+        entity_type="order_design_file",
+        entity_id=file_id,
+        detail={"order_id": order_id, "filename": name},
     )

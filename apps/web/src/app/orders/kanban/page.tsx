@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  DESIGN_STATUSES,
+  ORDER_CHANNELS,
   ORDER_STATUSES,
   KanbanBoard,
   apiFetch,
+  designStatusBadgeClass,
   formatMoney,
   statusBadgeClass,
 } from "@/lib/api";
@@ -14,6 +17,8 @@ export default function OrdersKanbanPage() {
   const [board, setBoard] = useState<KanbanBoard | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [channel, setChannel] = useState("");
+  const [designStatus, setDesignStatus] = useState("");
 
   const load = useCallback(async () => {
     setError("");
@@ -45,9 +50,23 @@ export default function OrdersKanbanPage() {
     }
   }
 
-  const columns =
-    board?.columns ??
-    ORDER_STATUSES.map((s) => ({ key: s, label: s, items: [] as KanbanBoard["columns"][0]["items"] }));
+  const columns = useMemo(() => {
+    const raw =
+      board?.columns ??
+      ORDER_STATUSES.map((s) => ({
+        key: s,
+        label: s,
+        items: [] as KanbanBoard["columns"][0]["items"],
+      }));
+    return raw.map((col) => ({
+      ...col,
+      items: col.items.filter((item) => {
+        if (channel && item.channel !== channel) return false;
+        if (designStatus && item.design_status !== designStatus) return false;
+        return true;
+      }),
+    }));
+  }, [board, channel, designStatus]);
 
   return (
     <div>
@@ -55,10 +74,34 @@ export default function OrdersKanbanPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Kanban</h1>
           <p className="text-slate-500 text-sm">
-            Masaüstü Baykuş durumları — karttan durum değiştirerek taşıyın
+            Masaüstü Baykuş durumları — tasarım rozeti · kanal / tasarım filtresi
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={channel}
+            onChange={(e) => setChannel(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">Tüm kanallar</option>
+            {ORDER_CHANNELS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select
+            value={designStatus}
+            onChange={(e) => setDesignStatus(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">Tüm tasarım</option>
+            {DESIGN_STATUSES.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
           <button
             onClick={load}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
@@ -105,6 +148,20 @@ export default function OrdersKanbanPage() {
                     {item.order_number}
                   </Link>
                   <div className="text-xs text-slate-500">{item.customer_name || "Müşteri yok"}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {item.channel && (
+                      <span className="rounded-full bg-slate-100 text-slate-600 px-2 py-0.5 text-[10px]">
+                        {item.channel}
+                      </span>
+                    )}
+                    {item.design_status && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${designStatusBadgeClass(item.design_status)}`}
+                      >
+                        {item.design_status}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-slate-600">
                     {formatMoney(item.total_amount)}
                     {item.remaining_amount > 0 && (

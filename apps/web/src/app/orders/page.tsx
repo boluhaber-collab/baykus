@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
+  DESIGN_STATUSES,
+  ORDER_CHANNELS,
   ORDER_STATUSES,
   OrderListItem,
   apiFetch,
+  designStatusBadgeClass,
   formatMoney,
   statusBadgeClass,
 } from "@/lib/api";
@@ -14,6 +17,8 @@ export default function OrdersListPage() {
   const [items, setItems] = useState<OrderListItem[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
+  const [channel, setChannel] = useState("");
+  const [designStatus, setDesignStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -24,6 +29,8 @@ export default function OrdersListPage() {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       if (status) params.set("status", status);
+      if (channel) params.set("channel", channel);
+      if (designStatus) params.set("design_status", designStatus);
       const qs = params.toString();
       const data = await apiFetch<OrderListItem[]>(`/api/orders${qs ? `?${qs}` : ""}`);
       setItems(data);
@@ -32,7 +39,7 @@ export default function OrdersListPage() {
     } finally {
       setLoading(false);
     }
-  }, [q, status]);
+  }, [q, status, channel, designStatus]);
 
   useEffect(() => {
     load();
@@ -53,7 +60,7 @@ export default function OrdersListPage() {
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Siparişler</h1>
-          <p className="text-slate-500 text-sm">Liste · detay · oluşturma — API bağlı</p>
+          <p className="text-slate-500 text-sm">Liste · kanal / tasarım filtresi · detay</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
@@ -90,6 +97,30 @@ export default function OrdersListPage() {
             </option>
           ))}
         </select>
+        <select
+          value={channel}
+          onChange={(e) => setChannel(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="">Tüm kanallar</option>
+          {ORDER_CHANNELS.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          value={designStatus}
+          onChange={(e) => setDesignStatus(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="">Tüm tasarım</option>
+          {DESIGN_STATUSES.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
         <button onClick={load} className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm">
           Ara
         </button>
@@ -106,7 +137,8 @@ export default function OrdersListPage() {
               <th className="px-4 py-3">Sipariş No</th>
               <th className="px-4 py-3">Müşteri</th>
               <th className="px-4 py-3">Durum</th>
-                <th className="px-4 py-3">Kanal</th>
+              <th className="px-4 py-3">Kanal</th>
+              <th className="px-4 py-3">Tasarım</th>
               <th className="px-4 py-3">Toplam</th>
               <th className="px-4 py-3">Kalan</th>
               <th className="px-4 py-3">Teslim</th>
@@ -116,7 +148,7 @@ export default function OrdersListPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   Yükleniyor…
                 </td>
               </tr>
@@ -136,6 +168,18 @@ export default function OrdersListPage() {
                     >
                       {o.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{o.channel || "—"}</td>
+                  <td className="px-4 py-3">
+                    {o.design_status ? (
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${designStatusBadgeClass(o.design_status)}`}
+                      >
+                        {o.design_status}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-4 py-3">{formatMoney(Number(o.total_amount))}</td>
                   <td className="px-4 py-3">{formatMoney(Number(o.remaining_amount))}</td>
@@ -159,7 +203,7 @@ export default function OrdersListPage() {
               ))}
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   Sipariş yok
                 </td>
               </tr>

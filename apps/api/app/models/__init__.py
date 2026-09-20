@@ -1,7 +1,10 @@
+from app.models.audit import AuditLog
 from app.models.customer import CariMovement, Customer
 from app.models.expense import Expense, ExpenseCategory
 from app.models.finance import BankAccount, BankMovement, CashMovement, CashRegister
-from app.models.order import Order, OrderLine, OrderStatusHistory, Payment
+from app.models.loan import Loan, LoanInstallment
+from app.models.order import Order, OrderDesignFile, OrderLine, OrderStatusHistory, Payment
+from app.models.price_list import PriceList, PriceListItem
 from app.models.product import Product, ProductVariant, StockMovement
 from app.models.quote import Quote, QuoteLine
 from app.models.settings_model import AppSetting
@@ -13,10 +16,13 @@ __all__ = [
     "User", "Role", "user_roles",
     "Customer", "CariMovement",
     "Product", "ProductVariant", "StockMovement",
-    "Order", "OrderLine", "Payment", "OrderStatusHistory",
+    "Order", "OrderLine", "Payment", "OrderStatusHistory", "OrderDesignFile",
     "CashRegister", "CashMovement", "BankAccount", "BankMovement",
     "Supplier", "SupplierMovement", "Purchase", "PurchaseLine",
     "Quote", "QuoteLine",
     "WhatsAppTemplate", "WhatsAppSendLog",
     "AppSetting", "ExpenseCategory", "Expense",
+    "PriceList", "PriceListItem",
+    "Loan", "LoanInstallment",
+    "AuditLog",
 ]

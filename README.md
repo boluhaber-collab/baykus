@@ -42,6 +42,17 @@ docker compose up --build
 9. **Finans** → kasa/banka özeti; **Kasa** hareket ekle; **Banka** hesap detayı + hareket.  
 10. **Raporlar** → hub kartları; her rapor filtre + tablo + CSV.  
 
+
+## Son parite turu (NEXT)
+
+- **Teklifler**: detayda satır+başlık inline düzenleme (PUT), PDF / siparişe dönüştür / soft iptal
+- **Siparişler / Kanban**: `design_status` rozeti; `channel` + `design_status` filtreleri
+- **Tasarım dosyaları**: `apps/api/uploads/designs/` + `order_design_files` (yükle / liste / indir)
+- **Fiyat listeleri**: `/price-lists` CRUD + seed
+- **Kredi / taksit**: `/finance/loans` + taksit ödemesi (opsiyonel kasa/banka)
+- **Denetim kaydı**: `/settings/audit` (admin); sipariş / müşteri / teklif CUD best-effort log
+- Postgres: `alembic upgrade head` (rev **008**) · SQLite: `python -m app.bootstrap_sqlite` (create_all eksik tabloları ekler)
+
 ## Windows (Docker yok)
 
 SQLite ile Docker / PostgreSQL olmadan çalıştırma:

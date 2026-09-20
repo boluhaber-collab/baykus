@@ -3,11 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
     expenses,
+    audit,
     auth,
     customers,
     dashboard,
     finance,
+    loans,
     orders,
+    price_lists,
     products,
     quotes,
     reports,
@@ -41,9 +44,12 @@ for router in (
     purchases.router,
     expenses.router,
     finance.router,
+    loans.router,
+    price_lists.router,
     reports.router,
     settings_router.router,
     whatsapp.router,
+    audit.router,
 ):
     app.include_router(router, prefix="/api")
 

@@ -10,6 +10,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
+from app.services.audit import write_audit
 from app.models.customer import CARI_MOVEMENT_TYPES, CariMovement, Customer
 from app.models.order import Order
 from app.models.user import User
@@ -198,7 +199,7 @@ def open_receivables(
 def create_customer(
     payload: CustomerCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*WRITE_ROLES)),
+    user: User = Depends(require_roles(*WRITE_ROLES)),
 ) -> CustomerOut:
     data = payload.model_dump()
     if data.get("code"):
@@ -209,6 +210,13 @@ def create_customer(
     db.add(customer)
     db.commit()
     db.refresh(customer)
+    write_audit(
+        user_id=user.id,
+        action="create",
+        entity_type="customer",
+        entity_id=customer.id,
+        detail={"name": customer.name},
+    )
     return _customer_out(customer, customer.opening_balance or Decimal("0"))
 
 
@@ -306,7 +314,7 @@ def update_customer(
     customer_id: int,
     payload: CustomerUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*WRITE_ROLES)),
+    user: User = Depends(require_roles(*WRITE_ROLES)),
 ) -> CustomerOut:
     customer = db.get(Customer, customer_id)
     if not customer:
@@ -325,6 +333,13 @@ def update_customer(
     customer.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(customer)
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="customer",
+        entity_id=customer.id,
+        detail={"name": customer.name},
+    )
     return _customer_out(customer, _balance_for(db, customer))
 
 
@@ -332,13 +347,21 @@ def update_customer(
 def delete_customer(
     customer_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin")),
+    user: User = Depends(require_roles("admin")),
 ) -> None:
     customer = db.get(Customer, customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Müşteri bulunamadı")
+    name = customer.name
     db.delete(customer)
     db.commit()
+    write_audit(
+        user_id=user.id,
+        action="delete",
+        entity_type="customer",
+        entity_id=customer_id,
+        detail={"name": name},
+    )
 
 
 @router.get("/{customer_id}/movements", response_model=list[CariMovementOut])
