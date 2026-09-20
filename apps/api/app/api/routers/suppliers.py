@@ -460,3 +460,55 @@ def supplier_statement(
         closing_balance=running,
         movements=out_rows,
     )
+
+
+@router.get("/{supplier_id}/voucher-pdf")
+def supplier_voucher_pdf(
+    supplier_id: int,
+    tip: str = Query(default="Alacak Fişi"),
+    amount: float = Query(default=0),
+    fis_date: str | None = Query(default=None, alias="date"),
+    due: str | None = Query(default=None),
+    note: str | None = Query(default=None),
+    movement_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+):
+    """Basit borç/alacak fişi PDF (masaüstü twin stil değil)."""
+    from fastapi.responses import Response
+    from app.models.settings_model import AppSetting
+    from app.services.pdf import build_supplier_voucher_pdf
+
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+
+    tip_out = tip
+    amount_out = Decimal(str(amount or 0))
+    date_out = fis_date or date.today().isoformat()
+    due_out = due or ""
+    note_out = note or ""
+
+    if movement_id:
+        mov = db.get(SupplierMovement, movement_id)
+        if mov and mov.supplier_id == supplier_id:
+            tip_out = "Alacak Fişi" if (mov.debit or 0) > 0 else "Borç Fişi"
+            amount_out = mov.debit or mov.credit or Decimal("0")
+            date_out = mov.movement_date.isoformat() if mov.movement_date else date_out
+            note_out = mov.note or note_out
+
+    rows = {s.key: s.value for s in db.query(AppSetting).all()}
+    settings = {
+        "company_name": rows.get("company_name", "Baykuş Baskı"),
+        "phone": rows.get("phone", ""),
+    }
+    pdf_bytes = build_supplier_voucher_pdf(
+        supplier.name, tip_out, amount_out, date_out, due_out, note_out, settings
+    )
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in supplier.name)[:40]
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="fis-{safe}.pdf"'},
+    )
+

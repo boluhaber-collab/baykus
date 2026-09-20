@@ -98,6 +98,14 @@ export default function OrderDetailPage() {
     load();
   }, [id, load]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !order) return;
+    const wantPrint = new URLSearchParams(window.location.search).get("print") === "1";
+    if (!wantPrint) return;
+    const tmr = setTimeout(() => window.print(), 400);
+    return () => clearTimeout(tmr);
+  }, [order]);
+
   const designTemplates = useMemo(() => {
     return templates.filter(
       (t) =>
@@ -350,6 +358,13 @@ export default function OrderDetailPage() {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+          >
+            Yazdır
+          </button>
           <button
             type="button"
             onClick={async () => {

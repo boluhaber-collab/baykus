@@ -299,3 +299,22 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.
 API: Alembic **017** (`tasks`). SQLite: `python -m app.bootstrap_sqlite` (create_all).
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI / otomatik restore.
+
+
+## Batch 14 — Tedarikçi fiş / PDF / Barkod / İnce raporlar (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Tedarikçi borç/alacak fişi (`tedarikci_borc_alacak_fisi_penceresi`) | `/suppliers/payables` + `/payables` — Alacak/Borç Fişi paneli · kasa yok · Yazdır/PDF (`/api/suppliers/{id}/voucher-pdf`) | done |
+| Direkt satış / sipariş yazdır | `/sales` Yazdır→`?print=1` + PDF; `/orders/[id]` Yazdır + İş Emri PDF | done |
+| İş emri PDF | `/production/work-orders` + arşiv sipariş sekmesi — `downloadPdf` | done |
+| Fiyat listesi yazdır link | `/price-lists` satır Yazdır/PDF → detay `export?fmt=` | done |
+| Belge Arşiv Merkezi | `/reports/archive` — belge tara (PDF filtre) + sipariş iş emri PDF sekmesi | done |
+| Barkod / etiket | `/products/labels` — Code128 SVG seçimli yazdır | done |
+| İnce raporlar | `/reports/receivables`, `/reports/payables`, `/reports/purchases`, `/cari` — özet kart + ara/min bakiye + CSV/Yazdır | done |
+| customers/import | kısa yönlendirici → `/tools/import?type=customers` sihirbaz | done |
+| Login / splash | logo + gradient sol panel (auth aynı) | done |
+
+API: voucher PDF (`build_supplier_voucher_pdf`). Alembic yok.
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI / postgres canlı şifre.

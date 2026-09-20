@@ -149,10 +149,28 @@ export default function PriceListsPage() {
                 <td className="text-xs text-slate-500">
                   {[pl.valid_from, pl.valid_to].filter(Boolean).join(" → ") || "—"}
                 </td>
-                <td className="text-right text-xs">
+                <td className="text-right text-xs whitespace-nowrap space-x-2">
                   <Link href={`/price-lists/${pl.id}`} className="text-baykus-primary hover:underline">
                     Kalemler
                   </Link>
+                  <Link href={`/price-lists/${pl.id}?print=1`} className="text-teal-700 hover:underline">
+                    Yazdır
+                  </Link>
+                  <a
+                    href={`#`}
+                    className="text-violet-700 hover:underline"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      try {
+                        const { downloadPdf } = await import("@/lib/api");
+                        await downloadPdf(`/api/price-lists/${pl.id}/export?fmt=pdf`, `${pl.name}-fiyat.pdf`);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "PDF hatası");
+                      }
+                    }}
+                  >
+                    PDF
+                  </a>
                 </td>
               </tr>
             ))}

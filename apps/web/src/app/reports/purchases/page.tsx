@@ -14,6 +14,7 @@ export default function PurchaseReportPage() {
   const [summary, setSummary] = useState<{ count: number; total: number } | null>(null);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState("");
   const [csvBusy, setCsvBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -35,10 +36,16 @@ export default function PurchaseReportPage() {
   }, [load]);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((r) => [r.number, r.supplier, r.status].join(" ").toLowerCase().includes(needle));
-  }, [rows, q]);
+    let list = rows;
+    if (status) list = list.filter((r) => r.status === status);
+    const needle = q.trim().toLocaleLowerCase("tr");
+    if (needle) {
+      list = list.filter((r) =>
+        [r.number, r.supplier, r.status].join(" ").toLocaleLowerCase("tr").includes(needle),
+      );
+    }
+    return list;
+  }, [rows, q, status]);
 
   const filteredTotal = filtered.reduce((s, r) => s + r.amount, 0);
 
@@ -67,6 +74,12 @@ export default function PurchaseReportPage() {
       <div className="bk-filter-bar">
         <input type="date" className="bk-input" value={from} onChange={(e) => setFrom(e.target.value)} />
         <input type="date" className="bk-input" value={to} onChange={(e) => setTo(e.target.value)} />
+        <select className="bk-input max-w-[140px]" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">Tüm durumlar</option>
+          <option value="draft">Taslak</option>
+          <option value="confirmed">Onaylı</option>
+          <option value="cancelled">İptal</option>
+        </select>
         <input className="bk-input max-w-[160px]" placeholder="Ara…" value={q} onChange={(e) => setQ(e.target.value)} />
         <button type="button" className="bk-btn bk-btn-primary text-xs" onClick={load}>
           Filtrele
@@ -74,15 +87,24 @@ export default function PurchaseReportPage() {
         <button type="button" className="bk-btn bk-btn-ghost text-xs" disabled={csvBusy} onClick={exportCsv}>
           CSV
         </button>
+        <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => window.print()}>
+          Yazdır
+        </button>
       </div>
-      <div className="flex gap-4 text-sm">
+      <div className="grid sm:grid-cols-3 gap-2 text-sm">
         <div className="bk-card px-4 py-2">
           <div className="text-[11px] text-baykus-muted">Belge</div>
-          <div className="font-bold">{filtered.length || summary?.count || 0}</div>
+          <div className="text-xl font-bold">{filtered.length || summary?.count || 0}</div>
         </div>
         <div className="bk-card px-4 py-2">
           <div className="text-[11px] text-baykus-muted">Toplam</div>
-          <div className="font-bold tabular-nums">{formatMoney(filteredTotal || summary?.total || 0)}</div>
+          <div className="text-xl font-bold tabular-nums">{formatMoney(filteredTotal || summary?.total || 0)}</div>
+        </div>
+        <div className="bk-card px-4 py-2">
+          <div className="text-[11px] text-baykus-muted">Ort. belge</div>
+          <div className="text-xl font-bold tabular-nums">
+            {formatMoney(filtered.length ? filteredTotal / filtered.length : 0)}
+          </div>
         </div>
       </div>
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}

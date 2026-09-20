@@ -8,6 +8,7 @@ import {
   ReportHeader,
   ReportTable,
   SummaryCards,
+  inputCls,
 } from "@/components/reports/ReportChrome";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 
@@ -26,6 +27,8 @@ type Row = {
 
 export default function PayablesReportPage() {
   const [includeZero, setIncludeZero] = useState(false);
+  const [search, setSearch] = useState("");
+  const [minBalance, setMinBalance] = useState("");
   const [data, setData] = useState<ReportResponse<Row> | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -55,6 +58,23 @@ export default function PayablesReportPage() {
 
   const s = data?.summary || {};
 
+  const rows = useMemo(() => {
+    let list = data?.rows || [];
+    const needle = search.trim().toLocaleLowerCase("tr");
+    if (needle) {
+      list = list.filter((r) =>
+        [r.code, r.name, r.city, r.phone].join(" ").toLocaleLowerCase("tr").includes(needle),
+      );
+    }
+    const min = Number(minBalance);
+    if (minBalance !== "" && Number.isFinite(min)) {
+      list = list.filter((r) => Number(r.balance) >= min);
+    }
+    return list;
+  }, [data, search, minBalance]);
+
+  const filteredTotal = rows.reduce((sum, r) => sum + Number(r.balance || 0), 0);
+
   return (
     <div>
       <ReportHeader
@@ -78,6 +98,12 @@ export default function PayablesReportPage() {
             >
               CSV indir
             </button>
+            <button
+              onClick={() => window.print()}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            >
+              Yazdır
+            </button>
           </>
         }
       />
@@ -87,6 +113,18 @@ export default function PayablesReportPage() {
           <input type="checkbox" checked={includeZero} onChange={(e) => setIncludeZero(e.target.checked)} />
           Sıfır bakiyeleri de göster
         </label>
+        <input
+          className={inputCls}
+          placeholder="Ara (tedarikçi, kod…)"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <input
+          className={inputCls + " max-w-[120px]"}
+          placeholder="Min bakiye"
+          value={minBalance}
+          onChange={(e) => setMinBalance(e.target.value)}
+        />
         <button onClick={load} className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm">
           Uygula
         </button>
@@ -97,22 +135,23 @@ export default function PayablesReportPage() {
 
       <SummaryCards
         items={[
-          { label: "Tedarikçi", value: Number(s.supplier_count ?? 0) },
+          { label: "Tedarikçi", value: rows.length || Number(s.supplier_count ?? 0) },
           { label: "Borçlu", value: Number(s.with_positive_balance ?? 0) },
           {
             label: "Toplam borç",
             value: formatMoney(Number(s.total_payables ?? 0)),
             accent: "border-rose-200",
           },
+          { label: "Filtreli", value: formatMoney(filteredTotal), accent: "border-sky-200" },
         ]}
       />
 
       <ReportTable
         headers={["Kod", "Tedarikçi", "Şehir", "Telefon", "Açılış", "Borç", "Ödeme", "Bakiye", "Son hareket", ""]}
         colSpan={10}
-        empty={!loading && (data?.rows.length ?? 0) === 0}
+        empty={!loading && rows.length === 0}
       >
-        {(data?.rows || []).map((r) => (
+        {rows.map((r) => (
           <tr key={r.supplier_id} className="border-t border-slate-100 hover:bg-slate-50">
             <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.code || "—"}</td>
             <td className="px-4 py-3 font-medium">{r.name}</td>

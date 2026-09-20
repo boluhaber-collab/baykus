@@ -221,7 +221,7 @@ export default function WorkOrdersPage() {
                       disabled={busy === o.id}
                       onClick={() => pdf(o)}
                     >
-                      {busy === o.id ? "…" : "PDF"}
+                      {busy === o.id ? "…" : "İndir PDF"}
                     </button>
                   </td>
                 </tr>

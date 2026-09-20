@@ -150,7 +150,27 @@ export default function DirektSatislarPage() {
       alert("Önce bir satış seçin.");
       return;
     }
-    window.open(`/orders/${selectedId}`, "_blank");
+    const o = items.find((x) => x.id === selectedId);
+    // Print-friendly order detail; auto-print via ?print=1
+    window.open(`/orders/${selectedId}?print=1`, "_blank");
+    void o;
+  }
+
+  async function pdfSelected() {
+    if (!selectedId) {
+      alert("Önce bir satış seçin.");
+      return;
+    }
+    const o = items.find((x) => x.id === selectedId);
+    try {
+      const { downloadPdf } = await import("@/lib/api");
+      await downloadPdf(
+        `/api/orders/${selectedId}/work-order-pdf`,
+        `${o?.order_number || selectedId}-belge.pdf`,
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "PDF hatası");
+    }
   }
 
   return (
@@ -296,6 +316,14 @@ export default function DirektSatislarPage() {
             style={{ backgroundColor: "#42b4d0" }}
           >
             🖨 Yazdır
+          </button>
+          <button
+            type="button"
+            onClick={() => void pdfSelected()}
+            className="bk-btn text-xs font-bold text-white"
+            style={{ backgroundColor: "#7c3aed" }}
+          >
+            PDF
           </button>
           <button
             type="button"

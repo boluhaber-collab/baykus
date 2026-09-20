@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PayableItem, apiFetch, formatMoney } from "@/lib/api";
+import SupplierFisPanel from "@/components/SupplierFisPanel";
 
 export default function PayablesPage() {
   const [items, setItems] = useState<PayableItem[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const [fisOpen, setFisOpen] = useState(false);
+  const [fisSupplierId, setFisSupplierId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,7 +44,7 @@ export default function PayablesPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Borçlar</h1>
-          <p className="text-slate-500 text-sm">Tedarik Merkezi › Borç-Alacak · açık tedarikçi borçları</p>
+          <p className="text-slate-500 text-sm">Tedarik Merkezi › Borç-Alacak · fiş kaydı + yazdır/PDF</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/suppliers" className="bk-btn text-xs text-white" style={{ background: "#0f766e" }}>
@@ -50,11 +53,19 @@ export default function PayablesPage() {
           <Link href="/suppliers/payables" className="bk-btn text-xs text-white" style={{ background: "#7c3aed" }}>
             Borç-Alacak
           </Link>
+          <button
+            type="button"
+            className="bk-btn text-xs text-white"
+            style={{ background: "#62c9aa" }}
+            onClick={() => {
+              setFisSupplierId(null);
+              setFisOpen(true);
+            }}
+          >
+            Borç-Alacak Fişi
+          </button>
           <Link href="/purchases/new" className="bk-btn text-xs text-white" style={{ background: "#be123c" }}>
             Satın Alma Talebi
-          </Link>
-          <Link href="/finance/open-balances" className="bk-btn bk-btn-ghost text-xs">
-            Açık Bakiyeler
           </Link>
           <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={load}>
             Yenile
@@ -63,6 +74,17 @@ export default function PayablesPage() {
       </div>
 
       {error && <div className="rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
+
+      {fisOpen && (
+        <SupplierFisPanel
+          embedded
+          open={fisOpen}
+          initialSupplierId={fisSupplierId}
+          payables={items}
+          onSaved={load}
+          onClose={() => setFisOpen(false)}
+        />
+      )}
 
       <div className="mb-1 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -108,7 +130,17 @@ export default function PayablesPage() {
                 <td className="px-4 py-3 text-right font-medium tabular-nums text-amber-700">
                   {formatMoney(Number(i.balance))}
                 </td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-4 py-3 text-xs whitespace-nowrap space-x-2">
+                  <button
+                    type="button"
+                    className="text-teal-700 hover:underline"
+                    onClick={() => {
+                      setFisSupplierId(i.supplier_id);
+                      setFisOpen(true);
+                    }}
+                  >
+                    Fiş
+                  </button>
                   <Link href={`/purchases/new?supplier_id=${i.supplier_id}`} className="text-baykus-primary hover:underline">
                     Alış
                   </Link>

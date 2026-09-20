@@ -141,6 +141,14 @@ export default function PriceListDetailPage() {
     }
   }
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("print") !== "1") return;
+    const tmr = setTimeout(() => openPrint(), 400);
+    return () => clearTimeout(tmr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list]);
+
   function openPrint() {
     window.open(`${apiBase}/api/price-lists/${id}/export?fmt=html`, "_blank");
   }

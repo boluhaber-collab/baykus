@@ -1,14 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PayableItem, apiFetch, formatMoney } from "@/lib/api";
+import SupplierFisPanel from "@/components/SupplierFisPanel";
 
-export default function SupplierPayablesPage() {
+function SupplierPayablesInner() {
+  const sp = useSearchParams();
+  const openFis = sp.get("fis") === "1" || sp.get("pay") === "1";
+  const preId = sp.get("supplier_id");
+
   const [items, setItems] = useState<PayableItem[]>([]);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const [fisOpen, setFisOpen] = useState(openFis);
+  const [fisSupplierId, setFisSupplierId] = useState<number | null>(
+    preId && Number(preId) ? Number(preId) : null,
+  );
+  const [embedded, setEmbedded] = useState(openFis);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -26,22 +37,37 @@ export default function SupplierPayablesPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (openFis) {
+      setFisOpen(true);
+      setEmbedded(true);
+    }
+  }, [openFis]);
+
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    const needle = q.trim().toLocaleLowerCase("tr");
     if (!needle) return items;
     return items.filter((i) =>
-      [i.name, i.code, i.city, i.phone].join(" ").toLowerCase().includes(needle),
+      [i.name, i.code, i.city, i.phone].join(" ").toLocaleLowerCase("tr").includes(needle),
     );
   }, [items, q]);
 
   const total = filtered.reduce((s, i) => s + Number(i.balance || 0), 0);
+
+  function openFisFor(id?: number) {
+    setFisSupplierId(id ?? null);
+    setFisOpen(true);
+    setEmbedded(true);
+  }
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-base font-bold">Açık Borçlar</h2>
-          <p className="text-xs text-baykus-muted">Tedarik Merkezi › Borç / Alacak · açık tedarikçi bakiyeleri</p>
+          <p className="text-xs text-baykus-muted">
+            Tedarik Merkezi › Borç / Alacak · fiş + ödeme kaydı
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/suppliers" className="bk-btn bk-btn-ghost text-xs">
@@ -53,9 +79,14 @@ export default function SupplierPayablesPage() {
           <Link href="/purchases" className="bk-btn text-xs" style={{ background: "#0f766e", color: "#fff" }}>
             Alış belgesi
           </Link>
-          <Link href="/finance/expenses" className="bk-btn text-xs" style={{ background: "#be123c", color: "#fff" }}>
-            Ödeme / Masraf
-          </Link>
+          <button
+            type="button"
+            className="bk-btn text-xs text-white"
+            style={{ background: "#62c9aa" }}
+            onClick={() => openFisFor()}
+          >
+            Borç-Alacak Fişi
+          </button>
           <button type="button" className="bk-btn bk-btn-primary text-xs" onClick={load}>
             Yenile
           </button>
@@ -63,6 +94,29 @@ export default function SupplierPayablesPage() {
       </div>
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+
+      {embedded && fisOpen && (
+        <SupplierFisPanel
+          embedded
+          open={fisOpen}
+          initialSupplierId={fisSupplierId}
+          payables={items}
+          onSaved={load}
+          onClose={() => {
+            setFisOpen(false);
+            setEmbedded(false);
+          }}
+        />
+      )}
+      {!embedded && fisOpen && (
+        <SupplierFisPanel
+          open={fisOpen}
+          initialSupplierId={fisSupplierId}
+          payables={items}
+          onSaved={load}
+          onClose={() => setFisOpen(false)}
+        />
+      )}
 
       <div className="grid sm:grid-cols-3 gap-2">
         <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2">
@@ -112,6 +166,13 @@ export default function SupplierPayablesPage() {
                   {formatMoney(Number(i.balance))}
                 </td>
                 <td className="text-right text-xs whitespace-nowrap space-x-2">
+                  <button
+                    type="button"
+                    className="text-teal-700 hover:underline"
+                    onClick={() => openFisFor(i.supplier_id)}
+                  >
+                    Fiş
+                  </button>
                   <Link href={`/suppliers/${i.supplier_id}`} className="text-baykus-primary hover:underline">
                     Ekstre
                   </Link>
@@ -132,5 +193,13 @@ export default function SupplierPayablesPage() {
         </table>
       </div>
     </div>
+  );
+}
+
+export default function SupplierPayablesPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-baykus-muted p-4">Yükleniyor…</p>}>
+      <SupplierPayablesInner />
+    </Suspense>
   );
 }

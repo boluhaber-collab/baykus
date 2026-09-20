@@ -326,3 +326,57 @@ def build_price_list_pdf(list_name: str, rows: list[dict[str, Any]], settings: d
     body.append(t)
     doc.build(body)
     return buf.getvalue()
+
+
+def build_supplier_voucher_pdf(
+    supplier_name: str,
+    tip: str,
+    amount: Any,
+    movement_date: str,
+    due_date: str = "",
+    note: str = "",
+    settings: dict[str, str] | None = None,
+) -> bytes:
+    """Basit tedarikçi borç/alacak fişi PDF."""
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=14 * mm, bottomMargin=14 * mm
+    )
+    styles = getSampleStyleSheet()
+    h2 = ParagraphStyle("H2v", parent=styles["Heading2"], fontSize=14, spaceBefore=4, spaceAfter=8, textColor=colors.HexColor("#0f766e"))
+    body = []
+    body.extend(_company_header(settings or {}))
+    body.append(Paragraph("Borç-Alacak Fişi", h2))
+    body.append(Paragraph(f"<b>{tip}</b>", styles["Normal"]))
+    body.append(Spacer(1, 8))
+    rows = [
+        ["Tedarikçi", str(supplier_name or "")],
+        ["İşlem Tipi", str(tip or "")],
+        ["İşlem Tarihi", str(movement_date or "")[:10]],
+        ["Vade", str(due_date or "—")[:10]],
+        ["Tutar", _money(amount)],
+        ["Açıklama", str(note or "—")[:120]],
+    ]
+    t = Table(rows, colWidths=[40 * mm, 120 * mm])
+    t.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f1f5f9")),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+    body.append(t)
+    body.append(Spacer(1, 12))
+    body.append(
+        Paragraph(
+            "Bu fiş kasa/banka hareketi oluşturmaz; yalnızca tedarikçi cari bakiyesini düzenler.",
+            styles["Normal"],
+        )
+    )
+    doc.build(body)
+    return buf.getvalue()

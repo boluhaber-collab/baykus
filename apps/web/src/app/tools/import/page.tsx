@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch, downloadAuthFile } from "@/lib/api";
 
 type Tab = "customers" | "stock";
@@ -14,8 +15,15 @@ type ImportResult = {
   message?: string;
 };
 
-export default function ImportWizardPage() {
-  const [tab, setTab] = useState<Tab>("customers");
+function ImportWizardInner() {
+  const sp = useSearchParams();
+  const initial: Tab = sp.get("type") === "stock" ? "stock" : "customers";
+  const [tab, setTab] = useState<Tab>(initial);
+
+  useEffect(() => {
+    const t = sp.get("type");
+    if (t === "stock" || t === "customers") setTab(t);
+  }, [sp]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
@@ -177,5 +185,14 @@ export default function ImportWizardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+
+export default function ImportWizardPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-baykus-muted p-4">Yükleniyor…</p>}>
+      <ImportWizardInner />
+    </Suspense>
   );
 }
