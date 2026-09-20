@@ -27,6 +27,7 @@ from app.api.routers import (
     settings as settings_router,
     suppliers,
     whatsapp,
+    sublimation,
 )
 from app.core.config import get_settings
 
@@ -68,6 +69,7 @@ for router in (
     audit.router,
     backups.router,
     integrations.router,
+    sublimation.router,
 ):
     app.include_router(router, prefix="/api")
 

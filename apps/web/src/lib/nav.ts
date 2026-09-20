@@ -1,26 +1,30 @@
 export type NavLeaf = {
   href: string;
   label: string;
-  icon?: string;
+  color?: string;
 };
 
 export type NavGroup = {
   id: string;
   label: string;
   icon: string;
+  color?: string;
   /** Hub or primary link when the group header is clicked */
   href?: string;
   items: NavLeaf[];
-  /** If true, group starts expanded */
   defaultOpen?: boolean;
 };
 
-/** Desktop Baykuş Baskı v2.34 left menu order */
+/**
+ * Masaüstü Baykuş Baskı sol menü — menu_tanimlari + modul_items birebir.
+ * Her yaprak çalışan bir sayfaya çözülür.
+ */
 export const NAV_GROUPS: NavGroup[] = [
   {
     id: "home",
     label: "Ana Sayfa",
     icon: "🏠",
+    color: "#93c5fd",
     href: "/dashboard",
     items: [],
   },
@@ -28,21 +32,20 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "customers",
     label: "Müşteri Merkezi",
     icon: "👥",
+    color: "#6ee7b7",
     href: "/customers",
     items: [
       { href: "/customers", label: "Müşteri Listesi" },
       { href: "/customers/new", label: "Yeni Müşteri" },
       { href: "/customers/track", label: "Müşteri Takibi" },
       { href: "/customers/receivables", label: "Açık Alacaklar" },
-      { href: "/directory", label: "Fihrist" },
-      { href: "/whatsapp", label: "WhatsApp" },
-      { href: "/crm/special-days", label: "Özel Gün / Kampanya" },
     ],
   },
   {
     id: "suppliers",
     label: "Tedarik Merkezi",
     icon: "🏭",
+    color: "#a7f3d0",
     href: "/suppliers",
     items: [
       { href: "/suppliers", label: "Tedarikçiler" },
@@ -56,6 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "products",
     label: "Ürün & Stok Merkezi",
     icon: "📦",
+    color: "#38bdf8",
     href: "/products",
     items: [
       { href: "/products", label: "Ürün Yönetimi" },
@@ -71,118 +75,131 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "sales",
     label: "Satış / Sipariş",
     icon: "🛒",
+    color: "#fbbf24",
     href: "/sales",
     defaultOpen: true,
     items: [
-      { href: "/orders", label: "Sipariş Merkezi" },
-      { href: "/orders", label: "Satışlar" },
-      { href: "/sales/create", label: "Satış / Teklif Oluştur" },
-      { href: "/sales/retail", label: "Perakende Satışlar" },
-      { href: "/sales/create?type=perakende", label: "Perakende Satış" },
-      { href: "/quotes", label: "Teklifler" },
-      { href: "/orders", label: "Sipariş Listesi" },
-      { href: "/orders?status=Teslim%20Edildi", label: "Teslim Edilen" },
-      { href: "/orders/delivery", label: "Teslim Takibi" },
-      { href: "/orders/kanban", label: "Kanban / Yaşam" },
+      { href: "/orders", label: "Sipariş Merkezi", color: "#111827" },
+      { href: "/sales", label: "Satışlar", color: "#1f6feb" },
+      { href: "/sales/create", label: "Satış / Teklif Oluştur", color: "#1f6feb" },
+      { href: "/sales/retail", label: "Perakende Satışlar", color: "#f97316" },
+      { href: "/quotes", label: "Teklifler", color: "#6d28d9" },
+      { href: "/orders", label: "Sipariş Listesi", color: "#0f766e" },
+      { href: "/orders?status=Teslim%20Edildi", label: "Teslim Edilen Siparişler", color: "#198754" },
+      { href: "/orders/delivery", label: "Teslim Takibi", color: "#198754" },
+      { href: "/orders/kanban", label: "Sipariş Yaşam Çizgisi", color: "#334155" },
     ],
   },
   {
     id: "production",
     label: "Üretim / Atölye",
     icon: "🔧",
+    color: "#f97316",
     href: "/production",
     items: [
-      { href: "/production", label: "Atölye paneli" },
-      { href: "/production/work-orders", label: "İş Emirleri" },
-      { href: "/orders/kanban", label: "Üretim Kanban" },
-      { href: "/orders", label: "Açık siparişler" },
+      { href: "/production", label: "Üretim Akış Paneli", color: "#f59e0b" },
+      { href: "/production/work-orders", label: "İş Emirleri", color: "#1f6feb" },
+      { href: "/production/sublimation", label: "Sublimasyon Baskı Süreleri", color: "#0d9488" },
+      { href: "/orders/delivery-alarm", label: "Teslim Alarmı", color: "#be123c" },
+      { href: "/orders/overdue", label: "Geciken İşler", color: "#dc2626" },
     ],
   },
   {
     id: "ecommerce",
     label: "E-Ticaret",
     icon: "🌐",
+    color: "#c084fc",
     href: "/ecommerce",
     items: [
-      { href: "/ecommerce", label: "İnternet siparişleri" },
-      { href: "/sales/create?type=internet", label: "Yeni internet siparişi" },
+      { href: "/ecommerce", label: "İnternet Satışları", color: "#0f766e" },
     ],
   },
   {
     id: "finance",
     label: "Finans",
     icon: "💰",
+    color: "#facc15",
     href: "/finance",
     items: [
-      { href: "/finance", label: "Finans özeti" },
-      { href: "/finance/cash", label: "Kasa" },
-      { href: "/finance/banks", label: "Banka" },
-      { href: "/finance/open-balances", label: "Açık Bakiyeler" },
-      { href: "/finance/expenses", label: "Gider takibi" },
-      { href: "/finance/loans", label: "Kredi / Taksit" },
-      { href: "/finance/assets", label: "Sabit kıymetler" },
+      { href: "/finance/cash", label: "Günlük Kasa", color: "#198754" },
+      { href: "/finance/open-balances", label: "Açık Bakiyeler", color: "#be123c" },
+      { href: "/finance/banks", label: "Hesaplarım", color: "#0f766e" },
+      { href: "/finance/loans", label: "Krediler", color: "#7c3aed" },
+      { href: "/finance/expenses", label: "Masraflar", color: "#be123c" },
+      { href: "/finance/assets", label: "Demirbaşlar", color: "#d39e00" },
     ],
   },
   {
     id: "pricing",
     label: "Fiyat / Maliyet",
     icon: "🏷️",
+    color: "#fb7185",
     href: "/price-lists",
     items: [
-      { href: "/price-lists", label: "Fiyat listeleri" },
-      { href: "/tools/costs", label: "Maliyet Yönetimi" },
-      { href: "/tools/dtf", label: "DTF maliyet" },
+      { href: "/price-lists", label: "Fiyat Listesi", color: "#be123c" },
+      { href: "/tools/dtf", label: "DTF Maliyet Hesaplama", color: "#0d9488" },
+      { href: "/tools/costs", label: "Maliyet Yönetimi", color: "#c2410c" },
+      { href: "/tools/last-purchase-prices", label: "Son Alış Fiyatları", color: "#6f42c1" },
     ],
   },
   {
     id: "reports",
     label: "Raporlar",
     icon: "📈",
+    color: "#60a5fa",
     href: "/reports",
     items: [
-      { href: "/reports", label: "Rapor merkezi" },
-      { href: "/reports/sales", label: "Satış" },
-      { href: "/reports/stock", label: "Stok" },
-      { href: "/reports/finance", label: "Finans" },
-      { href: "/reports/receivables", label: "Alacaklar" },
-      { href: "/reports/payables", label: "Borçlar" },
-      { href: "/reports/profit", label: "Kâr" },
+      { href: "/reports/archive", label: "Belge Arşiv Merkezi", color: "#111827" },
+      { href: "/reports/profit", label: "Kâr Analizi", color: "#ea580c" },
+      { href: "/reports/expenses", label: "Masraflar", color: "#be123c" },
+      { href: "/reports/cari-statements", label: "Cari Dökümler", color: "#0f766e" },
+      { href: "/reports/sales", label: "Satış Raporu", color: "#1f6feb" },
+      { href: "/reports/purchases", label: "Alış Raporu", color: "#198754" },
     ],
   },
   {
     id: "comms",
     label: "Müşteri İletişim",
     icon: "💬",
-    href: "/whatsapp",
+    color: "#2dd4bf",
+    href: "/communication",
     items: [
-      { href: "/whatsapp", label: "WhatsApp şablonları" },
-      { href: "/crm/campaigns", label: "Kampanyalar" },
-      { href: "/crm/special-days", label: "Özel günler" },
+      { href: "/communication", label: "İletişim Merkezi", color: "#0f766e" },
+      { href: "/whatsapp/track", label: "WhatsApp Takip", color: "#15803d" },
+      { href: "/crm/special-days", label: "Özel Gün / Kampanya", color: "#f59e0b" },
+      { href: "/whatsapp", label: "WhatsApp Taslakları", color: "#16a34a" },
+      { href: "/whatsapp?tab=history", label: "WhatsApp Geçmişi", color: "#64748b" },
+      { href: "/directory", label: "Fihrist", color: "#0f766e" },
     ],
   },
   {
     id: "documents",
     label: "Evrak Dolabı",
     icon: "📁",
+    color: "#fcd34d",
     href: "/documents",
-    items: [{ href: "/documents", label: "Dosya listesi" }],
+    items: [{ href: "/documents", label: "Evrak Dolabı" }],
   },
   {
     id: "system",
     label: "Sistem",
     icon: "⚙️",
+    color: "#cbd5e1",
     href: "/settings",
     items: [
-      { href: "/settings", label: "Ayarlar / Kullanıcılar" },
-      { href: "/settings/integrations", label: "Entegrasyonlar" },
-      { href: "/settings/backups", label: "Yedekleme" },
-      { href: "/settings/audit", label: "Denetim kaydı" },
-      { href: "/settings/health", label: "Sistem sağlığı" },
+      { href: "/settings", label: "Ayarlar", color: "#6f42c1" },
+      { href: "/settings/lock-mode", label: "Yetki / Kilit Modu", color: "#111827" },
+      { href: "/settings", label: "Kullanıcı Yönetimi", color: "#0f766e" },
+      { href: "/settings/audit", label: "İşlem Geçmişi", color: "#334155" },
+      { href: "/settings/backups", label: "Yedekleme", color: "#0f766e" },
+      { href: "/settings/backups?tab=test", label: "Yedek Test Et", color: "#f59e0b" },
+      { href: "/settings/health", label: "Sistem Sağlık Merkezi", color: "#be123c" },
+      { href: "/settings/database", label: "Merkezi DB / VPS", color: "#7c3aed" },
+      { href: "/settings?action=switch-user", label: "Kullanıcı Değiştir", color: "#0f766e" },
     ],
   },
 ];
 
-/** Flat list for active-path matching */
 export const NAV_FLAT: NavLeaf[] = NAV_GROUPS.flatMap((g) => {
   const leaves = [...g.items];
   if (g.href && !leaves.some((i) => i.href === g.href)) {
@@ -197,42 +214,68 @@ const PATH_LABELS: Record<string, string> = {
   "/dashboard": "Ana Sayfa",
   "/sales": "Satış / Sipariş",
   "/sales/create": "Satış / Teklif Oluştur",
-  "/production": "Üretim / Atölye",
-  "/ecommerce": "E-Ticaret",
+  "/sales/retail": "Perakende Satışlar",
+  "/production": "Üretim Akış Paneli",
+  "/production/work-orders": "İş Emirleri",
+  "/production/sublimation": "Sublimasyon Baskı Süreleri",
+  "/orders/delivery-alarm": "Teslim Alarmı",
+  "/orders/overdue": "Geciken İşler",
+  "/ecommerce": "İnternet Satışları",
   "/documents": "Evrak Dolabı",
   "/customers": "Müşteri Merkezi",
-  "/customers/new": "Yeni müşteri",
-  "/customers/receivables": "Açık alacaklar",
-  "/cari": "Cari / Alacaklar",
+  "/customers/new": "Yeni Müşteri",
+  "/customers/receivables": "Açık Alacaklar",
+  "/customers/track": "Müşteri Takibi",
+  "/directory": "Fihrist",
   "/products": "Ürün & Stok Merkezi",
-  "/products/new": "Yeni ürün",
-  "/stock": "Stok",
-  "/stock/critical": "Kritik stok",
+  "/products/new": "Yeni Ürün",
+  "/stock": "Stok Yönetimi",
+  "/stock/critical": "Kritik Stok",
+  "/stock/warehouses": "Depolar",
   "/orders": "Sipariş Merkezi",
-  "/orders/new": "Yeni sipariş",
-  "/orders/kanban": "Kanban",
+  "/orders/new": "Yeni Sipariş",
+  "/orders/kanban": "Sipariş Yaşam Çizgisi",
+  "/orders/delivery": "Teslim Takibi",
   "/quotes": "Teklifler",
-  "/quotes/new": "Yeni teklif",
+  "/quotes/new": "Yeni Teklif",
   "/suppliers": "Tedarik Merkezi",
-  "/purchases": "Alış hareketleri",
+  "/purchases": "Alış Hareketleri",
+  "/purchases/new": "Satın Alma Talebi",
   "/payables": "Borçlar",
   "/finance": "Finans",
-  "/finance/cash": "Kasa",
-  "/finance/banks": "Banka",
-  "/finance/expenses": "Giderler",
-  "/finance/loans": "Kredi / Taksit",
-  "/finance/assets": "Sabit kıymetler",
-  "/price-lists": "Fiyat listeleri",
-  "/tools/dtf": "DTF maliyet",
+  "/finance/cash": "Günlük Kasa",
+  "/finance/banks": "Hesaplarım",
+  "/finance/expenses": "Masraflar",
+  "/finance/loans": "Krediler",
+  "/finance/assets": "Demirbaşlar",
+  "/finance/open-balances": "Açık Bakiyeler",
+  "/price-lists": "Fiyat Listesi",
+  "/tools/dtf": "DTF Maliyet Hesaplama",
+  "/tools/costs": "Maliyet Yönetimi",
+  "/tools/last-purchase-prices": "Son Alış Fiyatları",
   "/reports": "Raporlar",
-  "/whatsapp": "WhatsApp",
-  "/crm/special-days": "Özel günler",
+  "/reports/sales": "Satış Raporu",
+  "/reports/stock": "Stok Raporu",
+  "/reports/finance": "Finans Raporu",
+  "/reports/receivables": "Alacaklar",
+  "/reports/payables": "Borçlar",
+  "/reports/profit": "Kâr Analizi",
+  "/reports/expenses": "Masraf Raporları",
+  "/reports/purchases": "Alış Raporu",
+  "/reports/cari-statements": "Cari Dökümler",
+  "/reports/archive": "Belge Arşiv Merkezi",
+  "/communication": "İletişim Merkezi",
+  "/whatsapp": "WhatsApp Taslakları",
+  "/whatsapp/track": "WhatsApp Takip",
+  "/crm/special-days": "Özel Gün / Kampanya",
   "/crm/campaigns": "Kampanyalar",
   "/settings": "Ayarlar",
   "/settings/integrations": "Entegrasyonlar",
   "/settings/backups": "Yedekleme",
-  "/settings/audit": "Denetim",
-  "/settings/health": "Sistem sağlığı",
+  "/settings/audit": "İşlem Geçmişi",
+  "/settings/health": "Sistem Sağlık Merkezi",
+  "/settings/lock-mode": "Yetki / Kilit Modu",
+  "/settings/database": "Merkezi DB / VPS",
 };
 
 function findGroupForPath(pathname: string): NavGroup | null {
@@ -255,7 +298,6 @@ function findGroupForPath(pathname: string): NavGroup | null {
   return best;
 }
 
-/** Breadcrumb trail for TopBar: "Grup > Sayfa" */
 export function crumbsForPath(pathname: string): Crumb[] {
   if (pathname === "/" || pathname === "/dashboard") {
     return [{ label: "Ana Sayfa" }, { label: "Genel Bakış" }];
@@ -265,9 +307,8 @@ export function crumbsForPath(pathname: string): Crumb[] {
   const pageLabel =
     exact ||
     (() => {
-      // dynamic segments e.g. /orders/12
       const parts = pathname.split("/").filter(Boolean);
-      if (parts.length >= 2 && /^\d+$/.test(parts[parts.length - 1])) {
+      if (parts.length >= 2 && /^\d+$/.test(parts[parts.length - 1]!)) {
         const parent = "/" + parts.slice(0, -1).join("/");
         return (PATH_LABELS[parent] || parts[0]) + " · Detay";
       }
@@ -289,17 +330,16 @@ export function titleForPath(pathname: string): string {
   return crumbs[crumbs.length - 1]?.label || "Baykuş Baskı";
 }
 
-/** Desktop Ana Sayfa quick actions (exact desktop colors) */
 export const QUICK_ACTIONS = [
-  { id: "satis_belgeleri", label: "Satışlar", href: "/orders", hex: "#0f766e" },
+  { id: "satis_belgeleri", label: "Satışlar", href: "/sales", hex: "#0f766e" },
   { id: "siparis_listesi", label: "Sipariş Listesi", href: "/orders", hex: "#0f766e" },
-  { id: "atolye_paneli", label: "Üretim Akış Paneli", href: "/orders/kanban", hex: "#f59e0b" },
-  { id: "gider_takibi", label: "Gider Takibi", href: "/finance/expenses", hex: "#be123c" },
+  { id: "atolye_paneli", label: "Üretim Akış Paneli", href: "/production", hex: "#f59e0b" },
+  { id: "gider_takibi", label: "Masraflar", href: "/finance/expenses", hex: "#be123c" },
   { id: "fiyat_listesi", label: "Fiyat Listesi", href: "/price-lists", hex: "#be123c" },
   { id: "alis_hareketleri", label: "Alış Hareketleri", href: "/purchases", hex: "#198754" },
   { id: "satis_teklif_olustur", label: "Satış / Teklif Oluştur", href: "/sales/create", hex: "#1f6feb" },
 ] as const;
 
-/** @deprecated flat list kept for older imports */
+/** @deprecated */
 export type NavItem = NavLeaf;
 export const NAV_ITEMS: NavItem[] = NAV_FLAT;

@@ -313,7 +313,79 @@ def list_orders(
     return [_to_list_item(o) for o in orders]
 
 
+
+def _apply_sale_side_effects(db: Session, order: Order, user: User) -> None:
+    """Stok düşümü (stoklu varyant/ürün) + cari satış hareketi."""
+    from datetime import date as date_cls
+    from app.models.customer import CariMovement
+    from app.models.product import Product, ProductVariant, StockMovement
+
+    # 1) Stok
+    for line in order.lines:
+        if not line.product_id:
+            continue
+        product = db.get(Product, line.product_id)
+        if not product:
+            continue
+        ptype = getattr(product, "product_type", None) or "stoklu"
+        if ptype == "hizmet":
+            continue
+        qty = int(line.quantity or 0)
+        if qty <= 0:
+            continue
+        variant = None
+        if line.variant_id:
+            variant = db.get(ProductVariant, line.variant_id)
+            if not variant or variant.product_id != product.id:
+                continue
+            before = int(variant.stock_qty or 0)
+            after = before - qty  # masaüstü: eksiye düşebilir
+            variant.stock_qty = after
+        else:
+            # varyantlı üründe varyantsız satır: ürün stokundan düş
+            before = int(product.stock_qty or 0)
+            after = before - qty
+            product.stock_qty = after
+        db.add(
+            StockMovement(
+                product_id=product.id,
+                variant_id=variant.id if variant else None,
+                direction="decrease",
+                quantity=qty,
+                qty_before=before,
+                qty_after=after,
+                reason="sale",
+                note=f"Satış {order.order_number}",
+                warehouse=getattr(product, "warehouse", None) or "Ana Depo",
+                created_by_user_id=user.id,
+            )
+        )
+        # sync product total if helper exists
+        try:
+            from app.api.routers.products import _sync_product_stock
+            _sync_product_stock(product)
+        except Exception:
+            if product.variants:
+                product.stock_qty = sum(int(v.stock_qty or 0) for v in product.variants)
+
+    # 2) Cari satış (borç)
+    if order.customer_id and order.total_amount and order.total_amount > 0:
+        db.add(
+            CariMovement(
+                customer_id=order.customer_id,
+                movement_type="sale",
+                debit=order.total_amount,
+                credit=Decimal("0"),
+                movement_date=date_cls.today(),
+                order_id=order.id,
+                note=f"Satış {order.order_number}",
+            )
+        )
+
+
+
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
+
 def create_order(
     payload: OrderCreate,
     db: Session = Depends(get_db),
@@ -344,6 +416,8 @@ def create_order(
     db.flush()
     _replace_lines(order, payload.lines)
 
+    _apply_sale_side_effects(db, order, user)
+
     if order.deposit_amount and order.deposit_amount > 0:
         db.add(
             Payment(
@@ -354,6 +428,43 @@ def create_order(
                 notes="Kapora",
             )
         )
+        # Kapora: cari alacak azalt + varsayılan kasa
+        if order.customer_id:
+            from datetime import date as date_cls
+            from app.models.customer import CariMovement
+
+            db.add(
+                CariMovement(
+                    customer_id=order.customer_id,
+                    movement_type="payment",
+                    debit=Decimal("0"),
+                    credit=order.deposit_amount,
+                    movement_date=date_cls.today(),
+                    order_id=order.id,
+                    note=f"Kapora {order.order_number}",
+                )
+            )
+        from app.models.finance import CashMovement, CashRegister
+
+        reg = (
+            db.query(CashRegister)
+            .filter(CashRegister.is_active.is_(True))
+            .order_by(CashRegister.id.asc())
+            .first()
+        )
+        if reg:
+            from datetime import date as date_cls
+
+            db.add(
+                CashMovement(
+                    cash_register_id=reg.id,
+                    movement_type="tahsilat",
+                    amount=order.deposit_amount,
+                    movement_date=date_cls.today(),
+                    note=f"Kapora {order.order_number}",
+                    customer_id=order.customer_id,
+                )
+            )
 
     _record_status(db, order, None, order.status, user, note="Sipariş oluşturuldu")
     db.commit()
@@ -657,11 +768,18 @@ def create_payment(
                     )
                 )
         elif payload.finance_method == "bank":
-            if not payload.bank_account_id:
-                raise HTTPException(status_code=400, detail="Banka hesabı seçilmedi")
-            acc = db.get(BankAccount, payload.bank_account_id)
+            acc = None
+            if payload.bank_account_id:
+                acc = db.get(BankAccount, payload.bank_account_id)
+            if acc is None:
+                acc = (
+                    db.query(BankAccount)
+                    .filter(BankAccount.is_active.is_(True))
+                    .order_by(BankAccount.id.asc())
+                    .first()
+                )
             if not acc or not acc.is_active:
-                raise HTTPException(status_code=400, detail="Banka hesabı bulunamadı")
+                raise HTTPException(status_code=400, detail="Aktif banka hesabı bulunamadı")
             db.add(
                 BankMovement(
                     bank_account_id=acc.id,

@@ -59,8 +59,8 @@ export default function ProfitReportPage() {
   return (
     <div>
       <ReportHeader
-        title="Kar özeti (basit)"
-        subtitle="Ay ciro vs onaylı satın alma — yaklaşım; gerçek COGS değil"
+        title="Kâr Analizi"
+        subtitle="Masaüstü Kâr Analizi paneli · dönem cirosu − onaylı alış maliyeti (yaklaşık brüt kâr)"
         actions={
           <>
             <button onClick={load} className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm" disabled={loading}>

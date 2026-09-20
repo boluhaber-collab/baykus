@@ -126,3 +126,39 @@ def delete_backup(
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Yedek bulunamadı")
     path.unlink()
+
+
+@router.post("/{filename}/verify")
+def verify_backup(
+    filename: str,
+    _: User = Depends(require_roles("admin")),
+) -> dict:
+    """Zip bütünlüğünü test et (testzip)."""
+    import zipfile
+
+    safe = Path(filename).name
+    if not safe.endswith(".zip") or ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Geçersiz dosya adı")
+    path = _ensure_dir() / safe
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Yedek bulunamadı")
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            bad = zf.testzip()
+            names = zf.namelist()
+        if bad is not None:
+            return {
+                "ok": False,
+                "filename": safe,
+                "message": f"Bozuk kayıt: {bad}",
+                "entries": len(names),
+            }
+        return {
+            "ok": True,
+            "filename": safe,
+            "message": f"Zip sağlam · {len(names)} kayıt",
+            "entries": len(names),
+            "sample": names[:12],
+        }
+    except zipfile.BadZipFile:
+        return {"ok": False, "filename": safe, "message": "Geçersiz zip dosyası", "entries": 0}

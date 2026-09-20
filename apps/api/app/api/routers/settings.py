@@ -20,7 +20,11 @@ from app.schemas.settings import (
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-SETTING_KEYS = ("company_name", "phone", "theme_label")
+SETTING_KEYS = (
+    "company_name", "phone", "theme_label",
+    "require_login", "user_mode",
+    "postgres_host", "postgres_port", "postgres_db", "postgres_user", "postgres_ssl",
+)
 
 
 def _user_out(u: User) -> UserOut:
@@ -134,6 +138,13 @@ def get_app_settings(
         company_name=m.get("company_name", "Baykuş Baskı"),
         phone=m.get("phone", ""),
         theme_label=m.get("theme_label", "Varsayılan"),
+        require_login=m.get("require_login", "Evet"),
+        user_mode=m.get("user_mode", "Yönetici"),
+        postgres_host=m.get("postgres_host", ""),
+        postgres_port=m.get("postgres_port", "5432"),
+        postgres_db=m.get("postgres_db", "baykus"),
+        postgres_user=m.get("postgres_user", ""),
+        postgres_ssl=m.get("postgres_ssl", "Hayır"),
     )
 
 
@@ -153,4 +164,11 @@ def update_app_settings(
         company_name=m.get("company_name", "Baykuş Baskı"),
         phone=m.get("phone", ""),
         theme_label=m.get("theme_label", "Varsayılan"),
+        require_login=m.get("require_login", "Evet"),
+        user_mode=m.get("user_mode", "Yönetici"),
+        postgres_host=m.get("postgres_host", ""),
+        postgres_port=m.get("postgres_port", "5432"),
+        postgres_db=m.get("postgres_db", "baykus"),
+        postgres_user=m.get("postgres_user", ""),
+        postgres_ssl=m.get("postgres_ssl", "Hayır"),
     )

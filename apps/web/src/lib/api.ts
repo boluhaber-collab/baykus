@@ -822,6 +822,13 @@ export type AppSettings = {
   company_name: string;
   phone: string;
   theme_label: string;
+  require_login?: string;
+  user_mode?: string;
+  postgres_host?: string;
+  postgres_port?: string;
+  postgres_db?: string;
+  postgres_user?: string;
+  postgres_ssl?: string;
 };
 
 export type ExpenseCategory = {

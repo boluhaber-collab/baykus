@@ -17,6 +17,8 @@ export default function EcommerceHubPage() {
   const [channel, setChannel] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const total = items.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+  const remaining = items.reduce((s, o) => s + Number(o.remaining_amount || 0), 0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,12 +47,23 @@ export default function EcommerceHubPage() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold">E-Ticaret</h2>
+          <h2 className="text-base font-bold">İnternet Satışları</h2>
           <p className="text-xs text-baykus-muted">İnternet / pazaryeri kanalı siparişleri</p>
         </div>
-        <Link href="/sales/create?type=internet" className="bk-btn bk-btn-primary text-xs">
-          + İnternet siparişi
-        </Link>
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs">
+            <span className="text-emerald-800">Toplam ciro </span>
+            <strong className="tabular-nums">{formatMoney(total)}</strong>
+          </div>
+          <div className="rounded border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs">
+            <span className="text-amber-800">Kalan </span>
+            <strong className="tabular-nums">{formatMoney(remaining)}</strong>
+          </div>
+          <div className="rounded border px-3 py-1.5 text-xs">Sipariş: <strong>{items.length}</strong></div>
+          <Link href="/sales/create?type=internet" className="bk-btn bk-btn-primary text-xs">
+            + İnternet siparişi
+          </Link>
+        </div>
       </div>
 
       <div className="bk-filter-bar">

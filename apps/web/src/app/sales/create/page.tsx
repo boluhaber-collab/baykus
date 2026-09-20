@@ -216,8 +216,8 @@ function CreateSaleInner() {
             notes: `${payType} tahsilat`,
             post_to_cari: Boolean(cid),
             // Banka hesabı seçimi yok; yalnızca nakit kasaya yazılır
-            post_to_finance: payType === "Nakit",
-            finance_method: payType === "Nakit" ? "cash" : null,
+            post_to_finance: payType === "Nakit" || payType === "EFT" || payType === "Kart",
+            finance_method: payType === "Nakit" ? "cash" : payType === "EFT" || payType === "Kart" ? "bank" : null,
           }),
         });
       }
@@ -510,8 +510,8 @@ function CreateSaleInner() {
             </div>
             <div className="text-xs text-baykus-muted pb-2">
               {payType === "Veresiye"
-                ? "Veresiye: kapora yok, cariye borç yazılır."
-                : "Kapora / tahsilat siparişe işlenir."}
+                ? "Veresiye: kapora yok, cariye satış borcu yazılır (stok düşer)."
+                : `Kapora / tahsilat: ${payAmount || "0"} ₺ · Kalan tutar: ${(Math.max(0, linesTotal - (Number(payAmount) || 0))).toFixed(2)} ₺`}
             </div>
           </div>
         )}

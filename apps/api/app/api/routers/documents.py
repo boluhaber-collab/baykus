@@ -22,12 +22,15 @@ WRITE = ("admin", "satış", "muhasebe")
 def list_documents(
     q: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    archive_tag: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ)),
 ) -> list[DocumentOut]:
     query = db.query(Document)
     if category:
         query = query.filter(Document.category == category)
+    if archive_tag:
+        query = query.filter(Document.archive_tag == archive_tag)
     if q and q.strip():
         like = f"%{q.strip()}%"
         query = query.filter(
@@ -44,6 +47,7 @@ async def upload_document(
     file: UploadFile = File(...),
     title: str = Form(...),
     category: str | None = Form(default=None),
+    archive_tag: str | None = Form(default=None),
     notes: str | None = Form(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(*WRITE)),
@@ -60,6 +64,7 @@ async def upload_document(
     row = Document(
         title=(title or original).strip()[:255],
         category=category,
+        archive_tag=archive_tag,
         original_filename=original,
         stored_filename=stored,
         content_type=file.content_type,

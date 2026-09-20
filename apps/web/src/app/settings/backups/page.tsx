@@ -48,6 +48,23 @@ export default function BackupsPage() {
     }
   }
 
+  async function verify(filename: string) {
+    setBusy(true);
+    setError("");
+    setMsg("");
+    try {
+      const r = await apiFetch<{ ok: boolean; message: string; entries?: number }>(
+        `/api/settings/backups/${encodeURIComponent(filename)}/verify`,
+        { method: "POST" },
+      );
+      setMsg(r.ok ? `✓ ${r.message}` : `✗ ${r.message}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Doğrulama hatası");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(filename: string) {
     if (!confirm(`${filename} silinsin mi?`)) return;
     await apiFetch(`/api/settings/backups/${encodeURIComponent(filename)}`, { method: "DELETE" });
@@ -96,6 +113,7 @@ export default function BackupsPage() {
                 <td className="px-4 py-2">{(b.size_bytes / 1024).toFixed(1)} KB</td>
                 <td className="px-4 py-2">{new Date(b.created_at).toLocaleString("tr-TR")}</td>
                 <td className="px-4 py-2 text-right space-x-2">
+                  <button onClick={() => verify(b.filename)} className="text-violet-700 hover:underline">Yedek Test Et</button>
                   <button onClick={() => download(b.filename)} className="text-baykus-700 hover:underline">İndir</button>
                   <button onClick={() => remove(b.filename)} className="text-red-600 hover:underline">Sil</button>
                 </td>

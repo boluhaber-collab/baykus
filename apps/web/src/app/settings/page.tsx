@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { AppSettings, apiFetch } from "@/lib/api";
+import { AppSettings, apiFetch, clearToken } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 type UserOut = {
   id: number;
@@ -14,6 +15,7 @@ type UserOut = {
 const ROLE_OPTIONS = ["admin", "satış", "üretim", "muhasebe"];
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<UserOut[]>([]);
   const [roles, setRoles] = useState<{ id: number; name: string; description?: string }[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
@@ -131,8 +133,22 @@ export default function SettingsPage() {
         <a href="/settings/audit" className="rounded-lg border px-3 py-1.5 hover:bg-slate-50">Denetim kaydı</a>
       </div>
 
-      <h1 className="text-2xl font-bold mb-1">Ayarlar / Kullanıcılar</h1>
-      <p className="text-slate-500 text-sm mb-6">Kullanıcılar · roller · şirket ayarları</p>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">Ayarlar / Kullanıcılar</h1>
+          <p className="text-slate-500 text-sm">Kullanıcılar · roller · şirket ayarları</p>
+        </div>
+        <button
+          type="button"
+          className="rounded-lg border border-teal-600 bg-teal-700 text-white px-4 py-2 text-sm"
+          onClick={() => {
+            clearToken();
+            router.push("/login");
+          }}
+        >
+          Kullanıcı Değiştir
+        </button>
+      </div>
       {error && <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
       {msg && <div className="mb-4 rounded-lg bg-emerald-50 text-emerald-800 px-4 py-2 text-sm">{msg}</div>}
 

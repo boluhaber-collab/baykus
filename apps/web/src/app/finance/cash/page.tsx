@@ -22,8 +22,9 @@ export default function CashPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [typeFilter, setTypeFilter] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
 
   const [formType, setFormType] = useState("tahsilat");
   const [formAmount, setFormAmount] = useState("");
@@ -86,8 +87,8 @@ export default function CashPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Kasa</h1>
-          <p className="text-slate-500 text-sm">Günlük nakit hareketleri · tahsilat / ödeme / gider</p>
+          <h1 className="text-2xl font-bold text-slate-900">Günlük Kasa</h1>
+          <p className="text-slate-500 text-sm">Bugün varsayılan · açılış bakiyesi + günlük nakit hareketleri</p>
         </div>
         <div className="flex gap-2">
           <Link href="/finance" className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50">

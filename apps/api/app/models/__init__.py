@@ -2,6 +2,7 @@ from app.models.asset import Asset
 from app.models.audit import AuditLog
 from app.models.contact import DirectoryContact
 from app.models.cost_item import CostItem
+from app.models.sublimation import SublimationPrintTime
 from app.models.crm import Campaign, SpecialDay
 from app.models.customer import CariMovement, Customer
 from app.models.document import Document
@@ -39,4 +40,5 @@ __all__ = [
     "DirectoryContact",
     "Document",
     "CostItem",
+    "SublimationPrintTime",
 ]

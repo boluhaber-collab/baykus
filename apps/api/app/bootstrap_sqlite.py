@@ -50,6 +50,16 @@ def bootstrap() -> None:
     # create_all is additive — creates any missing tables (price_lists, loans, audit, …)
     print("SQLite — Base.metadata.create_all (eksik tablolar eklenir)...")
     Base.metadata.create_all(bind=engine)
+
+    # SQLite cannot ADD via create_all for existing tables — patch critical columns
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        if "documents" in insp.get_table_names():
+            dcols = {c["name"] for c in insp.get_columns("documents")}
+            if "archive_tag" not in dcols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN archive_tag VARCHAR(100)"))
+                print("  + documents.archive_tag")
     if tables_missing():
         print("Uyarı: users tablosu hâlâ yok.")
     else:

@@ -7,12 +7,14 @@ class DocumentCreateMeta(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     category: str | None = None
     notes: str | None = None
+    archive_tag: str | None = None
 
 
 class DocumentUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     category: str | None = None
     notes: str | None = None
+    archive_tag: str | None = None
 
 
 class DocumentOut(BaseModel):
@@ -23,6 +25,7 @@ class DocumentOut(BaseModel):
     content_type: str | None = None
     size_bytes: int
     notes: str | None = None
+    archive_tag: str | None = None
     uploaded_by_user_id: int | None = None
     created_at: datetime | None = None
 

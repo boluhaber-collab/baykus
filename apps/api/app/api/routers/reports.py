@@ -133,10 +133,38 @@ def list_reports(_: User = Depends(require_roles(*READ_ROLES))) -> dict:
             },
             {
                 "key": "profit",
-                "title": "Kar özeti (basit)",
+                "title": "Kâr Analizi",
                 "path": "/api/reports/profit",
                 "href": "/reports/profit",
-                "description": "Ay ciro vs onaylı satın alma maliyeti — basit yaklaşım",
+                "description": "Ciro, maliyet yaklaşımı, kâr — masaüstü Kâr Analizi paneli",
+            },
+            {
+                "key": "expenses",
+                "title": "Masraf raporları",
+                "path": "/api/reports/expenses",
+                "href": "/reports/expenses",
+                "description": "Gider / masraf dökümü (tarih, kategori)",
+            },
+            {
+                "key": "purchases",
+                "title": "Alış Raporu",
+                "path": "/api/reports/purchases",
+                "href": "/reports/purchases",
+                "description": "Satın alma belgelerinin özeti",
+            },
+            {
+                "key": "cari_statements",
+                "title": "Cari Dökümler",
+                "path": "/api/reports/cari-statements",
+                "href": "/reports/cari-statements",
+                "description": "Müşteri seç → cari ekstre (CSV)",
+            },
+            {
+                "key": "archive",
+                "title": "Belge Arşiv Merkezi",
+                "path": "/api/documents",
+                "href": "/reports/archive",
+                "description": "Arşiv etiketli evraklar",
             },
         ]
     }
@@ -936,3 +964,216 @@ def profit_report(
         return _csv_response(f"kar_ozeti_{y}_{m:02d}.csv", headers, csv_rows)
 
     return {"summary": summary, "rows": detail, "orders": order_rows, "purchases": purchase_rows}
+
+
+
+@router.get("/expenses")
+def expenses_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    category_id: int | None = Query(default=None),
+    format: str | None = Query(default=None),
+):
+    """Masraf / gider raporu."""
+    from app.models.expense import Expense, ExpenseCategory
+
+    q = db.query(Expense).options(joinedload(Expense.category))
+    if date_from:
+        q = q.filter(Expense.expense_date >= date_from)
+    if date_to:
+        q = q.filter(Expense.expense_date <= date_to)
+    if category_id:
+        q = q.filter(Expense.category_id == category_id)
+    rows = q.order_by(Expense.expense_date.desc(), Expense.id.desc()).all()
+    total = sum((_dec(r.amount) for r in rows), Decimal("0"))
+    detail = [
+        {
+            "id": r.id,
+            "date": r.expense_date.isoformat() if r.expense_date else None,
+            "category": r.category.name if r.category else None,
+            "amount": _f(r.amount),
+            "payment_method": getattr(r, "payment_method", None),
+            "note": getattr(r, "note", None),
+            "posted": bool(getattr(r, "is_posted", False)),
+        }
+        for r in rows
+    ]
+    summary = {
+        "count": len(rows),
+        "total": _f(total),
+        "assumptions": [
+            "Masraf raporları gider kayıtlarından üretilir.",
+            "Kasa/bankaya işlenmiş (posted) kayıtlar ayrıca finans raporunda görünür.",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "masraf_raporu.csv",
+            ["id", "tarih", "kategori", "tutar", "odeme", "not", "islendi"],
+            [[d["id"], d["date"], d["category"], d["amount"], d["payment_method"], d["note"], d["posted"]] for d in detail],
+        )
+    return {"summary": summary, "rows": detail}
+
+
+@router.get("/purchases")
+def purchases_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    format: str | None = Query(default=None),
+):
+    """Alış raporu — satın alma belgeleri."""
+    from app.models.supplier import Purchase
+
+    q = db.query(Purchase).options(joinedload(Purchase.supplier))
+    if date_from:
+        q = q.filter(Purchase.purchase_date >= date_from)
+    if date_to:
+        q = q.filter(Purchase.purchase_date <= date_to)
+    rows = q.order_by(Purchase.purchase_date.desc(), Purchase.id.desc()).all()
+    total = sum((_dec(r.total_amount) for r in rows), Decimal("0"))
+    detail = [
+        {
+            "id": r.id,
+            "number": r.purchase_number,
+            "date": r.purchase_date.isoformat() if r.purchase_date else None,
+            "supplier": r.supplier.name if r.supplier else None,
+            "status": r.status,
+            "amount": _f(r.total_amount),
+        }
+        for r in rows
+    ]
+    summary = {
+        "count": len(rows),
+        "total": _f(total),
+        "assumptions": ["Alış raporu satın alma belgelerinin tutar toplamıdır."],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "alis_raporu.csv",
+            ["id", "belge", "tarih", "tedarikci", "durum", "tutar"],
+            [[d["id"], d["number"], d["date"], d["supplier"], d["status"], d["amount"]] for d in detail],
+        )
+    return {"summary": summary, "rows": detail}
+
+
+@router.get("/cari-statements")
+def cari_statements_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    customer_id: int | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    format: str | None = Query(default=None),
+):
+    """Cari döküm — müşteri seçilince ekstre."""
+    from app.models.customer import CariMovement, Customer
+
+    if not customer_id:
+        customers = (
+            db.query(Customer)
+            .filter(Customer.is_active.is_(True))
+            .order_by(Customer.name)
+            .all()
+        )
+        return {
+            "summary": {"message": "Müşteri seçin", "customer_count": len(customers)},
+            "customers": [
+                {"id": c.id, "name": c.name, "company": c.company, "balance": _f(getattr(c, "balance", 0) or 0)}
+                for c in customers
+            ],
+            "rows": [],
+        }
+
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Müşteri bulunamadı")
+
+    q = db.query(CariMovement).filter(CariMovement.customer_id == customer_id)
+    if date_from:
+        q = q.filter(CariMovement.movement_date >= date_from)
+    if date_to:
+        q = q.filter(CariMovement.movement_date <= date_to)
+    moves = q.order_by(CariMovement.movement_date.asc(), CariMovement.id.asc()).all()
+    running = Decimal("0")
+    detail = []
+    for m in moves:
+        running += _dec(m.debit) - _dec(m.credit)
+        detail.append(
+            {
+                "id": m.id,
+                "date": m.movement_date.isoformat() if m.movement_date else None,
+                "type": m.movement_type,
+                "debit": _f(m.debit),
+                "credit": _f(m.credit),
+                "balance": _f(running),
+                "note": m.note,
+                "order_id": m.order_id,
+            }
+        )
+    summary = {
+        "customer_id": customer.id,
+        "customer_name": customer.name,
+        "closing_balance": _f(running),
+        "count": len(detail),
+        "assumptions": [
+            "Borç (debit) alacağı artırır; alacak (credit) tahsilattır.",
+            "CSV dışa aktarım masaüstü Cari Döküm PDF yerine geçer.",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            f"cari_dokum_{customer.id}.csv",
+            ["id", "tarih", "tip", "borc", "alacak", "bakiye", "not"],
+            [[d["id"], d["date"], d["type"], d["debit"], d["credit"], d["balance"], d["note"]] for d in detail],
+        )
+    return {"summary": summary, "rows": detail}
+
+
+@router.get("/last-purchase-prices")
+def last_purchase_prices(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    q: str | None = Query(default=None),
+):
+    """Son alış fiyatları — satın alma satırlarından ürün bazlı son birim maliyet."""
+    from app.models.supplier import Purchase, PurchaseLine
+
+    lines = (
+        db.query(PurchaseLine)
+        .join(Purchase)
+        .options(joinedload(PurchaseLine.purchase).joinedload(Purchase.supplier))
+        .order_by(Purchase.purchase_date.desc(), PurchaseLine.id.desc())
+        .all()
+    )
+    seen: dict[str, dict] = {}
+    for ln in lines:
+        key = str(ln.product_id or "") + "|" + (ln.description or "")
+        if key in seen:
+            continue
+        if q:
+            blob = f"{ln.description or ''} {ln.product_id or ''}".lower()
+            if q.lower() not in blob:
+                continue
+        pur = ln.purchase
+        seen[key] = {
+            "product_id": ln.product_id,
+            "variant_id": ln.variant_id,
+            "description": ln.description,
+            "unit_cost": _f(ln.unit_cost),
+            "quantity": float(ln.quantity or 0),
+            "purchase_number": pur.purchase_number if pur else None,
+            "purchase_date": pur.purchase_date.isoformat() if pur and pur.purchase_date else None,
+            "supplier": pur.supplier.name if pur and pur.supplier else None,
+        }
+    rows = list(seen.values())
+    return {
+        "summary": {"count": len(rows), "assumptions": ["Her ürün/açıklama için en son alış satırı."]},
+        "rows": rows,
+    }

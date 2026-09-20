@@ -6,7 +6,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
 from app.models.user import User
@@ -173,3 +173,57 @@ def list_logs(
 ) -> list[WhatsAppLogOut]:
     rows = db.query(WhatsAppSendLog).order_by(WhatsAppSendLog.id.desc()).limit(limit).all()
     return [_log_out(r) for r in rows]
+
+
+
+@router.get("/track")
+def track_center(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış")),
+) -> dict:
+    """WhatsApp Takip Merkezi kuyrukları: hazır / ödeme / tasarım onayı."""
+    from datetime import date as date_cls
+    from app.models.order import Order
+
+    today = date_cls.today()
+    orders = (
+        db.query(Order)
+        .options(joinedload(Order.customer))
+        .filter(Order.status.notin_(["Teslim Edildi", "Sipariş İptali"]))
+        .order_by(Order.id.desc())
+        .limit(500)
+        .all()
+    )
+    ready, pay_due, design = [], [], []
+    for o in orders:
+        item = {
+            "id": o.id,
+            "order_number": o.order_number,
+            "customer_id": o.customer_id,
+            "customer_name": o.customer.name if o.customer else None,
+            "customer_phone": getattr(o.customer, "phone", None) if o.customer else None,
+            "status": o.status,
+            "design_status": o.design_status,
+            "total_amount": float(o.total_amount or 0),
+            "deposit_amount": float(o.deposit_amount or 0),
+            "delivery_date": o.delivery_date.isoformat() if o.delivery_date else None,
+        }
+        if o.status in ("Hazır", "Baskıda"):
+            ready.append(item)
+        paid = float(o.deposit_amount or 0)
+        # rough remaining
+        rem = float(o.total_amount or 0) - paid
+        if rem > 0.01:
+            pay_due.append({**item, "remaining": rem})
+        if (o.design_status or "").lower() in ("bekliyor", "revizyon", "bekliyor"):
+            design.append(item)
+    return {
+        "ready_orders": ready[:100],
+        "payment_due": pay_due[:100],
+        "design_approval": design[:100],
+        "counts": {
+            "ready": len(ready),
+            "payment_due": len(pay_due),
+            "design_approval": len(design),
+        },
+    }
