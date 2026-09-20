@@ -52,12 +52,12 @@ export default function QuotesPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Teklifler</h1>
-          <p className="text-slate-500 text-sm">Liste · oluştur · siparişe dönüştür</p>
+          <h1 className="text-2xl font-bold text-baykus-text">Teklifler</h1>
+          <p className="text-baykus-muted text-sm">Liste · oluştur · siparişe dönüştür</p>
         </div>
         <Link
           href="/quotes/new"
-          className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm font-medium"
+          className="rounded-lg bg-baykus-primary text-white px-4 py-2 text-sm font-medium"
         >
           + Yeni Teklif
         </Link>
@@ -68,12 +68,12 @@ export default function QuotesPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="No / müşteri / not ara…"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm min-w-[200px]"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm min-w-[200px]"
         />
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
         >
           <option value="">Tüm durumlar</option>
           {QUOTE_STATUSES.map((s) => (
@@ -90,43 +90,43 @@ export default function QuotesPage() {
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
-      {loading && <p className="text-slate-500 text-sm mb-2">Yükleniyor…</p>}
+      {loading && <p className="text-baykus-muted text-sm mb-2">Yükleniyor…</p>}
 
       {!loading && items.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">
+        <div className="rounded-xl border border-dashed border-baykus-line bg-white p-10 text-center text-baykus-muted">
           Henüz teklif yok. Yeni teklif oluşturun.
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-slate-600">
+            <thead className="bg-baykus-bg text-left text-baykus-muted">
               <tr>
-                <th className="px-4 py-3">No</th>
-                <th className="px-4 py-3">Müşteri</th>
-                <th className="px-4 py-3">Durum</th>
-                <th className="px-4 py-3">Tutar</th>
-                <th className="px-4 py-3">Geçerlilik</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-3 py-2">No</th>
+                <th className="px-3 py-2">Müşteri</th>
+                <th className="px-3 py-2">Durum</th>
+                <th className="px-3 py-2">Tutar</th>
+                <th className="px-3 py-2">Geçerlilik</th>
+                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
-                <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <Link href={`/quotes/${item.id}`} className="text-baykus-700 font-medium hover:underline">
+                <tr key={item.id} className="border-t border-baykus-line hover:bg-baykus-bg">
+                  <td className="px-3 py-2">
+                    <Link href={`/quotes/${item.id}`} className="text-baykus-primary font-medium hover:underline">
                       {item.quote_number}
                     </Link>
                   </td>
-                  <td className="px-4 py-3">{item.customer_name || "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2">{item.customer_name || "—"}</td>
+                  <td className="px-3 py-2">
                     <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${quoteStatusBadgeClass(item.status)}`}>
                       {item.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 tabular-nums">{formatMoney(Number(item.total_amount))}</td>
-                  <td className="px-4 py-3">{item.valid_until || "—"}</td>
-                  <td className="px-4 py-3 text-right space-x-2">
-                    <Link href={`/quotes/${item.id}`} className="text-baykus-600 hover:underline">
+                  <td className="px-3 py-2 tabular-nums">{formatMoney(Number(item.total_amount))}</td>
+                  <td className="px-3 py-2">{item.valid_until || "—"}</td>
+                  <td className="px-3 py-2 text-right space-x-2">
+                    <Link href={`/quotes/${item.id}`} className="text-baykus-primary hover:underline">
                       Aç
                     </Link>
                     {item.status !== "Siparişe Dönüştü" && item.status !== "Reddedildi" && (

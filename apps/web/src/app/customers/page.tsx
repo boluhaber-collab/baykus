@@ -48,19 +48,19 @@ export default function CustomersPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Müşteriler</h1>
-          <p className="text-slate-500 text-sm">Kartlar · cari bakiye · ekstre</p>
+          <h1 className="text-2xl font-bold text-baykus-text">Müşteriler</h1>
+          <p className="text-baykus-muted text-sm">Kartlar · cari bakiye · ekstre</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href="/cari"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
           >
             Açık alacaklar
           </Link>
           <Link
             href="/customers/new"
-            className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm font-medium"
+            className="rounded-lg bg-baykus-primary text-white px-4 py-2 text-sm font-medium"
           >
             + Yeni Müşteri
           </Link>
@@ -69,27 +69,27 @@ export default function CustomersPage() {
 
       <div className="mb-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Ara</label>
+          <label className="block text-xs text-baykus-muted mb-1">Ara</label>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Ad, kod, firma, telefon…"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-56"
+            className="rounded-lg border border-baykus-line px-3 py-2 text-sm w-56"
           />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Durum</label>
+          <label className="block text-xs text-baykus-muted mb-1">Durum</label>
           <select
             value={activeFilter}
             onChange={(e) => setActiveFilter(e.target.value as "all" | "true" | "false")}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
           >
             <option value="all">Tümü</option>
             <option value="true">Aktif</option>
             <option value="false">Pasif</option>
           </select>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700 pb-2">
+        <label className="flex items-center gap-2 text-sm text-baykus-text pb-2">
           <input
             type="checkbox"
             checked={hasBalance}
@@ -109,54 +109,54 @@ export default function CustomersPage() {
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+          <thead className="bg-baykus-bg text-left text-baykus-muted">
             <tr>
-              <th className="px-4 py-3">Kod</th>
-              <th className="px-4 py-3">Ad</th>
-              <th className="px-4 py-3">Firma</th>
-              <th className="px-4 py-3">Şehir</th>
-              <th className="px-4 py-3">Telefon</th>
-              <th className="px-4 py-3 text-right">Bakiye</th>
-              <th className="px-4 py-3">Durum</th>
-              <th className="px-4 py-3"></th>
+              <th className="px-3 py-2">Kod</th>
+              <th className="px-3 py-2">Ad</th>
+              <th className="px-3 py-2">Firma</th>
+              <th className="px-3 py-2">Şehir</th>
+              <th className="px-3 py-2">Telefon</th>
+              <th className="px-3 py-2 text-right">Bakiye</th>
+              <th className="px-3 py-2">Durum</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {items.map((c) => {
               const bal = Number(c.balance ?? 0);
               return (
-                <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-mono text-xs text-slate-500">{c.code || "—"}</td>
-                  <td className="px-4 py-3 font-medium">
-                    <Link href={`/customers/${c.id}`} className="text-baykus-700 hover:underline">
+                <tr key={c.id} className="border-t border-baykus-line hover:bg-baykus-bg">
+                  <td className="px-3 py-2 font-mono text-xs text-baykus-muted">{c.code || "—"}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <Link href={`/customers/${c.id}`} className="text-baykus-primary hover:underline">
                       {c.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{c.company || "—"}</td>
-                  <td className="px-4 py-3">{c.city || "—"}</td>
-                  <td className="px-4 py-3">{c.phone || "—"}</td>
+                  <td className="px-3 py-2 text-baykus-muted">{c.company || "—"}</td>
+                  <td className="px-3 py-2">{c.city || "—"}</td>
+                  <td className="px-3 py-2">{c.phone || "—"}</td>
                   <td
-                    className={`px-4 py-3 text-right font-medium tabular-nums ${
-                      bal > 0 ? "text-amber-700" : bal < 0 ? "text-emerald-700" : "text-slate-500"
+                    className={`px-3 py-2 text-right font-medium tabular-nums ${
+                      bal > 0 ? "text-amber-700" : bal < 0 ? "text-emerald-700" : "text-baykus-muted"
                     }`}
                   >
                     {formatMoney(bal)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs ${
                         c.is_active !== false
                           ? "bg-emerald-100 text-emerald-800"
-                          : "bg-slate-200 text-slate-600"
+                          : "bg-slate-200 text-baykus-muted"
                       }`}
                     >
                       {c.is_active !== false ? "Aktif" : "Pasif"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
-                    <Link href={`/customers/${c.id}`} className="text-baykus-600 hover:underline">
+                  <td className="px-3 py-2 text-right space-x-2 whitespace-nowrap">
+                    <Link href={`/customers/${c.id}`} className="text-baykus-primary hover:underline">
                       Detay
                     </Link>
                     <button onClick={() => onDelete(c.id)} className="text-red-600 hover:underline">

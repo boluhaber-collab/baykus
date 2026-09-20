@@ -19,11 +19,13 @@ export default function NewOrderPage() {
   return (
     <div>
       <div className="mb-6">
-        <Link href="/orders" className="text-sm text-baykus-600 hover:underline">
-          ← Siparişler
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900 mt-2">Yeni Sipariş</h1>
-        <p className="text-slate-500 text-sm">Başlık + satırlar</p>
+        <div className="text-xs text-baykus-muted mb-1">
+          <Link href="/orders" className="text-baykus-primary hover:underline">Siparişler</Link>
+          <span className="mx-1">/</span>
+          <span className="font-medium text-baykus-text">Yeni</span>
+        </div>
+        <h1 className="text-xl font-bold text-baykus-text mt-1">Yeni Sipariş</h1>
+        <p className="text-baykus-muted text-sm">Müşteri bakiyesi, stok ve fiyat listesi bağlantılı</p>
       </div>
       <OrderForm
         submitLabel="Siparişi Oluştur"

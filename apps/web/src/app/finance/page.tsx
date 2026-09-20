@@ -41,37 +41,37 @@ export default function FinanceOverviewPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Finans</h1>
-          <p className="text-slate-500 text-sm">Kasa + banka özeti · bugünkü hareketler</p>
+          <h1 className="text-2xl font-bold text-baykus-text">Finans</h1>
+          <p className="text-baykus-muted text-sm">Kasa + banka özeti · bugünkü hareketler</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href="/finance/cash"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
           >
             Kasa
           </Link>
           <Link
             href="/finance/banks"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
           >
             Banka
           </Link>
           <Link
             href="/finance/expenses"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
           >
             Giderler
           </Link>
           <Link
             href="/finance/assets"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
           >
             Sabit kıymetler
           </Link>
           <Link
             href="/finance/loans"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
           >
             Kredi / Taksit
           </Link>
@@ -87,7 +87,7 @@ export default function FinanceOverviewPage() {
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
-      {loading && !data && <p className="text-slate-500 text-sm">Yükleniyor…</p>}
+      {loading && !data && <p className="text-baykus-muted text-sm">Yükleniyor…</p>}
 
       {data && (
         <>
@@ -122,17 +122,17 @@ export default function FinanceOverviewPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2 mb-6">
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="font-semibold text-slate-800 mb-3">Bugün — Kasa</h2>
+            <div className="rounded-xl border border-baykus-line bg-white p-5 shadow-sm">
+              <h2 className="font-semibold text-baykus-text mb-3">Bugün — Kasa</h2>
               <div className="flex gap-6 text-sm">
                 <div>
-                  <div className="text-xs text-slate-500">Giriş</div>
+                  <div className="text-xs text-baykus-muted">Giriş</div>
                   <div className="font-semibold text-emerald-700 tabular-nums">
                     {formatMoney(Number(data.today_cash_in))}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500">Çıkış</div>
+                  <div className="text-xs text-baykus-muted">Çıkış</div>
                   <div className="font-semibold text-red-700 tabular-nums">
                     {formatMoney(Number(data.today_cash_out))}
                   </div>
@@ -147,17 +147,17 @@ export default function FinanceOverviewPage() {
                 ))}
               </ul>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="font-semibold text-slate-800 mb-3">Bugün — Banka</h2>
+            <div className="rounded-xl border border-baykus-line bg-white p-5 shadow-sm">
+              <h2 className="font-semibold text-baykus-text mb-3">Bugün — Banka</h2>
               <div className="flex gap-6 text-sm">
                 <div>
-                  <div className="text-xs text-slate-500">Giriş</div>
+                  <div className="text-xs text-baykus-muted">Giriş</div>
                   <div className="font-semibold text-emerald-700 tabular-nums">
                     {formatMoney(Number(data.today_bank_in))}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500">Çıkış</div>
+                  <div className="text-xs text-baykus-muted">Çıkış</div>
                   <div className="font-semibold text-red-700 tabular-nums">
                     {formatMoney(Number(data.today_bank_out))}
                   </div>
@@ -166,7 +166,7 @@ export default function FinanceOverviewPage() {
               <ul className="mt-4 space-y-1 text-sm">
                 {data.bank_accounts.map((a) => (
                   <li key={a.id} className="flex justify-between">
-                    <Link href={`/finance/banks/${a.id}`} className="text-baykus-700 hover:underline">
+                    <Link href={`/finance/banks/${a.id}`} className="text-baykus-primary hover:underline">
                       {a.name}
                     </Link>
                     <span className="tabular-nums font-medium">{formatMoney(Number(a.balance))}</span>
@@ -176,19 +176,19 @@ export default function FinanceOverviewPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 font-semibold text-slate-800">
+          <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-baykus-line font-semibold text-baykus-text">
               Son hareketler
             </div>
             <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-600">
+              <thead className="bg-baykus-bg text-left text-baykus-muted">
                 <tr>
-                  <th className="px-4 py-3">Tarih</th>
-                  <th className="px-4 py-3">Kaynak</th>
-                  <th className="px-4 py-3">Hesap</th>
-                  <th className="px-4 py-3">Tip</th>
-                  <th className="px-4 py-3">Not</th>
-                  <th className="px-4 py-3 text-right">Tutar</th>
+                  <th className="px-3 py-2">Tarih</th>
+                  <th className="px-3 py-2">Kaynak</th>
+                  <th className="px-3 py-2">Hesap</th>
+                  <th className="px-3 py-2">Tip</th>
+                  <th className="px-3 py-2">Not</th>
+                  <th className="px-3 py-2 text-right">Tutar</th>
                 </tr>
               </thead>
               <tbody>
@@ -200,14 +200,14 @@ export default function FinanceOverviewPage() {
                   </tr>
                 )}
                 {data.recent_movements.map((m) => (
-                  <tr key={`${m.source}-${m.id}`} className="border-t border-slate-100">
-                    <td className="px-4 py-2.5 whitespace-nowrap">{m.movement_date}</td>
-                    <td className="px-4 py-2.5">{m.source === "cash" ? "Kasa" : "Banka"}</td>
-                    <td className="px-4 py-2.5">{m.account_name || "—"}</td>
-                    <td className="px-4 py-2.5">{typeLabel(m.source, m.movement_type)}</td>
-                    <td className="px-4 py-2.5 text-slate-500 max-w-xs truncate">{m.note || "—"}</td>
+                  <tr key={`${m.source}-${m.id}`} className="border-t border-baykus-line">
+                    <td className="px-3 py-1.5 whitespace-nowrap">{m.movement_date}</td>
+                    <td className="px-3 py-1.5">{m.source === "cash" ? "Kasa" : "Banka"}</td>
+                    <td className="px-3 py-1.5">{m.account_name || "—"}</td>
+                    <td className="px-3 py-1.5">{typeLabel(m.source, m.movement_type)}</td>
+                    <td className="px-3 py-1.5 text-baykus-muted max-w-xs truncate">{m.note || "—"}</td>
                     <td
-                      className={`px-4 py-2.5 text-right tabular-nums font-medium ${
+                      className={`px-3 py-1.5 text-right tabular-nums font-medium ${
                         m.direction === "in" ? "text-emerald-700" : "text-red-700"
                       }`}
                     >

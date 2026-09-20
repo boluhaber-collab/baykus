@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,12 +10,15 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
 from app.models.product import DEFAULT_WAREHOUSE, Product, ProductVariant, StockMovement
+from app.models.price_list import PriceList, PriceListItem
 from app.models.user import User
 from app.schemas.product import (
     CriticalStockItem,
     ProductCreate,
     ProductDetail,
     ProductListItem,
+    ProductPriceListRef,
+    ProductPricingOut,
     ProductUpdate,
     StockAdjustIn,
     StockAdjustOut,
@@ -577,3 +580,130 @@ def list_movements(
         .all()
     )
     return [_movement_out(m) for m in movements]
+
+
+@router.get("/{product_id}/pricing", response_model=ProductPricingOut)
+def product_pricing(
+    product_id: int,
+    variant_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+) -> ProductPricingOut:
+    """Resolve unit price from active price list, else product/variant sale price; include stock."""
+    product = (
+        db.query(Product)
+        .options(joinedload(Product.variants))
+        .filter(Product.id == product_id)
+        .first()
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+
+    variant: ProductVariant | None = None
+    if variant_id is not None:
+        variant = next((v for v in product.variants if v.id == variant_id), None)
+        if not variant:
+            raise HTTPException(status_code=404, detail="Varyant bulunamadı")
+
+    today = date.today()
+    q = (
+        db.query(PriceListItem, PriceList)
+        .join(PriceList, PriceList.id == PriceListItem.price_list_id)
+        .filter(PriceList.is_active.is_(True), PriceListItem.product_id == product_id)
+    )
+    if variant_id is not None:
+        q = q.filter(
+            (PriceListItem.variant_id == variant_id) | (PriceListItem.variant_id.is_(None))
+        )
+    else:
+        q = q.filter(PriceListItem.variant_id.is_(None))
+    rows = q.order_by(PriceList.id.desc(), PriceListItem.id.desc()).all()
+
+    chosen_item = None
+    chosen_list = None
+    for item, pl in rows:
+        if pl.valid_from and pl.valid_from > today:
+            continue
+        if pl.valid_to and pl.valid_to < today:
+            continue
+        if item.valid_from and item.valid_from > today:
+            continue
+        if item.valid_to and item.valid_to < today:
+            continue
+        chosen_item, chosen_list = item, pl
+        break
+
+    if chosen_item is not None and chosen_list is not None:
+        unit_price = Decimal(chosen_item.unit_price or 0)
+        source = "price_list"
+        pl_id = chosen_list.id
+        pl_name = chosen_list.name
+    elif variant is not None:
+        unit_price = Decimal(variant.price or 0)
+        source = "variant"
+        pl_id = None
+        pl_name = None
+    else:
+        unit_price = Decimal(product.base_price or 0)
+        source = "product"
+        pl_id = None
+        pl_name = None
+
+    if variant is not None:
+        stock_qty = int(variant.stock_qty or 0)
+        name = f"{product.name} / {variant.name}"
+        sku = variant.sku or product.sku
+    else:
+        stock_qty = _variant_stock_sum(product)
+        name = product.name
+        sku = product.sku
+
+    thr = int(product.critical_stock_threshold or 10)
+    return ProductPricingOut(
+        product_id=product.id,
+        variant_id=variant.id if variant else None,
+        name=name,
+        sku=sku,
+        unit_price=unit_price,
+        price_source=source,
+        price_list_id=pl_id,
+        price_list_name=pl_name,
+        stock_qty=stock_qty,
+        critical_stock_threshold=thr,
+        is_critical=stock_qty < thr,
+    )
+
+
+@router.get("/{product_id}/price-lists", response_model=list[ProductPriceListRef])
+def product_price_lists(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+) -> list[ProductPriceListRef]:
+    if not db.get(Product, product_id):
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+    rows = (
+        db.query(PriceListItem, PriceList)
+        .join(PriceList, PriceList.id == PriceListItem.price_list_id)
+        .filter(PriceListItem.product_id == product_id)
+        .order_by(PriceList.name.asc())
+        .all()
+    )
+    out: list[ProductPriceListRef] = []
+    seen: set[int] = set()
+    for item, pl in rows:
+        if pl.id in seen:
+            continue
+        seen.add(pl.id)
+        out.append(
+            ProductPriceListRef(
+                price_list_id=pl.id,
+                price_list_name=pl.name,
+                unit_price=Decimal(item.unit_price or 0),
+                is_active=bool(pl.is_active),
+                valid_from=pl.valid_from,
+                valid_to=pl.valid_to,
+            )
+        )
+    return out
+

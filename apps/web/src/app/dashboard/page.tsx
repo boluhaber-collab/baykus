@@ -53,23 +53,27 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+      <div className="flex flex-wrap items-end justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Gösterge Paneli</h1>
-          <p className="text-slate-500 text-sm">Baykuş Baskı operasyon özeti · canlı veriler</p>
+          <h1 className="text-xl md:text-2xl font-bold text-baykus-text mb-1">Gösterge Paneli</h1>
+          <p className="text-baykus-muted text-sm">Baykuş Baskı operasyon özeti · canlı veriler</p>
         </div>
-        <button
-          onClick={load}
-          className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm hover:bg-slate-700"
-        >
+        <button onClick={load} className="bk-btn-ghost text-sm">
           Yenile
         </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Link href="/orders/new" className="bk-btn-primary text-sm">+ Yeni sipariş</Link>
+        <Link href="/quotes/new" className="bk-btn-ghost text-sm">+ Yeni teklif</Link>
+        <Link href="/cari" className="bk-btn-ghost text-sm">Tahsilat / Cari</Link>
+        <Link href="/orders/kanban" className="bk-btn-ghost text-sm">Kanban</Link>
       </div>
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
-      {loading && !data && <p className="text-slate-500 text-sm mb-4">Yükleniyor…</p>}
+      {loading && !data && <p className="text-baykus-muted text-sm mb-4">Yükleniyor…</p>}
 
       {data && (
         <>
@@ -77,10 +81,10 @@ export default function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-6">
             <Link
               href="/orders"
-              className="rounded-xl border border-sky-200 bg-sky-50 px-5 py-4 hover:shadow-sm transition"
+              className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 hover:shadow-sm transition"
             >
               <div className="text-xs text-sky-800">Bugün sipariş</div>
-              <div className="mt-1 text-2xl font-bold text-sky-900">{data.orders_today_count}</div>
+              <div className="mt-0.5 text-xl font-bold text-sky-900">{data.orders_today_count}</div>
               <div className="text-xs text-sky-700 mt-1 tabular-nums">
                 {formatMoney(Number(data.orders_today_revenue))}
               </div>
@@ -88,10 +92,10 @@ export default function DashboardPage() {
 
             <Link
               href="/orders"
-              className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-4 hover:shadow-sm transition"
+              className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 hover:shadow-sm transition"
             >
               <div className="text-xs text-violet-800">Bu ay sipariş / ciro</div>
-              <div className="mt-1 text-2xl font-bold text-violet-900">{data.orders_month_count}</div>
+              <div className="mt-0.5 text-xl font-bold text-violet-900">{data.orders_month_count}</div>
               <div className="text-xs text-violet-700 mt-1 tabular-nums">
                 {formatMoney(Number(data.orders_month_revenue))}
               </div>
@@ -99,25 +103,25 @@ export default function DashboardPage() {
 
             <Link
               href="/orders/kanban"
-              className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 hover:shadow-sm transition"
+              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 hover:shadow-sm transition"
             >
               <div className="text-xs text-amber-800">Açık siparişler</div>
-              <div className="mt-1 text-2xl font-bold text-amber-900">{data.open_orders}</div>
+              <div className="mt-0.5 text-xl font-bold text-amber-900">{data.open_orders}</div>
               <div className="text-xs text-amber-700 mt-1">Kanban →</div>
             </Link>
 
             <Link
               href="/stock/critical"
-              className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 hover:shadow-sm transition"
+              className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 hover:shadow-sm transition"
             >
               <div className="text-xs text-red-800">Kritik stok</div>
-              <div className="mt-1 text-2xl font-bold text-red-900">{data.critical_stock_count}</div>
+              <div className="mt-0.5 text-xl font-bold text-red-900">{data.critical_stock_count}</div>
               <div className="text-xs text-red-700 mt-1">Kritik liste →</div>
             </Link>
 
             <Link
               href="/cari"
-              className="rounded-xl border border-orange-200 bg-orange-50 px-5 py-4 hover:shadow-sm transition"
+              className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 hover:shadow-sm transition"
             >
               <div className="text-xs text-orange-800">Açık alacaklar</div>
               <div className="mt-1 text-xl font-bold text-orange-900 tabular-nums">
@@ -130,7 +134,7 @@ export default function DashboardPage() {
 
             <Link
               href="/finance/cash"
-              className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 hover:shadow-sm transition"
+              className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 hover:shadow-sm transition"
             >
               <div className="text-xs text-emerald-800">Kasa bakiyesi</div>
               <div className="mt-1 text-xl font-bold text-emerald-900 tabular-nums">
@@ -141,7 +145,7 @@ export default function DashboardPage() {
 
             <Link
               href="/finance/banks"
-              className="rounded-xl border border-cyan-200 bg-cyan-50 px-5 py-4 hover:shadow-sm transition"
+              className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 hover:shadow-sm transition"
             >
               <div className="text-xs text-cyan-800">Banka bakiyeleri</div>
               <div className="mt-1 text-xl font-bold text-cyan-900 tabular-nums">
@@ -152,23 +156,23 @@ export default function DashboardPage() {
 
             <Link
               href="/finance"
-              className="rounded-xl border border-slate-200 bg-white px-5 py-4 hover:shadow-sm transition"
+              className="rounded-xl border border-baykus-line bg-white px-3 py-2 hover:shadow-sm transition"
             >
-              <div className="text-xs text-slate-600">Toplam likidite</div>
-              <div className="mt-1 text-xl font-bold text-baykus-700 tabular-nums">
+              <div className="text-xs text-baykus-muted">Toplam likidite</div>
+              <div className="mt-1 text-xl font-bold text-baykus-primary tabular-nums">
                 {formatMoney(Number(data.total_liquidity))}
               </div>
-              <div className="text-xs text-slate-500 mt-1">
+              <div className="text-xs text-baykus-muted mt-1">
                 {data.products_count} ürün · Finans →
               </div>
             </Link>
           </div>
 
           {/* Kanban status counts */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm mb-6">
+          <div className="rounded-xl border border-baykus-line bg-white p-5 shadow-sm mb-6">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-slate-800">Sipariş durumları</h2>
-              <Link href="/orders/kanban" className="text-sm text-baykus-700 hover:underline">
+              <h2 className="font-semibold text-baykus-text">Sipariş durumları</h2>
+              <Link href="/orders/kanban" className="text-sm text-baykus-primary hover:underline">
                 Kanban
               </Link>
             </div>
@@ -188,13 +192,13 @@ export default function DashboardPage() {
           {/* Upcoming special days */}
           <div className="rounded-xl border border-pink-200 bg-pink-50/50 p-5 shadow-sm mb-6">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-slate-800">Yaklaşan özel günler (30 gün)</h2>
-              <Link href="/crm/special-days" className="text-sm text-baykus-700 hover:underline">
+              <h2 className="font-semibold text-baykus-text">Yaklaşan özel günler (30 gün)</h2>
+              <Link href="/crm/special-days" className="text-sm text-baykus-primary hover:underline">
                 Tümü
               </Link>
             </div>
             {!data.upcoming_special_days || data.upcoming_special_days.length === 0 ? (
-              <p className="text-sm text-slate-500">Önümüzdeki 30 günde özel gün yok.</p>
+              <p className="text-sm text-baykus-muted">Önümüzdeki 30 günde özel gün yok.</p>
             ) : (
               <ul className="space-y-2">
                 {data.upcoming_special_days.slice(0, 8).map((d) => (
@@ -203,10 +207,10 @@ export default function DashboardPage() {
                     className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-pink-100 px-3 py-2 text-sm"
                   >
                     <div>
-                      <span className="font-medium text-slate-800">{d.name}</span>
-                      <span className="ml-2 text-xs text-slate-500">{d.day_type}</span>
+                      <span className="font-medium text-baykus-text">{d.name}</span>
+                      <span className="ml-2 text-xs text-baykus-muted">{d.day_type}</span>
                       {d.customer_name && (
-                        <span className="ml-2 text-xs text-slate-500">· {d.customer_name}</span>
+                        <span className="ml-2 text-xs text-baykus-muted">· {d.customer_name}</span>
                       )}
                     </div>
                     <span className="text-xs font-semibold text-pink-800 tabular-nums">
@@ -220,18 +224,18 @@ export default function DashboardPage() {
 
           <div className="grid gap-6 lg:grid-cols-2 mb-6">
             {/* Recent orders */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-                <h2 className="font-semibold text-slate-800">Son siparişler</h2>
-                <Link href="/orders" className="text-sm text-baykus-700 hover:underline">
+            <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-baykus-line">
+                <h2 className="font-semibold text-baykus-text">Son siparişler</h2>
+                <Link href="/orders" className="text-sm text-baykus-primary hover:underline">
                   Tümü
                 </Link>
               </div>
               {data.recent_orders.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-slate-500">Henüz sipariş yok.</p>
+                <p className="px-5 py-6 text-sm text-baykus-muted">Henüz sipariş yok.</p>
               ) : (
                 <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-slate-600">
+                  <thead className="bg-baykus-bg text-left text-baykus-muted">
                     <tr>
                       <th className="px-4 py-2">No</th>
                       <th className="px-4 py-2">Müşteri</th>
@@ -241,13 +245,13 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {data.recent_orders.map((o) => (
-                      <tr key={o.id} className="border-t border-slate-100 hover:bg-slate-50">
+                      <tr key={o.id} className="border-t border-baykus-line hover:bg-baykus-bg">
                         <td className="px-4 py-2">
-                          <Link href={`/orders/${o.id}`} className="text-baykus-700 hover:underline">
+                          <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline">
                             {o.order_number}
                           </Link>
                         </td>
-                        <td className="px-4 py-2 text-slate-700">{o.customer_name || "—"}</td>
+                        <td className="px-4 py-2 text-baykus-text">{o.customer_name || "—"}</td>
                         <td className="px-4 py-2">
                           <span
                             className={`inline-block rounded px-2 py-0.5 text-xs ${statusBadgeClass(o.status)}`}
@@ -266,18 +270,18 @@ export default function DashboardPage() {
             </div>
 
             {/* Critical stock */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-                <h2 className="font-semibold text-slate-800">Kritik stok (öncelikli)</h2>
-                <Link href="/stock/critical" className="text-sm text-baykus-700 hover:underline">
+            <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-baykus-line">
+                <h2 className="font-semibold text-baykus-text">Kritik stok (öncelikli)</h2>
+                <Link href="/stock/critical" className="text-sm text-baykus-primary hover:underline">
                   Kritik stok
                 </Link>
               </div>
               {data.low_stock_items.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-slate-500">Kritik stok kalemi yok.</p>
+                <p className="px-5 py-6 text-sm text-baykus-muted">Kritik stok kalemi yok.</p>
               ) : (
                 <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-slate-600">
+                  <thead className="bg-baykus-bg text-left text-baykus-muted">
                     <tr>
                       <th className="px-4 py-2">SKU</th>
                       <th className="px-4 py-2">Ürün</th>
@@ -289,21 +293,21 @@ export default function DashboardPage() {
                     {data.low_stock_items.map((i) => (
                       <tr
                         key={`${i.product_id}-${i.variant_id ?? 0}`}
-                        className="border-t border-slate-100 hover:bg-slate-50"
+                        className="border-t border-baykus-line hover:bg-baykus-bg"
                       >
                         <td className="px-4 py-2">
                           <Link
                             href={`/products/${i.product_id}`}
-                            className="text-baykus-700 hover:underline font-mono text-xs"
+                            className="text-baykus-primary hover:underline font-mono text-xs"
                           >
                             {i.sku}
                           </Link>
                         </td>
-                        <td className="px-4 py-2 text-slate-700">{i.name}</td>
+                        <td className="px-4 py-2 text-baykus-text">{i.name}</td>
                         <td className="px-4 py-2 text-right font-semibold text-red-700">
                           {i.stock_qty}
                         </td>
-                        <td className="px-4 py-2 text-right text-slate-500">{i.threshold}</td>
+                        <td className="px-4 py-2 text-right text-baykus-muted">{i.threshold}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -314,15 +318,15 @@ export default function DashboardPage() {
 
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Recent cari payments */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-                <h2 className="font-semibold text-slate-800">Son cari tahsilatlar</h2>
-                <Link href="/cari" className="text-sm text-baykus-700 hover:underline">
+            <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-baykus-line">
+                <h2 className="font-semibold text-baykus-text">Son cari tahsilatlar</h2>
+                <Link href="/cari" className="text-sm text-baykus-primary hover:underline">
                   Cari
                 </Link>
               </div>
               {data.recent_cari_payments.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-slate-500">Henüz tahsilat yok.</p>
+                <p className="px-5 py-6 text-sm text-baykus-muted">Henüz tahsilat yok.</p>
               ) : (
                 <ul className="divide-y divide-slate-100 text-sm">
                   {data.recent_cari_payments.map((p) => (
@@ -330,11 +334,11 @@ export default function DashboardPage() {
                       <div>
                         <Link
                           href={`/customers/${p.customer_id}`}
-                          className="font-medium text-slate-800 hover:underline"
+                          className="font-medium text-baykus-text hover:underline"
                         >
                           {p.customer_name || `#${p.customer_id}`}
                         </Link>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-baykus-muted">
                           {fmtDate(p.movement_date)}
                           {p.order_number ? ` · ${p.order_number}` : ""}
                           {p.note ? ` · ${p.note}` : ""}
@@ -350,15 +354,15 @@ export default function DashboardPage() {
             </div>
 
             {/* Recent finance */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-                <h2 className="font-semibold text-slate-800">Son kasa / banka hareketleri</h2>
-                <Link href="/finance" className="text-sm text-baykus-700 hover:underline">
+            <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-baykus-line">
+                <h2 className="font-semibold text-baykus-text">Son kasa / banka hareketleri</h2>
+                <Link href="/finance" className="text-sm text-baykus-primary hover:underline">
                   Finans
                 </Link>
               </div>
               {data.recent_finance_movements.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-slate-500">Henüz hareket yok.</p>
+                <p className="px-5 py-6 text-sm text-baykus-muted">Henüz hareket yok.</p>
               ) : (
                 <ul className="divide-y divide-slate-100 text-sm">
                   {data.recent_finance_movements.map((m) => (
@@ -367,13 +371,13 @@ export default function DashboardPage() {
                       className="px-5 py-3 flex justify-between gap-3"
                     >
                       <div>
-                        <div className="font-medium text-slate-800">
+                        <div className="font-medium text-baykus-text">
                           {financeTypeLabel(m.source, m.movement_type)}
-                          <span className="ml-2 text-xs font-normal text-slate-500">
+                          <span className="ml-2 text-xs font-normal text-baykus-muted">
                             {m.account_name || (m.source === "cash" ? "Kasa" : "Banka")}
                           </span>
                         </div>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-baykus-muted">
                           {fmtDate(m.movement_date)}
                           {m.note ? ` · ${m.note}` : ""}
                         </div>

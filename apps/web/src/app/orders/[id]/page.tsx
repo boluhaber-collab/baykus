@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import OrderForm, { OrderFormPayload } from "@/components/OrderForm";
+import { PageHeader, StatusBadge, Card } from "@/components/ui";
 import {
   ORDER_STATUSES,
   OrderDesignFile,
@@ -13,6 +14,7 @@ import {
   downloadPdf,
   formatMoney,
   statusBadgeClass,
+  BankAccount,
 } from "@/lib/api";
 
 export default function OrderDetailPage() {
@@ -24,12 +26,22 @@ export default function OrderDetailPage() {
   const [statusBusy, setStatusBusy] = useState(false);
   const [designFiles, setDesignFiles] = useState<OrderDesignFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState("nakit");
+  const [payNotes, setPayNotes] = useState("");
+  const [postCari, setPostCari] = useState(true);
+  const [postFinance, setPostFinance] = useState(false);
+  const [financeMethod, setFinanceMethod] = useState<"cash" | "bank">("cash");
+  const [bankId, setBankId] = useState("");
+  const [banks, setBanks] = useState<BankAccount[]>([]);
+  const [payBusy, setPayBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
     try {
       const data = await apiFetch<OrderDetail>(`/api/orders/${id}`);
       setOrder(data);
+      setPayAmount(data.remaining_amount ? String(data.remaining_amount) : "");
       try {
         const files = await apiFetch<OrderDesignFile[]>(`/api/orders/${id}/design-files`);
         setDesignFiles(files);
@@ -40,6 +52,12 @@ export default function OrderDetailPage() {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
   }, [id]);
+
+  useEffect(() => {
+    apiFetch<BankAccount[]>("/api/finance/banks?active=true")
+      .then(setBanks)
+      .catch(() => setBanks([]));
+  }, []);
 
   async function uploadDesign(file: File) {
     setUploading(true);
@@ -94,6 +112,33 @@ export default function OrderDetailPage() {
     await load();
   }
 
+  async function submitPayment(e: FormEvent) {
+    e.preventDefault();
+    setPayBusy(true);
+    setError("");
+    try {
+      const updated = await apiFetch<OrderDetail>(`/api/orders/${id}/payments`, {
+        method: "POST",
+        body: JSON.stringify({
+          amount: Number(payAmount),
+          method: payMethod,
+          notes: payNotes.trim() || null,
+          post_to_cari: postCari,
+          post_to_finance: postFinance,
+          finance_method: postFinance ? financeMethod : null,
+          bank_account_id: postFinance && financeMethod === "bank" && bankId ? Number(bankId) : null,
+        }),
+      });
+      setOrder(updated);
+      setPayAmount(updated.remaining_amount ? String(updated.remaining_amount) : "");
+      setPayNotes("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tahsilat kaydı başarısız");
+    } finally {
+      setPayBusy(false);
+    }
+  }
+
   if (!order && !error) {
     return <div className="text-slate-500">Yükleniyor…</div>;
   }
@@ -113,12 +158,20 @@ export default function OrderDetailPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/orders" className="text-sm text-baykus-600 hover:underline">
-            ← Siparişler
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-2">{order.order_number}</h1>
+          <div className="text-xs text-baykus-muted mb-1">
+            <Link href="/orders" className="text-baykus-primary hover:underline">Siparişler</Link>
+            <span className="mx-1">/</span>
+            <span className="font-medium text-baykus-text">{order.order_number}</span>
+          </div>
+          <h1 className="text-2xl font-bold text-baykus-text mt-1">{order.order_number}</h1>
           <p className="text-slate-500 text-sm">
-            {order.customer_name || "Müşteri yok"} ·{" "}
+            {order.customer_id ? (
+              <Link href={`/customers/${order.customer_id}`} className="text-baykus-primary hover:underline">
+                {order.customer_name || `Müşteri #${order.customer_id}`}
+              </Link>
+            ) : (
+              "Müşteri yok"
+            )} ·{" "}
             <span
               className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass(order.status)}`}
             >
@@ -202,6 +255,100 @@ export default function OrderDetailPage() {
               </div>
             </div>
           </div>
+
+          {Number(order.remaining_amount) > 0 && (
+            <form onSubmit={submitPayment} className="rounded-xl border border-baykus-line bg-white p-4 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-sm text-baykus-text">Tahsilat kaydet</h2>
+                <span className="text-xs text-baykus-muted">
+                  Kalan {formatMoney(Number(order.remaining_amount))}
+                </span>
+              </div>
+              <div className="grid md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-[11px] text-baykus-muted mb-1">Tutar (₺)</label>
+                  <input
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    required
+                    className="bk-input"
+                    value={payAmount}
+                    onChange={(e) => setPayAmount(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-baykus-muted mb-1">Yöntem</label>
+                  <select className="bk-input" value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                    <option value="nakit">Nakit</option>
+                    <option value="havale">Havale / EFT</option>
+                    <option value="kredi_karti">Kredi kartı</option>
+                    <option value="cek">Çek</option>
+                    <option value="diger">Diğer</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-[11px] text-baykus-muted mb-1">Not</label>
+                  <input className="bk-input" value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-xs text-baykus-text">
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="checkbox" checked={postCari} onChange={(e) => setPostCari(e.target.checked)} />
+                  Cariye işle
+                </label>
+                <label className="inline-flex items-center gap-1.5">
+                  <input type="checkbox" checked={postFinance} onChange={(e) => setPostFinance(e.target.checked)} />
+                  Kasa / bankaya işle
+                </label>
+                {postFinance && (
+                  <>
+                    <select
+                      className="bk-input w-auto py-1"
+                      value={financeMethod}
+                      onChange={(e) => setFinanceMethod(e.target.value as "cash" | "bank")}
+                    >
+                      <option value="cash">Kasa</option>
+                      <option value="bank">Banka</option>
+                    </select>
+                    {financeMethod === "bank" && (
+                      <select
+                        className="bk-input w-auto py-1 min-w-[160px]"
+                        value={bankId}
+                        onChange={(e) => setBankId(e.target.value)}
+                        required
+                      >
+                        <option value="">Banka seçin</option>
+                        {banks.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                )}
+                <button type="submit" disabled={payBusy} className="bk-btn-primary ml-auto">
+                  {payBusy ? "Kaydediliyor…" : "Tahsilat Kaydet"}
+                </button>
+              </div>
+              {(order.payments || []).length > 0 && (
+                <ul className="text-xs text-baykus-muted divide-y divide-baykus-line border-t border-baykus-line pt-2">
+                  {order.payments.map((pay) => (
+                    <li key={pay.id} className="py-1.5 flex justify-between gap-2">
+                      <span>
+                        {String(pay.paid_at).slice(0, 10)} · {pay.method}
+                        {pay.notes ? ` — ${pay.notes}` : ""}
+                      </span>
+                      <span className="tabular-nums font-medium text-emerald-700">
+                        {formatMoney(Number(pay.amount))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </form>
+          )}
 
           {order.notes && (
             <div className="rounded-xl border bg-white p-4 shadow-sm text-sm text-slate-700">

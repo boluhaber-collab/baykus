@@ -110,7 +110,18 @@ class CustomerOrderBrief(BaseModel):
     created_at: datetime
 
 
+
+class CustomerQuoteBrief(BaseModel):
+    id: int
+    quote_number: str
+    status: str
+    total_amount: Decimal
+    valid_until: date | None = None
+    created_at: datetime
+
+
 class CustomerDetailOut(CustomerOut):
     recent_orders: list[CustomerOrderBrief] = []
+    recent_quotes: list[CustomerQuoteBrief] = []
     recent_movements: list[CariMovementOut] = []
     timeline: list[dict] = []

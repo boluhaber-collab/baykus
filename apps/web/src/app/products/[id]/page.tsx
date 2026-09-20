@@ -10,6 +10,7 @@ import {
   apiFetch,
   formatMoney,
   stockBadgeClass,
+  ProductPriceListRef,
 } from "@/lib/api";
 
 export default function ProductDetailPage() {
@@ -25,12 +26,20 @@ export default function ProductDetailPage() {
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [stockBusy, setStockBusy] = useState(false);
+  const [priceLists, setPriceLists] = useState<ProductPriceListRef[]>([]);
+
 
   const load = useCallback(async () => {
     setError("");
     try {
       const data = await apiFetch<ProductDetail>(`/api/products/${id}`);
       setProduct(data);
+      try {
+        const pls = await apiFetch<ProductPriceListRef[]>(`/api/products/${id}/price-lists`);
+        setPriceLists(pls);
+      } catch {
+        setPriceLists([]);
+      }
       if (data.variants?.length && !variantId) {
         setVariantId(String(data.variants[0].id));
       }
@@ -111,10 +120,12 @@ export default function ProductDetailPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/products" className="text-sm text-baykus-600 hover:underline">
-            ← Ürünler
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-2">{product.name}</h1>
+          <div className="text-xs text-baykus-muted mb-1">
+            <Link href="/products" className="text-baykus-primary hover:underline">Ürünler</Link>
+            <span className="mx-1">/</span>
+            <span className="font-medium text-baykus-text">{product.sku}</span>
+          </div>
+          <h1 className="text-2xl font-bold text-baykus-text mt-1">{product.name}</h1>
           <p className="text-slate-500 text-sm font-mono">
             {product.sku}
             {product.brand ? ` · ${product.brand}` : ""}
@@ -178,6 +189,40 @@ export default function ProductDetailPage() {
                 {product.warehouse || "Ana Depo"} · {thr}
               </div>
             </div>
+          </div>
+
+
+          {(product.is_critical || (product.product_type !== "hizmet" && total < thr)) && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+              Kritik stok uyarısı: mevcut {total} / eşik {thr}. Sipariş ve teklif formlarında stok kontrolü yapılır.
+            </div>
+          )}
+
+          <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-baykus-line flex items-center justify-between">
+              <h2 className="font-semibold text-sm text-baykus-text">Bağlı fiyat listeleri</h2>
+              <Link href="/price-lists" className="text-xs text-baykus-primary hover:underline">
+                Fiyat listeleri
+              </Link>
+            </div>
+            {priceLists.length === 0 ? (
+              <p className="px-4 py-4 text-sm text-baykus-muted">Bu ürün henüz bir fiyat listesinde değil.</p>
+            ) : (
+              <ul className="divide-y divide-baykus-line text-sm">
+                {priceLists.map((pl) => (
+                  <li key={pl.price_list_id} className="px-4 py-2.5 flex justify-between gap-3">
+                    <Link
+                      href={`/price-lists/${pl.price_list_id}`}
+                      className="font-medium text-baykus-primary hover:underline"
+                    >
+                      {pl.price_list_name}
+                      {!pl.is_active ? " (pasif)" : ""}
+                    </Link>
+                    <span className="tabular-nums text-baykus-text">{formatMoney(Number(pl.unit_price))}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {product.description && (

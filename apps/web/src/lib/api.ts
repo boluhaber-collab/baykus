@@ -124,8 +124,18 @@ export type CustomerOrderBrief = {
   created_at: string;
 };
 
+export type CustomerQuoteBrief = {
+  id: number;
+  quote_number: string;
+  status: string;
+  total_amount: number;
+  valid_until?: string | null;
+  created_at: string;
+};
+
 export type CustomerDetail = Customer & {
   recent_orders: CustomerOrderBrief[];
+  recent_quotes?: CustomerQuoteBrief[];
   recent_movements: CariMovement[];
   timeline: {
     kind: string;
@@ -370,6 +380,30 @@ export type Product = {
   photo_url?: string | null;
 };
 
+
+export type ProductPricingInfo = {
+  product_id: number;
+  variant_id?: number | null;
+  name: string;
+  sku: string;
+  unit_price: number;
+  price_source: "price_list" | "product" | "variant" | string;
+  price_list_id?: number | null;
+  price_list_name?: string | null;
+  stock_qty: number;
+  critical_stock_threshold: number;
+  is_critical: boolean;
+};
+
+export type ProductPriceListRef = {
+  price_list_id: number;
+  price_list_name: string;
+  unit_price: number;
+  is_active: boolean;
+  valid_from?: string | null;
+  valid_to?: string | null;
+};
+
 export type ProductDetail = Product & {
   supplier_name?: string | null;
   description?: string | null;
@@ -402,20 +436,30 @@ export function formatMoney(n: number): string {
   return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(n);
 }
 
+/** Desktop SIPARIS_DURUM_RENKLERI badge backgrounds */
+export const ORDER_STATUS_COLORS: Record<string, string> = {
+  "Sipariş Alındı": "#e0f2fe",
+  "Hazırlanıyor": "#fef3c7",
+  "Baskıda": "#ddd6fe",
+  "Hazır": "#dcfce7",
+  "Teslim Edildi": "#e5e7eb",
+  "Sipariş İptali": "#fee2e2",
+};
+
 export function statusBadgeClass(status: string): string {
   switch (status) {
     case "Sipariş Alındı":
-      return "bg-sky-100 text-sky-800";
+      return "bg-[#e0f2fe] text-sky-900";
     case "Hazırlanıyor":
-      return "bg-amber-100 text-amber-800";
+      return "bg-[#fef3c7] text-amber-900";
     case "Baskıda":
-      return "bg-violet-100 text-violet-800";
+      return "bg-[#ddd6fe] text-violet-900";
     case "Hazır":
-      return "bg-emerald-100 text-emerald-800";
+      return "bg-[#dcfce7] text-emerald-900";
     case "Teslim Edildi":
-      return "bg-slate-200 text-slate-700";
+      return "bg-[#e5e7eb] text-slate-800";
     case "Sipariş İptali":
-      return "bg-red-100 text-red-800";
+      return "bg-[#fee2e2] text-red-800";
     default:
       return "bg-slate-100 text-slate-700";
   }
@@ -776,18 +820,34 @@ export type Expense = {
   created_at: string;
 };
 
+/** Desktop TEKLIF_DURUM_RENKLERI (+ web status aliases) */
+export const QUOTE_STATUS_COLORS: Record<string, string> = {
+  Açık: "#f5f3ff",
+  Taslak: "#f5f3ff",
+  Gönderildi: "#e0f2fe",
+  Onaylandı: "#dcfce7",
+  Reddedildi: "#fee2e2",
+  "Süresi Geçti": "#ffedd5",
+  İptal: "#fee2e2",
+  "Siparişe Dönüştü": "#ddd6fe",
+};
+
 export function quoteStatusBadgeClass(status: string): string {
   switch (status) {
+    case "Açık":
     case "Taslak":
-      return "bg-slate-100 text-slate-700";
+      return "bg-[#f5f3ff] text-violet-900";
     case "Gönderildi":
-      return "bg-sky-100 text-sky-800";
+      return "bg-[#e0f2fe] text-sky-900";
     case "Onaylandı":
-      return "bg-emerald-100 text-emerald-800";
+      return "bg-[#dcfce7] text-emerald-900";
     case "Reddedildi":
-      return "bg-red-100 text-red-800";
+    case "İptal":
+      return "bg-[#fee2e2] text-red-800";
+    case "Süresi Geçti":
+      return "bg-[#ffedd5] text-orange-900";
     case "Siparişe Dönüştü":
-      return "bg-violet-100 text-violet-800";
+      return "bg-[#ddd6fe] text-violet-900";
     default:
       return "bg-slate-100 text-slate-700";
   }

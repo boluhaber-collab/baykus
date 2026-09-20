@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -164,3 +164,26 @@ class CriticalStockItem(BaseModel):
     stock_qty: int
     critical_stock_threshold: int
     warehouse: str | None
+
+
+class ProductPricingOut(BaseModel):
+    product_id: int
+    variant_id: int | None = None
+    name: str
+    sku: str
+    unit_price: Decimal
+    price_source: str  # price_list | product | variant
+    price_list_id: int | None = None
+    price_list_name: str | None = None
+    stock_qty: int
+    critical_stock_threshold: int
+    is_critical: bool
+
+
+class ProductPriceListRef(BaseModel):
+    price_list_id: int
+    price_list_name: str
+    unit_price: Decimal
+    is_active: bool
+    valid_from: date | None = None
+    valid_to: date | None = None

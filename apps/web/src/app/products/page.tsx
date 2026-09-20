@@ -55,13 +55,13 @@ export default function ProductsPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Ürünler</h1>
-          <p className="text-slate-500 text-sm">Katalog · varyant · stok rozetleri</p>
+          <h1 className="text-2xl font-bold text-baykus-text">Ürünler</h1>
+          <p className="text-baykus-muted text-sm">Katalog · varyant · stok rozetleri</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href="/stock"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
           >
             Stok özeti
           </Link>
@@ -73,7 +73,7 @@ export default function ProductsPage() {
           </Link>
           <Link
             href="/products/new"
-            className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm font-medium"
+            className="rounded-lg bg-baykus-primary text-white px-4 py-2 text-sm font-medium"
           >
             + Yeni Ürün
           </Link>
@@ -85,12 +85,12 @@ export default function ProductsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Ad / SKU / marka ara…"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm min-w-[200px]"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm min-w-[200px]"
         />
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
         >
           <option value="">Tüm kategoriler</option>
           {categories.map((c) => (
@@ -102,13 +102,13 @@ export default function ProductsPage() {
         <select
           value={productType}
           onChange={(e) => setProductType(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
         >
           <option value="">Tüm türler</option>
           <option value="stoklu">Stoklu</option>
           <option value="hizmet">Hizmet</option>
         </select>
-        <label className="flex items-center gap-2 text-sm text-slate-700 px-2">
+        <label className="flex items-center gap-2 text-sm text-baykus-text px-2">
           <input
             type="checkbox"
             checked={criticalOnly}
@@ -128,18 +128,18 @@ export default function ProductsPage() {
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+          <thead className="bg-baykus-bg text-left text-baykus-muted">
             <tr>
-              <th className="px-4 py-3">SKU</th>
-              <th className="px-4 py-3">Ad</th>
-              <th className="px-4 py-3">Kategori</th>
-              <th className="px-4 py-3">Tür</th>
-              <th className="px-4 py-3">Satış</th>
-              <th className="px-4 py-3">Stok</th>
-              <th className="px-4 py-3">Varyant</th>
-              <th className="px-4 py-3"></th>
+              <th className="px-3 py-2">SKU</th>
+              <th className="px-3 py-2">Ad</th>
+              <th className="px-3 py-2">Kategori</th>
+              <th className="px-3 py-2">Tür</th>
+              <th className="px-3 py-2">Satış</th>
+              <th className="px-3 py-2">Stok</th>
+              <th className="px-3 py-2">Varyant</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -150,23 +150,23 @@ export default function ProductsPage() {
               return (
                 <tr
                   key={p.id}
-                  className={`border-t border-slate-100 hover:bg-slate-50 ${critical ? "bg-red-50/40" : ""}`}
+                  className={`border-t border-baykus-line hover:bg-baykus-bg ${critical ? "bg-red-50/40" : ""}`}
                 >
-                  <td className="px-4 py-3 font-mono text-xs">{p.sku}</td>
-                  <td className="px-4 py-3 font-medium">
-                    <Link href={`/products/${p.id}`} className="text-baykus-700 hover:underline">
+                  <td className="px-3 py-2 font-mono text-xs">{p.sku}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <Link href={`/products/${p.id}`} className="text-baykus-primary hover:underline">
                       {p.name}
                     </Link>
                     {p.brand && <span className="block text-xs text-slate-400">{p.brand}</span>}
                   </td>
-                  <td className="px-4 py-3">{p.category || "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2">{p.category || "—"}</td>
+                  <td className="px-3 py-2">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">
                       {p.product_type === "hizmet" ? "Hizmet" : "Stoklu"}
                     </span>
                   </td>
-                  <td className="px-4 py-3">{formatMoney(Number(p.base_price))}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2">{formatMoney(Number(p.base_price))}</td>
+                  <td className="px-3 py-2">
                     {p.product_type === "hizmet" ? (
                       <span className="text-slate-400">—</span>
                     ) : (
@@ -178,9 +178,9 @@ export default function ProductsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{p.variants_count ?? 0}</td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
-                    <Link href={`/products/${p.id}`} className="text-baykus-600 hover:underline">
+                  <td className="px-3 py-2 text-baykus-muted">{p.variants_count ?? 0}</td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap space-x-2">
+                    <Link href={`/products/${p.id}`} className="text-baykus-primary hover:underline">
                       Aç
                     </Link>
                     <button onClick={() => onDelete(p.id)} className="text-red-600 hover:underline">

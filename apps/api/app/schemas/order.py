@@ -162,3 +162,16 @@ class KanbanColumn(BaseModel):
 
 class KanbanBoard(BaseModel):
     columns: list[KanbanColumn]
+
+
+class PaymentCreate(BaseModel):
+    amount: Decimal = Field(gt=0)
+    method: str = Field(default="nakit", max_length=50)
+    notes: str | None = None
+    paid_at: datetime | None = None
+    post_to_cari: bool = True
+    post_to_finance: bool = False
+    finance_method: str | None = Field(default=None, pattern="^(cash|bank)$")
+    bank_account_id: int | None = None
+
+

@@ -59,19 +59,19 @@ export default function OrdersListPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Siparişler</h1>
-          <p className="text-slate-500 text-sm">Liste · kanal / tasarım filtresi · detay</p>
+          <h1 className="text-2xl font-bold text-baykus-text">Siparişler</h1>
+          <p className="text-baykus-muted text-sm">Liste · kanal / tasarım filtresi · detay</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href="/orders/kanban"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
           >
             Kanban
           </Link>
           <Link
             href="/orders/new"
-            className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm font-medium"
+            className="rounded-lg bg-baykus-primary text-white px-4 py-2 text-sm font-medium"
           >
             + Yeni Sipariş
           </Link>
@@ -83,12 +83,12 @@ export default function OrdersListPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="No / müşteri / not ara…"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm min-w-[200px]"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm min-w-[200px]"
         />
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
         >
           <option value="">Tüm durumlar</option>
           {ORDER_STATUSES.map((s) => (
@@ -100,7 +100,7 @@ export default function OrdersListPage() {
         <select
           value={channel}
           onChange={(e) => setChannel(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
         >
           <option value="">Tüm kanallar</option>
           {ORDER_CHANNELS.map((c) => (
@@ -112,7 +112,7 @@ export default function OrdersListPage() {
         <select
           value={designStatus}
           onChange={(e) => setDesignStatus(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
         >
           <option value="">Tüm tasarım</option>
           {DESIGN_STATUSES.map((d) => (
@@ -130,19 +130,19 @@ export default function OrdersListPage() {
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+          <thead className="bg-baykus-bg text-left text-baykus-muted">
             <tr>
-              <th className="px-4 py-3">Sipariş No</th>
-              <th className="px-4 py-3">Müşteri</th>
-              <th className="px-4 py-3">Durum</th>
-              <th className="px-4 py-3">Kanal</th>
-              <th className="px-4 py-3">Tasarım</th>
-              <th className="px-4 py-3">Toplam</th>
-              <th className="px-4 py-3">Kalan</th>
-              <th className="px-4 py-3">Teslim</th>
-              <th className="px-4 py-3"></th>
+              <th className="px-3 py-2">Sipariş No</th>
+              <th className="px-3 py-2">Müşteri</th>
+              <th className="px-3 py-2">Durum</th>
+              <th className="px-3 py-2">Kanal</th>
+              <th className="px-3 py-2">Tasarım</th>
+              <th className="px-3 py-2">Toplam</th>
+              <th className="px-3 py-2">Kalan</th>
+              <th className="px-3 py-2">Teslim</th>
+              <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
@@ -155,22 +155,22 @@ export default function OrdersListPage() {
             )}
             {!loading &&
               items.map((o) => (
-                <tr key={o.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium">
-                    <Link href={`/orders/${o.id}`} className="text-baykus-700 hover:underline">
+                <tr key={o.id} className="border-t border-baykus-line hover:bg-baykus-bg">
+                  <td className="px-3 py-2 font-medium">
+                    <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline">
                       {o.order_number}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{o.customer_name || "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2 text-baykus-muted">{o.customer_name || "—"}</td>
+                  <td className="px-3 py-2">
                     <span
                       className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeClass(o.status)}`}
                     >
                       {o.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{o.channel || "—"}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-2 text-baykus-muted">{o.channel || "—"}</td>
+                  <td className="px-3 py-2">
                     {o.design_status ? (
                       <span
                         className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${designStatusBadgeClass(o.design_status)}`}
@@ -181,13 +181,13 @@ export default function OrdersListPage() {
                       "—"
                     )}
                   </td>
-                  <td className="px-4 py-3">{formatMoney(Number(o.total_amount))}</td>
-                  <td className="px-4 py-3">{formatMoney(Number(o.remaining_amount))}</td>
-                  <td className="px-4 py-3 text-slate-500">
+                  <td className="px-3 py-2">{formatMoney(Number(o.total_amount))}</td>
+                  <td className="px-3 py-2">{formatMoney(Number(o.remaining_amount))}</td>
+                  <td className="px-3 py-2 text-baykus-muted">
                     {o.due_date ? String(o.due_date).slice(0, 10) : "—"}
                   </td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap space-x-2">
-                    <Link href={`/orders/${o.id}`} className="text-baykus-600 hover:underline">
+                  <td className="px-3 py-2 text-right whitespace-nowrap space-x-2">
+                    <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline">
                       Aç
                     </Link>
                     {o.status !== "Sipariş İptali" && (

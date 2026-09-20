@@ -163,11 +163,14 @@ def list_quotes(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış", "muhasebe")),
     status_filter: str | None = Query(default=None, alias="status"),
+    customer_id: int | None = Query(default=None),
     q: str | None = Query(default=None),
     skip: int = 0,
     limit: int = 100,
 ) -> list[QuoteListItem]:
     query = db.query(Quote).options(joinedload(Quote.customer))
+    if customer_id is not None:
+        query = query.filter(Quote.customer_id == customer_id)
     if status_filter:
         if status_filter not in QUOTE_STATUSES:
             raise HTTPException(status_code=400, detail="Geçersiz durum filtresi")

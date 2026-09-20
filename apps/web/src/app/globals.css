@@ -4,8 +4,59 @@
 
 :root {
   color-scheme: light;
+  --baykus-bg: #f4f7fb;
+  --baykus-card: #ffffff;
+  --baykus-line: #d7dee8;
+  --baykus-text: #111827;
+  --baykus-muted: #6b7280;
+  --baykus-primary: #2563eb;
+  --baykus-success: #16a34a;
+  --baykus-splash: #111827;
+  --baykus-accent: #93c5fd;
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-baykus-bg text-baykus-text antialiased;
+}
+
+@layer components {
+  .bk-card {
+    @apply rounded-xl border border-baykus-line bg-baykus-card shadow-card;
+  }
+  .bk-input {
+    @apply w-full rounded-lg border border-baykus-line bg-white px-3 py-2 text-sm text-baykus-text
+      placeholder:text-baykus-muted focus:outline-none focus:ring-2 focus:ring-baykus-primary/30 focus:border-baykus-primary;
+  }
+  .bk-btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition
+      disabled:opacity-60 disabled:cursor-not-allowed;
+  }
+  .bk-btn-primary {
+    @apply bk-btn bg-baykus-primary text-white hover:bg-baykus-primary-dark;
+  }
+  .bk-btn-ghost {
+    @apply bk-btn border border-baykus-line bg-white text-baykus-text hover:bg-baykus-bg;
+  }
+  .bk-btn-danger {
+    @apply bk-btn border border-red-200 text-red-700 hover:bg-red-50;
+  }
+  .bk-table {
+    @apply min-w-full text-sm;
+  }
+  .bk-table thead {
+    @apply bg-baykus-bg text-left text-baykus-muted;
+  }
+  .bk-table th {
+    @apply px-3 py-2 text-xs font-semibold uppercase tracking-wide whitespace-nowrap;
+  }
+  .bk-table td {
+    @apply px-3 py-1.5 border-t border-baykus-line align-middle;
+  }
+  .bk-table tbody tr:hover {
+    @apply bg-baykus-bg/70;
+  }
+  .bk-sticky-header {
+    @apply sticky top-0 z-10 -mx-6 md:-mx-8 px-6 md:px-8 py-3 mb-4
+      bg-baykus-bg/95 backdrop-blur border-b border-baykus-line;
+  }
 }

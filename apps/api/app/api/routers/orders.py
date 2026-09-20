@@ -31,6 +31,8 @@ from app.schemas.order import (
     OrderOut,
     OrderStatusChange,
     OrderUpdate,
+    PaymentCreate,
+    PaymentOut,
 )
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -480,6 +482,99 @@ def work_order_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{order.order_number}-is-emri.pdf"'},
     )
+
+
+
+
+
+@router.post("/{order_id}/payments", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
+def create_payment(
+    order_id: int,
+    payload: PaymentCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin", "satış", "muhasebe")),
+) -> OrderOut:
+    order = _load_order(db, order_id)
+    amount = _dec(payload.amount)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Tutar 0 dan büyük olmalı")
+
+    payment = Payment(
+        order_id=order.id,
+        amount=amount,
+        method=payload.method or "nakit",
+        status="tamamlandi",
+        paid_at=payload.paid_at or datetime.utcnow(),
+        notes=payload.notes,
+    )
+    db.add(payment)
+    db.flush()
+
+    if payload.post_to_cari and order.customer_id:
+        from app.models.customer import CariMovement
+
+        db.add(
+            CariMovement(
+                customer_id=order.customer_id,
+                movement_type="payment",
+                debit=Decimal("0"),
+                credit=amount,
+                movement_date=(payload.paid_at or datetime.utcnow()).date(),
+                order_id=order.id,
+                note=payload.notes or f"Sipariş tahsilatı {order.order_number}",
+            )
+        )
+
+    if payload.post_to_finance and payload.finance_method:
+        from app.models.finance import BankAccount, BankMovement, CashMovement, CashRegister
+
+        note = payload.notes or f"Sipariş tahsilatı {order.order_number}"
+        mov_date = (payload.paid_at or datetime.utcnow()).date()
+        if payload.finance_method == "cash":
+            reg = (
+                db.query(CashRegister)
+                .filter(CashRegister.is_active.is_(True))
+                .order_by(CashRegister.id.asc())
+                .first()
+            )
+            if reg:
+                db.add(
+                    CashMovement(
+                        cash_register_id=reg.id,
+                        movement_type="tahsilat",
+                        amount=amount,
+                        movement_date=mov_date,
+                        note=note,
+                        customer_id=order.customer_id,
+                    )
+                )
+        elif payload.finance_method == "bank":
+            if not payload.bank_account_id:
+                raise HTTPException(status_code=400, detail="Banka hesabı seçilmedi")
+            acc = db.get(BankAccount, payload.bank_account_id)
+            if not acc or not acc.is_active:
+                raise HTTPException(status_code=400, detail="Banka hesabı bulunamadı")
+            db.add(
+                BankMovement(
+                    bank_account_id=acc.id,
+                    movement_type="deposit",
+                    amount=amount,
+                    movement_date=mov_date,
+                    note=note,
+                    customer_id=order.customer_id,
+                )
+            )
+
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="create",
+        entity_type="order_payment",
+        entity_id=payment.id,
+        detail={"order_id": order.id, "amount": float(amount), "method": payment.method},
+    )
+    return _to_out(_load_order(db, order.id))
 
 
 

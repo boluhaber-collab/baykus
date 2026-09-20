@@ -13,6 +13,7 @@ from app.core.deps import get_db, require_roles
 from app.services.audit import write_audit
 from app.models.customer import CARI_MOVEMENT_TYPES, CariMovement, Customer
 from app.models.order import Order
+from app.models.quote import Quote
 from app.models.user import User
 from app.schemas.customer import (
     CariMovementCreate,
@@ -20,6 +21,7 @@ from app.schemas.customer import (
     CustomerCreate,
     CustomerDetailOut,
     CustomerOrderBrief,
+    CustomerQuoteBrief,
     CustomerOut,
     CustomerUpdate,
     ReceivableItem,
@@ -257,6 +259,25 @@ def get_customer_detail(
             )
         )
 
+
+    quotes = (
+        db.query(Quote)
+        .filter(Quote.customer_id == customer_id)
+        .order_by(Quote.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    recent_quotes = [
+        CustomerQuoteBrief(
+            id=q.id,
+            quote_number=q.quote_number,
+            status=q.status,
+            total_amount=q.total_amount or Decimal("0"),
+            valid_until=q.valid_until,
+            created_at=q.created_at,
+        )
+        for q in quotes
+    ]
     movements = (
         db.query(CariMovement)
         .filter(CariMovement.customer_id == customer_id)
@@ -276,6 +297,17 @@ def get_customer_detail(
                 "status": o.status,
                 "amount": float(o.total_amount),
                 "ref_id": o.id,
+            }
+        )
+    for q in recent_quotes:
+        timeline.append(
+            {
+                "kind": "quote",
+                "date": q.created_at.date().isoformat() if q.created_at else None,
+                "label": f"Teklif {q.quote_number}",
+                "status": q.status,
+                "amount": float(q.total_amount),
+                "ref_id": q.id,
             }
         )
     for m in recent_movements:
@@ -304,6 +336,7 @@ def get_customer_detail(
     return CustomerDetailOut(
         **base.model_dump(),
         recent_orders=recent_orders,
+        recent_quotes=recent_quotes,
         recent_movements=recent_movements,
         timeline=timeline[:20],
     )

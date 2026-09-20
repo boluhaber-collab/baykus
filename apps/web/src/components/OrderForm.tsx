@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   apiFetch,
@@ -10,6 +11,8 @@ import {
   OrderDetail,
   OrderLine,
   Product,
+  ProductPricingInfo,
+  formatMoney,
 } from "@/lib/api";
 
 export type OrderFormPayload = {
@@ -49,6 +52,9 @@ type LineState = {
   unit_price: string;
   discount_rate: string;
   discount_amount: string;
+  stock_qty?: number | null;
+  is_critical?: boolean;
+  price_source?: string | null;
 };
 
 function emptyLine(): LineState {
@@ -63,6 +69,9 @@ function emptyLine(): LineState {
     unit_price: "0",
     discount_rate: "0",
     discount_amount: "0",
+    stock_qty: null,
+    is_critical: false,
+    price_source: null,
   };
 }
 
@@ -79,6 +88,9 @@ function fromOrderLines(lines: OrderLine[]): LineState[] {
     unit_price: String(l.unit_price ?? 0),
     discount_rate: String(l.discount_rate ?? 0),
     discount_amount: String(l.discount_amount ?? 0),
+    stock_qty: null,
+    is_critical: false,
+    price_source: null,
   }));
 }
 
@@ -121,7 +133,12 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
       .catch((e) => setError(e instanceof Error ? e.message : "Yükleme hatası"));
   }, []);
 
-  const linesSubtotal = useMemo(() => {
+  const selectedCustomer = useMemo(
+    () => customers.find((c) => String(c.id) === customerId) || null,
+    [customers, customerId],
+  );
+
+    const linesSubtotal = useMemo(() => {
     return lines.reduce((sum, l) => {
       const qty = Number(l.quantity) || 0;
       const price = Number(l.unit_price) || 0;
@@ -138,13 +155,29 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
 
-  function onProductChange(key: string, productId: string) {
+  async function onProductChange(key: string, productId: string) {
     const product = products.find((p) => String(p.id) === productId);
     updateLine(key, {
       product_id: productId,
       description: product?.name || "",
-      unit_price: product ? String(product.base_price) : "0",
+      unit_price: product ? String(product.base_price ?? 0) : "0",
+      stock_qty: product?.stock_qty ?? null,
+      is_critical: Boolean(product?.is_critical),
+      price_source: productId ? "product" : null,
     });
+    if (!productId) return;
+    try {
+      const info = await apiFetch<ProductPricingInfo>(`/api/products/${productId}/pricing`);
+      updateLine(key, {
+        description: info.name || product?.name || "",
+        unit_price: String(info.unit_price ?? 0),
+        stock_qty: info.stock_qty,
+        is_critical: info.is_critical,
+        price_source: info.price_source,
+      });
+    } catch {
+      // keep product fallback
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -215,6 +248,26 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
               </option>
             ))}
           </select>
+          {selectedCustomer && (
+            <div className="mt-2 rounded-lg border border-baykus-line bg-baykus-bg px-3 py-2 text-xs space-y-1">
+              <div>
+                Telefon: <strong>{selectedCustomer.phone || "—"}</strong>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  Açık bakiye:{" "}
+                  <strong
+                    className={`tabular-nums ${Number(selectedCustomer.balance || 0) > 0 ? "text-amber-700" : ""}`}
+                  >
+                    {formatMoney(Number(selectedCustomer.balance || 0))}
+                  </strong>
+                </span>
+                <Link href={`/customers/${selectedCustomer.id}`} className="text-baykus-primary hover:underline">
+                  Cari kartı →
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">
@@ -335,6 +388,36 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
                     </option>
                   ))}
                 </select>
+                {line.product_id && (
+                  <div className="mt-1 text-[11px] text-slate-500 space-x-2">
+                    <span>
+                      Stok:{" "}
+                      <strong
+                        className={
+                          line.is_critical ||
+                          (line.stock_qty != null && Number(line.quantity) > line.stock_qty)
+                            ? "text-red-700"
+                            : "text-slate-800"
+                        }
+                      >
+                        {line.stock_qty ?? "—"}
+                      </strong>
+                    </span>
+                    {line.price_source && (
+                      <span>
+                        Fiyat kaynağı:{" "}
+                        {line.price_source === "price_list"
+                          ? "fiyat listesi"
+                          : line.price_source === "variant"
+                            ? "varyant"
+                            : "ürün"}
+                      </span>
+                    )}
+                    {line.stock_qty != null && Number(line.quantity) > line.stock_qty && (
+                      <span className="text-red-700 font-medium">Miktar stoktan fazla!</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="md:col-span-2">
                 <label className="block text-[10px] text-slate-500 mb-0.5">Açıklama *</label>

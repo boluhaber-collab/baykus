@@ -63,7 +63,6 @@ for router in (
 ):
     app.include_router(router, prefix="/api")
 
-
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "app": cfg.app_name}

@@ -10,6 +10,7 @@ import {
   apiFetch,
   formatMoney,
   statusBadgeClass,
+  quoteStatusBadgeClass,
 } from "@/lib/api";
 
 export default function CustomerDetailPage() {
@@ -167,10 +168,12 @@ export default function CustomerDetailPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/customers" className="text-sm text-baykus-600 hover:underline">
-            ← Müşteriler
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-2">{customer.name}</h1>
+          <div className="text-xs text-baykus-muted mb-1">
+            <Link href="/customers" className="text-baykus-primary hover:underline">Müşteriler</Link>
+            <span className="mx-1">/</span>
+            <span className="font-medium text-baykus-text">{customer.name}</span>
+          </div>
+          <h1 className="text-2xl font-bold text-baykus-text mt-1">{customer.name}</h1>
           <p className="text-slate-500 text-sm">
             {customer.code ? `${customer.code} · ` : ""}
             {customer.company || "—"}
@@ -470,7 +473,37 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-3 gap-6">
+
+        <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-baykus-line flex items-center justify-between">
+            <h2 className="font-semibold text-baykus-text">Son teklifler</h2>
+            <Link href={`/quotes/new?customer_id=${customer.id}`} className="text-xs text-baykus-primary hover:underline">
+              + Teklif
+            </Link>
+          </div>
+          <ul className="divide-y divide-baykus-line text-sm">
+            {(customer.recent_quotes || []).map((q) => (
+              <li key={q.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                <div>
+                  <Link href={`/quotes/${q.id}`} className="font-medium text-baykus-primary hover:underline">
+                    {q.quote_number}
+                  </Link>
+                  <div className="text-xs text-baykus-muted mt-0.5">
+                    {q.created_at?.slice(0, 10)} · {formatMoney(Number(q.total_amount))}
+                  </div>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-xs ${quoteStatusBadgeClass(q.status)}`}>
+                  {q.status}
+                </span>
+              </li>
+            ))}
+            {(customer.recent_quotes || []).length === 0 && (
+              <li className="px-5 py-6 text-center text-baykus-muted">Teklif yok</li>
+            )}
+          </ul>
+        </div>
+
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100">
             <h2 className="font-semibold text-slate-800">Son siparişler</h2>
