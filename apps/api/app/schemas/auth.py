@@ -13,7 +13,7 @@ class LoginRequest(BaseModel):
 
 class UserOut(BaseModel):
     id: int
-    email: EmailStr
+    email: str
     full_name: str
     is_active: bool
     roles: list[str]

@@ -72,6 +72,10 @@ def _to_list_item(order: Order) -> OrderListItem:
         paid_amount=effective_paid,
         remaining_amount=_remaining(order),
         due_date=order.due_date,
+        delivery_date=getattr(order, "delivery_date", None),
+        channel=getattr(order, "channel", None),
+        design_status=getattr(order, "design_status", None),
+        design_notes=getattr(order, "design_notes", None),
         notes=order.notes,
         created_at=order.created_at,
         updated_at=order.updated_at,
@@ -206,6 +210,8 @@ def kanban_board(
                 total_amount=float(o.total_amount or 0),
                 remaining_amount=float(_remaining(o)),
                 due_date=o.due_date,
+                channel=getattr(o, "channel", None),
+                design_status=getattr(o, "design_status", None),
             )
             for o in orders
             if o.status == status_label
@@ -259,6 +265,10 @@ def create_order(
         status=payload.status or DEFAULT_ORDER_STATUS,
         notes=payload.notes,
         due_date=payload.due_date,
+        delivery_date=getattr(payload, "delivery_date", None),
+        channel=getattr(payload, "channel", None) or "mağaza",
+        design_status=getattr(payload, "design_status", None) or "bekliyor",
+        design_notes=getattr(payload, "design_notes", None),
         deposit_amount=_dec(payload.deposit_amount),
         discount_amount=_dec(payload.discount_amount),
         total_amount=Decimal("0"),
@@ -386,3 +396,27 @@ def delete_order(
         raise HTTPException(status_code=403, detail="Kalıcı silme yalnızca admin")
     db.delete(order)
     db.commit()
+
+
+@router.get("/{order_id}/work-order-pdf")
+def work_order_pdf(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "üretim", "muhasebe")),
+):
+    from fastapi.responses import Response
+    from app.models.settings_model import AppSetting
+    from app.services.pdf import build_work_order_pdf
+
+    order = _load_order(db, order_id)
+    rows = {s.key: s.value for s in db.query(AppSetting).all()}
+    settings = {
+        "company_name": rows.get("company_name", "Baykuş Baskı"),
+        "phone": rows.get("phone", ""),
+    }
+    pdf_bytes = build_work_order_pdf(order, settings)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{order.order_number}-is-emri.pdf"'},
+    )

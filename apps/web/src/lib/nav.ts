@@ -19,6 +19,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/finance", label: "Finans", icon: "💰" },
   { href: "/finance/cash", label: "Kasa", icon: "💵" },
   { href: "/finance/banks", label: "Banka", icon: "🏦" },
+  { href: "/finance/expenses", label: "Giderler", icon: "🧾" },
   { href: "/reports", label: "Raporlar", icon: "📈" },
   { href: "/whatsapp", label: "WhatsApp Şablonları", icon: "💬" },
   { href: "/settings", label: "Ayarlar / Kullanıcılar", icon: "⚙️" },

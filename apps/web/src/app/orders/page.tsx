@@ -106,6 +106,7 @@ export default function OrdersListPage() {
               <th className="px-4 py-3">Sipariş No</th>
               <th className="px-4 py-3">Müşteri</th>
               <th className="px-4 py-3">Durum</th>
+                <th className="px-4 py-3">Kanal</th>
               <th className="px-4 py-3">Toplam</th>
               <th className="px-4 py-3">Kalan</th>
               <th className="px-4 py-3">Teslim</th>

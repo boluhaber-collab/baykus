@@ -8,12 +8,15 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models import (
+    AppSetting,
     BankAccount,
     BankMovement,
     CariMovement,
     CashMovement,
     CashRegister,
     Customer,
+    Expense,
+    ExpenseCategory,
     Order,
     OrderLine,
     OrderStatusHistory,
@@ -22,10 +25,13 @@ from app.models import (
     ProductVariant,
     Purchase,
     PurchaseLine,
+    Quote,
+    QuoteLine,
     Role,
     Supplier,
     SupplierMovement,
     User,
+    WhatsAppTemplate,
 )
 # StockMovement imported lazily in product seed block when needed
 from app.models.order import DEFAULT_ORDER_STATUS
@@ -378,6 +384,8 @@ def seed(db: Session) -> None:
             line_total = price * qty
             order_discount = Decimal("0")
             total = line_total - order_discount
+            channels = ["mağaza", "internet", "Trendyol", "Hepsiburada", "N11", "diğer"]
+            designs = ["bekliyor", "onaylandı", "revizyon"]
             order = Order(
                 order_number=num,
                 customer_id=cust.id,
@@ -386,6 +394,10 @@ def seed(db: Session) -> None:
                 deposit_amount=deposit if deposit <= total else total,
                 discount_amount=order_discount,
                 due_date=due,
+                delivery_date=due,
+                channel=channels[hash(num) % len(channels)],
+                design_status=designs[hash(num) % len(designs)],
+                design_notes=("Demo tasarım notu" if designs[hash(num) % len(designs)] == "revizyon" else None),
                 notes=notes or "Demo sipariş",
             )
             db.add(order)
@@ -994,6 +1006,135 @@ def seed(db: Session) -> None:
 
 
     print("Seed tamamlandı: admin@baykus.local / admin123")
+
+
+
+    # ─── App settings ────────────────────────────────────────────────────────
+    if db.query(AppSetting).count() == 0:
+        db.add_all(
+            [
+                AppSetting(key="company_name", value="Baykuş Baskı"),
+                AppSetting(key="phone", value="+90 212 555 0101"),
+                AppSetting(key="theme_label", value="Varsayılan"),
+            ]
+        )
+        db.commit()
+
+    # ─── Quotes (Teklifler) ──────────────────────────────────────────────────
+    if db.query(Quote).count() == 0:
+        customers = db.query(Customer).order_by(Customer.id).all()
+        products = db.query(Product).order_by(Product.id).all()
+        today = date.today()
+        samples = [
+            ("TKL-2026-001", "Taslak", customers[0] if customers else None, "Gönderilmedi — fiyat netleşecek"),
+            ("TKL-2026-002", "Gönderildi", customers[1] if len(customers) > 1 else None, "Müşteriye e-posta ile iletildi"),
+            ("TKL-2026-003", "Onaylandı", customers[2] if len(customers) > 2 else None, "Onay alındı — siparişe hazır"),
+            ("TKL-2026-004", "Reddedildi", customers[3] if len(customers) > 3 else None, "Bütçe uygun değil"),
+            ("TKL-2026-005", "Taslak", customers[4] if len(customers) > 4 else None, "Fuar seti teklifi"),
+        ]
+        for num, st, cust, notes in samples:
+            prod = products[0] if products else None
+            qty = 50
+            price = Decimal("149.90") if prod is None else Decimal(str(getattr(prod, "base_price", None) or getattr(prod, "unit_price", None) or "149.90"))
+            line_total = price * qty
+            q = Quote(
+                quote_number=num,
+                customer_id=cust.id if cust else None,
+                status=st,
+                total_amount=line_total,
+                discount_amount=Decimal("0"),
+                valid_until=today + timedelta(days=14),
+                notes=notes,
+                is_cancelled=(st == "Reddedildi"),
+            )
+            db.add(q)
+            db.flush()
+            db.add(
+                QuoteLine(
+                    quote_id=q.id,
+                    product_id=prod.id if prod else None,
+                    description=(prod.name if prod else "Promosyon tişört baskı"),
+                    quantity=qty,
+                    size="L",
+                    color="Siyah",
+                    print_type="DTF",
+                    unit_price=price,
+                    discount_rate=Decimal("0"),
+                    discount_amount=Decimal("0"),
+                    line_total=line_total,
+                )
+            )
+        db.commit()
+
+    # ─── WhatsApp templates ──────────────────────────────────────────────────
+    if db.query(WhatsAppTemplate).count() == 0:
+        db.add_all(
+            [
+                WhatsAppTemplate(
+                    name="siparis_hazir",
+                    category="hazır sipariş",
+                    body="Merhaba {ad}, {siparis_no} numaralı siparişiniz hazır. Toplam: {tutar} TL. Teslim tarihi: {tarih}.",
+                ),
+                WhatsAppTemplate(
+                    name="odeme_hatirlatma",
+                    category="ödeme hatırlatma",
+                    body="Sayın {ad}, {siparis_no} için {tutar} TL bakiyeniz bulunmaktadır. Son ödeme: {tarih}.",
+                ),
+                WhatsAppTemplate(
+                    name="tasarim_onayi",
+                    category="tasarım onayı",
+                    body="Merhaba {ad}, {siparis_no} tasarımı onayınızı bekliyor. Lütfen {tarih} öncesi dönüş yapın.",
+                ),
+                WhatsAppTemplate(
+                    name="teslimat_bildirim",
+                    category="teslimat",
+                    body="Merhaba {ad}, {siparis_no} siparişiniz {tarih} tarihinde teslim edilecektir. Tutar: {tutar} TL.",
+                ),
+                WhatsAppTemplate(
+                    name="kampanya_duyuru",
+                    category="kampanya",
+                    body="Merhaba {ad}! {tarih} tarihine kadar baskı işlerinde özel fırsat. Detay için yazın.",
+                ),
+            ]
+        )
+        db.commit()
+
+    # ─── Expenses (Giderler) ─────────────────────────────────────────────────
+    if db.query(ExpenseCategory).count() == 0:
+        cats = [
+            ExpenseCategory(name="Kira", description="İşyeri kirası"),
+            ExpenseCategory(name="Elektrik", description="Enerji gideri"),
+            ExpenseCategory(name="Kırtasiye", description="Ofis malzemeleri"),
+            ExpenseCategory(name="Kargo", description="Kargo ve lojistik"),
+            ExpenseCategory(name="Maaş", description="Personel ödemeleri"),
+        ]
+        db.add_all(cats)
+        db.flush()
+        cash = db.query(CashRegister).first()
+        bank = db.query(BankAccount).first()
+        admin = db.query(User).filter(User.email == "admin@baykus.local").first()
+        uid = admin.id if admin else None
+        today = date.today()
+        samples = [
+            (cats[0], Decimal("15000.00"), "banka", today - timedelta(days=10), "Aylık kira"),
+            (cats[1], Decimal("1850.50"), "banka", today - timedelta(days=5), "Elektrik faturası"),
+            (cats[2], Decimal("320.00"), "nakit", today - timedelta(days=3), "Toner ve kağıt"),
+            (cats[3], Decimal("640.00"), "nakit", today - timedelta(days=1), "Müşteri kargoları"),
+        ]
+        for cat, amount, method, d, note in samples:
+            e = Expense(
+                category_id=cat.id,
+                amount=amount,
+                expense_date=d,
+                payment_method=method,
+                note=note,
+                cash_register_id=cash.id if method == "nakit" and cash else None,
+                bank_account_id=bank.id if method == "banka" and bank else None,
+                is_posted=False,
+                created_by_user_id=uid,
+            )
+            db.add(e)
+        db.commit()
 
 
 def main() -> None:

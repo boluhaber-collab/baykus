@@ -258,6 +258,10 @@ export type OrderListItem = {
   paid_amount: number;
   remaining_amount: number;
   due_date?: string | null;
+  delivery_date?: string | null;
+  channel?: string | null;
+  design_status?: string | null;
+  design_notes?: string | null;
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -652,6 +656,143 @@ export async function downloadReportCsv(path: string, filename: string): Promise
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || data.message || `CSV hatası: ${res.status}`);
+  }
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+
+export const ORDER_CHANNELS = ["mağaza", "internet", "Trendyol", "Hepsiburada", "N11", "diğer"] as const;
+export const DESIGN_STATUSES = ["bekliyor", "onaylandı", "revizyon"] as const;
+
+export const QUOTE_STATUSES = [
+  "Taslak",
+  "Gönderildi",
+  "Onaylandı",
+  "Reddedildi",
+  "Siparişe Dönüştü",
+] as const;
+
+export type QuoteLine = {
+  id?: number;
+  product_id?: number | null;
+  variant_id?: number | null;
+  description: string;
+  quantity: number;
+  size?: string | null;
+  color?: string | null;
+  print_type?: string | null;
+  unit_price: number;
+  discount_rate?: number;
+  discount_amount?: number;
+  line_total?: number;
+};
+
+export type QuoteListItem = {
+  id: number;
+  quote_number: string;
+  customer_id: number | null;
+  customer_name?: string | null;
+  status: string;
+  total_amount: number;
+  discount_amount: number;
+  valid_until?: string | null;
+  notes?: string | null;
+  converted_order_id?: number | null;
+  is_cancelled?: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type QuoteDetail = QuoteListItem & { lines: QuoteLine[] };
+
+export type WhatsAppTemplate = {
+  id: number;
+  name: string;
+  category: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WhatsAppLog = {
+  id: number;
+  template_id: number | null;
+  template_name?: string | null;
+  phone: string;
+  rendered_body: string;
+  wa_link: string;
+  customer_name?: string | null;
+  created_by_user_id?: number | null;
+  created_at: string;
+};
+
+export type AppSettings = {
+  company_name: string;
+  phone: string;
+  theme_label: string;
+};
+
+export type ExpenseCategory = {
+  id: number;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type Expense = {
+  id: number;
+  category_id: number;
+  category_name?: string | null;
+  amount: number;
+  expense_date: string;
+  payment_method: string;
+  note?: string | null;
+  cash_register_id?: number | null;
+  bank_account_id?: number | null;
+  is_posted: boolean;
+  created_by_user_id?: number | null;
+  created_at: string;
+};
+
+export function quoteStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "Taslak":
+      return "bg-slate-100 text-slate-700";
+    case "Gönderildi":
+      return "bg-sky-100 text-sky-800";
+    case "Onaylandı":
+      return "bg-emerald-100 text-emerald-800";
+    case "Reddedildi":
+      return "bg-red-100 text-red-800";
+    case "Siparişe Dönüştü":
+      return "bg-violet-100 text-violet-800";
+    default:
+      return "bg-slate-100 text-slate-700";
+  }
+}
+
+/** Download PDF binary from an authenticated endpoint. */
+export async function downloadPdf(path: string, filename: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 401) {
+    clearToken();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("Yetkisiz");
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || data.message || `PDF hatası: ${res.status}`);
   }
   const blob = await res.blob();
   const a = document.createElement("a");

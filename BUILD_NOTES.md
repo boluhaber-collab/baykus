@@ -33,3 +33,9 @@
 
 ## Zip
 `/workspace/baykus-web.zip` — `node_modules`, `.venv`, `__pycache__`, `.next` hariç.
+
+## 2026-09-20 ~14:35 TR — Windows SQLite
+
+Docker-suz Windows: `WINDOWS.md`, `scripts/*-windows.ps1`, `app/bootstrap_sqlite.py`.
+SQLite: `create_all` (Alembic yok). Postgres: Alembic korunur.
+Push: https://github.com/boluhaber-collab/baykus/commit/1b3e6f9066d91d16127c4d07f3f648a4b9e638eb

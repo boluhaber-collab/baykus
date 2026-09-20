@@ -132,3 +132,13 @@ Alembic migrations `001`–`006_suppliers_purchases`:
 ## Lisans
 
 İç kullanım / iskelet — özel proje.
+
+## Yeni modüller (masaüstü parite turu)
+
+- **Teklifler** (`/quotes`): CRUD, satırlar, soft iptal, **siparişe dönüştür**, PDF
+- **WhatsApp şablonları** (`/whatsapp`): CRUD, `{ad}` / `{siparis_no}` / `{tutar}` / `{tarih}`, wa.me önizleme, yerel gönderim günlüğü
+- **Ayarlar / Kullanıcılar** (`/settings`): kullanıcı oluşturma, rol atama, şifre değiştirme, şirket ayarları
+- **Giderler** (`/finance/expenses`): kategori + gider; nakit/banka işleme
+- **PDF**: teklif PDF, sipariş iş emri PDF (ReportLab)
+- **Sipariş alanları**: kanal, tasarım durumu/notu, teslim tarihi (liste/detay/kanban)
+

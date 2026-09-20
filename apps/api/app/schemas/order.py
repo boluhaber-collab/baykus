@@ -3,7 +3,12 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.order import ORDER_STATUSES, DEFAULT_ORDER_STATUS
+from app.models.order import (
+    DEFAULT_ORDER_STATUS,
+    DESIGN_STATUSES,
+    ORDER_CHANNELS,
+    ORDER_STATUSES,
+)
 
 
 class OrderLineBase(BaseModel):
@@ -58,6 +63,10 @@ class OrderCreate(BaseModel):
     status: str = DEFAULT_ORDER_STATUS
     notes: str | None = None
     due_date: date | None = None
+    delivery_date: date | None = None
+    channel: str = "mağaza"
+    design_status: str = "bekliyor"
+    design_notes: str | None = None
     deposit_amount: Decimal = Field(default=Decimal("0"), ge=0)
     discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
     lines: list[OrderLineCreate] = Field(default_factory=list, min_length=1)
@@ -76,6 +85,10 @@ class OrderUpdate(BaseModel):
     status: str | None = None
     notes: str | None = None
     due_date: date | None = None
+    delivery_date: date | None = None
+    channel: str | None = None
+    design_status: str | None = None
+    design_notes: str | None = None
     deposit_amount: Decimal | None = Field(default=None, ge=0)
     discount_amount: Decimal | None = Field(default=None, ge=0)
     lines: list[OrderLineCreate] | None = None
@@ -111,6 +124,10 @@ class OrderListItem(BaseModel):
     paid_amount: Decimal
     remaining_amount: Decimal
     due_date: date | None = None
+    delivery_date: date | None = None
+    channel: str | None = None
+    design_status: str | None = None
+    design_notes: str | None = None
     notes: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -133,6 +150,8 @@ class KanbanCard(BaseModel):
     total_amount: float
     remaining_amount: float
     due_date: date | None = None
+    channel: str | None = None
+    design_status: str | None = None
 
 
 class KanbanColumn(BaseModel):

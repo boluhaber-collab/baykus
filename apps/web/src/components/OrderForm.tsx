@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   apiFetch,
   Customer,
+  ORDER_CHANNELS,
+  DESIGN_STATUSES,
   ORDER_STATUSES,
   OrderDetail,
   OrderLine,
@@ -16,6 +18,10 @@ export type OrderFormPayload = {
   status: string;
   notes: string | null;
   due_date: string | null;
+  delivery_date: string | null;
+  channel: string;
+  design_status: string;
+  design_notes: string | null;
   deposit_amount: number;
   discount_amount: number;
   lines: {
@@ -91,6 +97,10 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
   const [status, setStatus] = useState(initial?.status || "Sipariş Alındı");
   const [notes, setNotes] = useState(initial?.notes || "");
   const [dueDate, setDueDate] = useState(initial?.due_date ? initial.due_date.slice(0, 10) : "");
+  const [deliveryDate, setDeliveryDate] = useState(initial?.delivery_date ? initial.delivery_date.slice(0, 10) : "");
+  const [channel, setChannel] = useState(initial?.channel || "mağaza");
+  const [designStatus, setDesignStatus] = useState(initial?.design_status || "bekliyor");
+  const [designNotes, setDesignNotes] = useState(initial?.design_notes || "");
   const [deposit, setDeposit] = useState(String(initial?.deposit_amount ?? 0));
   const [discount, setDiscount] = useState(String(initial?.discount_amount ?? 0));
   const [lines, setLines] = useState<LineState[]>(() =>
@@ -152,6 +162,10 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
         status,
         notes: notes.trim() || null,
         due_date: dueDate || null,
+        delivery_date: deliveryDate || null,
+        channel,
+        design_status: designStatus,
+        design_notes: designNotes.trim() || null,
         deposit_amount: Number(deposit) || 0,
         discount_amount: Number(discount) || 0,
         lines: lines
@@ -253,6 +267,30 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
             value={discount}
             onChange={(e) => setDiscount(e.target.value)}
           />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Teslim Tarihi</label>
+          <input type="date" className={inputCls} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Kanal</label>
+          <select className={inputCls} value={channel} onChange={(e) => setChannel(e.target.value)}>
+            {ORDER_CHANNELS.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Tasarım Durumu</label>
+          <select className={inputCls} value={designStatus} onChange={(e) => setDesignStatus(e.target.value)}>
+            {DESIGN_STATUSES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs font-medium text-slate-600 mb-1">Tasarım Notları</label>
+          <textarea rows={2} className={inputCls} value={designNotes} onChange={(e) => setDesignNotes(e.target.value)} />
         </div>
         <div className="md:col-span-2">
           <label className="block text-xs font-medium text-slate-600 mb-1">Notlar</label>

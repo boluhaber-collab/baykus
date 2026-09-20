@@ -57,6 +57,12 @@ export default function FinanceOverviewPage() {
           >
             Banka
           </Link>
+          <Link
+            href="/finance/expenses"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+          >
+            Giderler
+          </Link>
           <button
             onClick={load}
             className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm"

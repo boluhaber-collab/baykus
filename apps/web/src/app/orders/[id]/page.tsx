@@ -8,6 +8,7 @@ import {
   ORDER_STATUSES,
   OrderDetail,
   apiFetch,
+  downloadPdf,
   formatMoney,
   statusBadgeClass,
 } from "@/lib/api";
@@ -97,6 +98,8 @@ export default function OrderDetailPage() {
             >
               {order.status}
             </span>
+            {order.channel ? ` · ${order.channel}` : ""}
+            {order.design_status ? ` · Tasarım: ${order.design_status}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -113,6 +116,19 @@ export default function OrderDetailPage() {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await downloadPdf(`/api/orders/${id}/work-order-pdf`, `${order.order_number}-is-emri.pdf`);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "PDF hatası");
+              }
+            }}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+          >
+            İş Emri PDF
+          </button>
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}

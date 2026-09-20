@@ -19,6 +19,19 @@ ORDER_STATUSES = [
 DEFAULT_ORDER_STATUS = "Sipariş Alındı"
 CLOSED_STATUSES = frozenset({"Teslim Edildi", "Sipariş İptali"})
 
+ORDER_CHANNELS = [
+    "mağaza",
+    "internet",
+    "Trendyol",
+    "Hepsiburada",
+    "N11",
+    "diğer",
+]
+DEFAULT_ORDER_CHANNEL = "mağaza"
+
+DESIGN_STATUSES = ["bekliyor", "onaylandı", "revizyon"]
+DEFAULT_DESIGN_STATUS = "bekliyor"
+
 
 class Order(Base):
     __tablename__ = "orders"
@@ -32,6 +45,10 @@ class Order(Base):
     discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     due_date: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
+    channel: Mapped[str] = mapped_column(String(50), default="mağaza", index=True)
+    design_status: Mapped[str] = mapped_column(String(50), default="bekliyor", index=True)
+    design_notes: Mapped[str | None] = mapped_column(Text)
+    delivery_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

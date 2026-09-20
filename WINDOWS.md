@@ -119,3 +119,15 @@ npm run dev
 - `sqlite:///./baykus.db` yolu **`apps/api` çalışma dizinine** göredir.
 - SQLAlchemy SQLite için `check_same_thread=False` kullanılır (`app/db/session.py`).
 - Mevcut Postgres / `docker compose` yolu bozulmaz; sadece alternatif yerel yoldur.
+
+## Yeni tablolar (SQLite)
+
+`python -m app.bootstrap_sqlite` ile `create_all` yeni tabloları da oluşturur:
+
+- `quotes`, `quote_lines`
+- `whatsapp_templates`, `whatsapp_send_logs`
+- `app_settings`
+- `expense_categories`, `expenses`
+- `orders` üzerine: `channel`, `design_status`, `design_notes`, `delivery_date`
+
+Postgres için: `alembic upgrade head` (rev `007`).

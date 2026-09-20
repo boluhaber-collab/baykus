@@ -1,0 +1,56 @@
+from datetime import date, datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, Field, field_validator
+
+from app.models.expense import EXPENSE_PAYMENT_METHODS
+
+
+class ExpenseCategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str | None = None
+
+
+class ExpenseCategoryOut(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ExpenseCreate(BaseModel):
+    category_id: int
+    amount: Decimal = Field(gt=0)
+    expense_date: date
+    payment_method: str = "nakit"
+    note: str | None = None
+    cash_register_id: int | None = None
+    bank_account_id: int | None = None
+    post_immediately: bool = True
+
+    @field_validator("payment_method")
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        if v not in EXPENSE_PAYMENT_METHODS:
+            raise ValueError(f"Geçersiz ödeme yöntemi: {', '.join(EXPENSE_PAYMENT_METHODS)}")
+        return v
+
+
+class ExpenseOut(BaseModel):
+    id: int
+    category_id: int
+    category_name: str | None = None
+    amount: Decimal
+    expense_date: date
+    payment_method: str
+    note: str | None
+    cash_register_id: int | None
+    bank_account_id: int | None
+    is_posted: bool
+    created_by_user_id: int | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

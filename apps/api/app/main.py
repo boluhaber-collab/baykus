@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
+    expenses,
     auth,
     customers,
     dashboard,
@@ -38,6 +39,7 @@ for router in (
     orders.router,
     suppliers.router,
     purchases.router,
+    expenses.router,
     finance.router,
     reports.router,
     settings_router.router,
