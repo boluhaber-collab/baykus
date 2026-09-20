@@ -96,7 +96,10 @@ def global_search(
 
     # Suppliers
     for s in db.query(Supplier).order_by(Supplier.id.desc()).limit(500).all():
-        blob = " ".join(filter(None, [s.name, s.company, s.phone, s.code, s.email, s.city]))
+        city = getattr(s, "city", None) or ""
+        email = getattr(s, "email", None) or ""
+        contact = getattr(s, "contact_name", None) or getattr(s, "authorized_person", None) or ""
+        blob = " ".join(filter(None, [s.name, s.phone, s.code, email, city, contact]))
         sc = _score(blob, qn, q_digits)
         if sc:
             add(
@@ -104,7 +107,7 @@ def global_search(
                 s.code or f"#{s.id}",
                 s.name,
                 s.phone or "",
-                s.company or s.city or "",
+                contact or city or email or "",
                 f"/suppliers/{s.id}",
                 sc + 3,
             )

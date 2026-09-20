@@ -7,8 +7,9 @@ import io
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
@@ -133,6 +134,275 @@ def create_price_list(
         detail={"name": pl.name},
     )
     return out
+
+
+
+PRICE_LIST_TEMPLATE_HEADERS = [
+    "Ürün",
+    "Tedarikçi",
+    "Alış Fiyatı",
+    "Baskısız Fiyatı",
+    "Baskılı Fiyatı",
+    "Nakışlı Fiyatı",
+    "Not",
+]
+
+PRICE_FIELDS = ("purchase_price", "blank_price", "printed_price", "embroidered_price")
+
+
+class BulkAdjustRequest(BaseModel):
+    """Seçili kalemlerde % veya mutlak fiyat güncelleme."""
+
+    item_ids: list[int] = Field(default_factory=list)
+    mode: str = Field(default="percent", pattern="^(percent|absolute)$")
+    value: float = 0
+    fields: list[str] = Field(default_factory=lambda: ["blank_price", "printed_price", "embroidered_price", "purchase_price"])
+    apply_all: bool = False
+
+
+class BulkAdjustResult(BaseModel):
+    updated: int
+    skipped: int
+
+
+def _norm_header(h: str) -> str:
+    return str(h or "").strip().lower().replace("ı", "i").replace("İ", "i")
+
+
+def _col_map(headers: list[str]) -> dict[str, str]:
+    clean = {_norm_header(h): h for h in headers}
+    adaylar = {
+        "description": ["urun", "ürün", "urun adi", "ürün adı", "product", "açıklama", "aciklama"],
+        "supplier_name": ["tedarikci", "tedarikçi", "supplier"],
+        "purchase_price": ["alis fiyati", "alış fiyatı", "alis", "alış", "maliyet", "purchase"],
+        "blank_price": ["baskisiz fiyati", "baskısız fiyatı", "baskisiz", "baskısız", "blank", "unit_price", "satis", "satış"],
+        "printed_price": ["baskili fiyati", "baskılı fiyatı", "baskili", "baskılı", "printed"],
+        "embroidered_price": ["nakisli fiyati", "nakışlı fiyatı", "nakisli", "nakışlı", "embroidered"],
+        "notes": ["not", "notes", "aciklama", "açıklama"],
+    }
+    out: dict[str, str] = {}
+    for hedef, isimler in adaylar.items():
+        for ad in isimler:
+            if ad in clean:
+                out[hedef] = clean[ad]
+                break
+    return out
+
+
+@router.get("/import-template")
+def price_list_import_template(
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+    fmt: str = Query(default="xlsx", pattern="^(csv|xlsx)$"),
+):
+    """Masaüstü FIYAT_LISTESI_KOLONLARI — boş fiyat listesi şablonu."""
+    headers = PRICE_LIST_TEMPLATE_HEADERS
+    if fmt == "xlsx":
+        try:
+            from openpyxl import Workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "FiyatListesi"
+        ws.append(headers)
+        buf = io.BytesIO()
+        wb.save(buf)
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="fiyat-listesi-sablon.xlsx"'},
+        )
+    buf = io.StringIO()
+    csv.writer(buf).writerow(headers)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="fiyat-listesi-sablon.csv"'},
+    )
+
+
+@router.post("/{list_id}/bulk-adjust", response_model=BulkAdjustResult)
+def bulk_adjust_prices(
+    list_id: int,
+    payload: BulkAdjustRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin", "satış")),
+) -> BulkAdjustResult:
+    pl = _load(db, list_id)
+    fields = [f for f in payload.fields if f in PRICE_FIELDS]
+    if not fields:
+        raise HTTPException(status_code=400, detail="En az bir fiyat alanı seçin")
+    id_set = set(payload.item_ids or [])
+    updated = 0
+    skipped = 0
+    for it in pl.items or []:
+        if not payload.apply_all and it.id not in id_set:
+            continue
+        touched = False
+        for f in fields:
+            cur = getattr(it, f, None)
+            if cur is None and f == "blank_price":
+                cur = it.unit_price
+            if cur is None:
+                cur = Decimal("0")
+            cur_d = _d(cur)
+            if payload.mode == "percent":
+                new_v = cur_d * (Decimal("1") + Decimal(str(payload.value)) / Decimal("100"))
+            else:
+                new_v = cur_d + Decimal(str(payload.value))
+            if new_v < 0:
+                new_v = Decimal("0")
+            setattr(it, f, new_v)
+            if f == "blank_price":
+                it.unit_price = new_v
+            touched = True
+        if touched:
+            updated += 1
+        else:
+            skipped += 1
+    pl.updated_at = datetime.utcnow()
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="bulk_adjust",
+        entity_type="price_list",
+        entity_id=pl.id,
+        detail={"mode": payload.mode, "value": payload.value, "updated": updated, "fields": fields},
+    )
+    return BulkAdjustResult(updated=updated, skipped=skipped)
+
+
+@router.post("/{list_id}/import")
+async def import_price_list_rows(
+    list_id: int,
+    file: UploadFile = File(...),
+    mode: str = Query(default="merge", pattern="^(merge|replace)$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin", "satış")),
+) -> dict:
+    """Excel/CSV satırlarını fiyat listesine aktar (merge: eşleşen ürün güncelle / yeni ekle)."""
+    pl = _load(db, list_id)
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Boş dosya")
+    name = (file.filename or "").lower()
+    rows: list[dict] = []
+    if name.endswith((".xlsx", ".xlsm")):
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb.active
+        data = list(ws.iter_rows(values_only=True))
+        if not data:
+            raise HTTPException(status_code=400, detail="Boş dosya")
+        headers = [str(h or "").strip() for h in data[0]]
+        for line in data[1:]:
+            if not line or all(v is None or str(v).strip() == "" for v in line):
+                continue
+            rows.append({headers[i]: line[i] if i < len(line) else None for i in range(len(headers))})
+    else:
+        text_data = raw.decode("utf-8-sig", errors="replace")
+        reader = csv.DictReader(io.StringIO(text_data))
+        rows = [r for r in reader if any(str(v or "").strip() for v in r.values())]
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="Excel dosyasında okunacak satır bulunamadı")
+
+    cmap = _col_map(list(rows[0].keys()))
+    if "description" not in cmap:
+        raise HTTPException(
+            status_code=400,
+            detail="Excel içinde en az Ürün sütunu olmalı (Alış / Baskısız / Baskılı / Nakışlı isteğe bağlı).",
+        )
+
+    def _num(v) -> Decimal | None:
+        if v is None or str(v).strip() == "" or str(v).strip().lower() == "nan":
+            return None
+        try:
+            s = str(v).strip().replace(",", ".")
+            return Decimal(s)
+        except Exception:
+            return None
+
+    created = 0
+    updated = 0
+    skipped = 0
+    errors: list[str] = []
+
+    if mode == "replace":
+        pl.items.clear()
+        db.flush()
+
+    existing = {str(it.description or "").strip().lower(): it for it in (pl.items or [])}
+
+    for idx, row in enumerate(rows, start=2):
+        desc_raw = row.get(cmap["description"], "")
+        desc = str(desc_raw or "").strip()
+        if not desc or desc.lower() == "nan":
+            skipped += 1
+            continue
+        supplier = str(row.get(cmap.get("supplier_name", ""), "") or "").strip() or None
+        purchase = _num(row.get(cmap["purchase_price"])) if "purchase_price" in cmap else None
+        blank = _num(row.get(cmap["blank_price"])) if "blank_price" in cmap else None
+        printed = _num(row.get(cmap["printed_price"])) if "printed_price" in cmap else None
+        emb = _num(row.get(cmap["embroidered_price"])) if "embroidered_price" in cmap else None
+        notes = str(row.get(cmap.get("notes", ""), "") or "").strip() or None
+        if purchase is None and blank is None and printed is None and emb is None:
+            skipped += 1
+            errors.append(f"Satır {idx}: fiyat yok — atlandı ({desc})")
+            continue
+
+        key = desc.lower()
+        it = existing.get(key)
+        if it is None:
+            unit = blank if blank is not None else Decimal("0")
+            it = PriceListItem(
+                description=desc,
+                supplier_name=supplier,
+                purchase_price=purchase,
+                blank_price=blank,
+                printed_price=printed,
+                embroidered_price=emb,
+                unit_price=unit,
+                notes=notes,
+            )
+            pl.items.append(it)
+            existing[key] = it
+            created += 1
+        else:
+            if supplier is not None:
+                it.supplier_name = supplier
+            if purchase is not None:
+                it.purchase_price = purchase
+            if blank is not None:
+                it.blank_price = blank
+                it.unit_price = blank
+            if printed is not None:
+                it.printed_price = printed
+            if emb is not None:
+                it.embroidered_price = emb
+            if notes is not None:
+                it.notes = notes
+            updated += 1
+
+    pl.updated_at = datetime.utcnow()
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="import",
+        entity_type="price_list",
+        entity_id=pl.id,
+        detail={"created": created, "updated": updated, "skipped": skipped, "mode": mode},
+    )
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors[:20],
+        "message": f"İçe aktarma: {created} yeni, {updated} güncellendi, {skipped} atlandı",
+    }
 
 
 @router.get("/{list_id}", response_model=PriceListOut)

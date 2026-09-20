@@ -423,6 +423,48 @@ export const QUICK_ACTIONS = QUICK_ACTION_CATALOG.filter((a) =>
 
 export const DEFAULT_SOL_MENU_ORDER = NAV_GROUPS.map((g) => g.label);
 
+
+/** Masaüstü yetki_menuleri — kilit moduna göre sol menü grupları. */
+export const LOCK_MODE_ALLOWED: Record<string, string[]> = {
+  Yönetici: [
+    "Ana Sayfa", "Müşteri Merkezi", "Müşteri İletişim", "Satış / Sipariş", "Üretim / Atölye",
+    "Ürün & Stok Merkezi", "Tedarik Merkezi", "E-Ticaret", "Finans", "Fiyat / Maliyet",
+    "Raporlar", "Evrak Dolabı", "Sistem",
+  ],
+  Personel: [
+    "Ana Sayfa", "Müşteri Merkezi", "Müşteri İletişim", "Satış / Sipariş", "Üretim / Atölye",
+    "Ürün & Stok Merkezi", "E-Ticaret", "Evrak Dolabı",
+  ],
+  "Tam Yetki": [
+    "Ana Sayfa", "Müşteri Merkezi", "Müşteri İletişim", "Satış / Sipariş", "Üretim / Atölye",
+    "Ürün & Stok Merkezi", "Tedarik Merkezi", "E-Ticaret", "Finans", "Fiyat / Maliyet",
+    "Raporlar", "Evrak Dolabı", "Sistem",
+  ],
+  "Sadece Satış": [
+    "Ana Sayfa", "Müşteri Merkezi", "Müşteri İletişim", "Satış / Sipariş", "E-Ticaret",
+    "Fiyat / Maliyet", "Evrak Dolabı", "Sistem",
+  ],
+  "Sadece Stok": [
+    "Ana Sayfa", "Ürün & Stok Merkezi", "Tedarik Merkezi", "Fiyat / Maliyet", "Evrak Dolabı", "Sistem",
+  ],
+};
+
+/** Canonical label = original NAV_GROUPS.label (before sol_menu_adlari rename). */
+export function filterNavByLockMode(
+  groups: NavGroup[],
+  userMode: string | undefined | null,
+  originalLabels?: Record<string, string>,
+): NavGroup[] {
+  const mode = userMode || "Yönetici";
+  const allowed = new Set(LOCK_MODE_ALLOWED[mode] || LOCK_MODE_ALLOWED["Yönetici"]);
+  // Map display label back to canonical if renamed
+  return groups.filter((g) => {
+    const canonical = NAV_GROUPS.find((n) => n.id === g.id)?.label || g.label;
+    void originalLabels; // reserved for future rename reverse-lookup
+    return allowed.has(canonical);
+  });
+}
+
 export function orderNavGroups(
   groups: NavGroup[],
   order: string[] | undefined,

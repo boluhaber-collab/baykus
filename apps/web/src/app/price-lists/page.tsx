@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { PriceList, apiFetch } from "@/lib/api";
+import { PriceList, apiFetch, downloadAuthFile } from "@/lib/api";
 
 export default function PriceListsPage() {
   const [items, setItems] = useState<PriceList[]>([]);
@@ -64,11 +64,23 @@ export default function PriceListsPage() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-base font-bold">Fiyat Listesi</h2>
-          <p className="text-xs text-baykus-muted">Fiyat / Maliyet › Fiyat Listesi · baskılı/baskısız/nakışlı · yazdır/CSV/PDF detayda</p>
+          <p className="text-xs text-baykus-muted">Fiyat / Maliyet › Fiyat Listesi · toplu %/mutlak · Excel şablon · yazdır/CSV/PDF</p>
         </div>
-        <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={load}>
-          Yenile
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="bk-btn bk-btn-ghost text-xs"
+            onClick={() => downloadAuthFile("/api/price-lists/import-template?fmt=xlsx", "fiyat-listesi-sablon.xlsx")}
+          >
+            Boş Şablon
+          </button>
+          <Link href="/tools/import?type=prices" className="bk-btn bk-btn-ghost text-xs">
+            Excel İçe Aktar
+          </Link>
+          <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={load}>
+            Yenile
+          </button>
+        </div>
       </div>
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}

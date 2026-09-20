@@ -20,7 +20,14 @@ type UserOut = {
   roles: string[];
 };
 
-const ROLE_OPTIONS = ["admin", "satış", "üretim", "muhasebe"];
+const ROLE_OPTIONS: string[] = ["admin", "satış", "üretim", "muhasebe"];
+/** UI labels — masaüstü admin/sales/production/accounting ↔ TR roller */
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  "satış": "Sales (Satış)",
+  "üretim": "Production (Üretim)",
+  muhasebe: "Accounting (Muhasebe)",
+};
 
 type Tab =
   | "genel"
@@ -215,6 +222,19 @@ function SettingsPageInner() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Rol güncellenemedi");
+    }
+  }
+
+  async function toggleActive(user: UserOut) {
+    try {
+      await apiFetch(`/api/settings/users/${user.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ is_active: !user.is_active }),
+      });
+      setMsg(user.is_active ? "Kullanıcı pasifleştirildi" : "Kullanıcı etkinleştirildi");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Durum güncellenemedi");
     }
   }
 
@@ -851,7 +871,12 @@ function SettingsPageInner() {
       {tab === "kullanicilar" && (
         <div className="space-y-4">
           <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b font-semibold text-sm">Kullanıcılar</div>
+            <div className="px-4 py-3 border-b font-semibold text-sm flex flex-wrap justify-between gap-2">
+              <span>Kullanıcı Yönetimi</span>
+              <span className="text-xs font-normal text-slate-500">
+                Roller: Admin / Sales / Production / Accounting · oluştur · pasif · şifre sıfırla (JWT)
+              </span>
+            </div>
             <table className="min-w-full text-sm">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
@@ -859,11 +884,12 @@ function SettingsPageInner() {
                   <th className="px-4 py-3">E-posta</th>
                   <th className="px-4 py-3">Roller</th>
                   <th className="px-4 py-3">Durum</th>
+                  <th className="px-4 py-3">İşlem</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.id} className="border-t">
+                  <tr key={u.id} className={`border-t ${u.is_active ? "" : "bg-slate-50 text-slate-400"}`}>
                     <td className="px-4 py-3">{u.full_name}</td>
                     <td className="px-4 py-3">{u.email}</td>
                     <td className="px-4 py-3">
@@ -872,6 +898,7 @@ function SettingsPageInner() {
                           <button
                             key={r}
                             type="button"
+                            title={ROLE_LABELS[r] || r}
                             onClick={() => void toggleRole(u, r)}
                             className={`rounded-full px-2 py-0.5 text-xs border ${
                               u.roles.includes(r)
@@ -879,12 +906,36 @@ function SettingsPageInner() {
                                 : "bg-white text-slate-600"
                             }`}
                           >
-                            {r}
+                            {ROLE_LABELS[r] || r}
                           </button>
                         ))}
                       </div>
                     </td>
-                    <td className="px-4 py-3">{u.is_active ? "Aktif" : "Pasif"}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          u.is_active ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                        }`}
+                      >
+                        {u.is_active ? "Aktif" : "Pasif"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap space-x-2">
+                      <button
+                        type="button"
+                        className="text-xs text-slate-700 hover:underline"
+                        onClick={() => void toggleActive(u)}
+                      >
+                        {u.is_active ? "Pasifleştir" : "Etkinleştir"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-[#0f766e] hover:underline"
+                        onClick={() => setPwd({ userId: u.id, password: "" })}
+                      >
+                        Şifre sıfırla
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -933,7 +984,7 @@ function SettingsPageInner() {
                         });
                       }}
                     />
-                    {r}
+                    {ROLE_LABELS[r] || r}
                   </label>
                 ))}
               </div>
@@ -943,7 +994,7 @@ function SettingsPageInner() {
             </form>
 
             <form onSubmit={changePassword} className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
-              <h2 className="font-semibold">Şifre değiştir (admin)</h2>
+              <h2 className="font-semibold">Şifre sıfırla (yerel JWT)</h2>
               <select
                 className={input}
                 value={pwd.userId}

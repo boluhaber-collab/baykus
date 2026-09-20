@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { NAV_GROUPS, NavGroup, orderNavGroups } from "@/lib/nav";
+import { NAV_GROUPS, NavGroup, filterNavByLockMode, orderNavGroups } from "@/lib/nav";
 import { AppSettings, apiFetch, clearToken } from "@/lib/api";
 
 function pathMatches(pathname: string, href: string): boolean {
@@ -40,7 +40,8 @@ export default function Sidebar() {
   useEffect(() => {
     function applyFromSettings(s: AppSettings | null) {
       if (!s) return;
-      setGroups(orderNavGroups(NAV_GROUPS, s.sol_menu_sirasi, s.sol_menu_adlari));
+      const ordered = orderNavGroups(NAV_GROUPS, s.sol_menu_sirasi, s.sol_menu_adlari);
+      setGroups(filterNavByLockMode(ordered, s.user_mode, s.sol_menu_adlari));
     }
     try {
       const cached = localStorage.getItem("baykus_app_settings");

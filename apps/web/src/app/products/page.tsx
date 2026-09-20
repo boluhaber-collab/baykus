@@ -119,6 +119,7 @@ function ProductsHubPageInner() {
           { href: "/stock/warehouses", label: "Depolar", color: "#14b8a6" },
           { href: "/stock/count", label: "Stok Sayımı", color: "#22a447" },
           { href: "/tools/import", label: "Excel İçe Aktar", color: "#e2b44d" },
+          { href: "/tools/import?type=bulk-price", label: "Toplu Fiyat Güncelle", color: "#be123c" },
           { href: "/products/labels", label: "Barkod / Etiket", color: "#334155" },
         ]}
       />

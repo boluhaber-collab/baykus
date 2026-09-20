@@ -72,7 +72,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Fiyat / Maliyet
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Fiyat Listesi | `/price-lists` | done |
+| Fiyat Listesi | `/price-lists` | done (batch 17: toplu %/mutlak + Excel) |
 | DTF Maliyet Hesaplama | `/tools/dtf` | done |
 | Maliyet Yönetimi | `/tools/costs` | done |
 | Son Alış Fiyatları | `/tools/last-purchase-prices` | done |
@@ -106,8 +106,8 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
 | Ayarlar | `/settings` sekmeli (Genel/Hızlı İşlemler/Sol Menü/Varyant/Şablon/Kullanıcılar/Entegrasyonlar/Yedek/Sistem/YARDIM) | done |
-| Yetki / Kilit Modu | `/settings/lock-mode` | done |
-| Kullanıcı Yönetimi | `/settings?tab=kullanicilar` | done |
+| Yetki / Kilit Modu | `/settings/lock-mode` | done (batch 17: preset chips + nav hide) |
+| Kullanıcı Yönetimi | `/settings?tab=kullanicilar` | done (batch 17: disable/roles/şifre) |
 | İşlem Geçmişi | `/settings/audit` | done |
 | Yedekleme | `/settings/backups` | done |
 | Yedek Test Et | `/settings/backups` (Yedek Test Et düğmesi) | done |
@@ -353,3 +353,28 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.
 API: Alembic **018** (`expense_categories.group_name`). SQLite: `python -m app.bootstrap_sqlite` kolon yaması.
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password.
+
+
+## Batch 17 — Toplu Fiyat / Şablonlar / Kullanıcı / Kilit / Önceki Fiyatlar (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Toplu Fiyat Güncelle (fiyat listesi) | `/price-lists/[id]` — çoklu seçim · % veya mutlak · alan seçimi · `POST /api/price-lists/{id}/bulk-adjust` | done |
+| Fiyat listesi Excel içe/dışa | Boş şablon `GET /api/price-lists/import-template` · `POST /api/price-lists/{id}/import` · CSV dışa (mevcut) | done |
+| Ürün Toplu Fiyat Excel | `/tools/import?type=bulk-price` + ürün hub CTA · `POST /api/products/bulk-price-import` (masaüstü toplu_fiyat_guncelle) | done |
+| Excel şablonları | `/tools/import` — Müşteri · Stok · Fiyat Listesi · Toplu Fiyat sekmeleri | done |
+| Kullanıcı Yönetimi | `/settings?tab=kullanicilar` — Admin/Sales/Production/Accounting etiketleri · oluştur · pasifleştir · şifre sıfırla (JWT) | done |
+| Yetki / Kilit Modu | `/settings/lock-mode` — Yönetici/Personel/Tam Yetki/Sadece Satış/Sadece Stok · görünür/gizli önizleme · Sidebar `filterNavByLockMode` | done |
+| Önceki Fiyatlar modal | `/sales/create` satır «↶ Önceki fiyatlar» → `PreviousPricesModal` (`GET /api/products/{id}/history`) | done |
+| Smoke | `/health` · `/api/search` (tedarikçi company AttributeError fix) · tahsilat · bulk-adjust | done |
+
+API: price-lists bulk-adjust/import/template; products bulk-price-*; search supplier fix. Alembic yok.
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password.
+
+### Kalan (dürüst)
+
+- Masaüstü ReportLab twin PDF stilleri (cari/demirbaş/fiyat listesi) — web basit PDF/HTML
+- Lock mode sunucu claim zorunlu API gate (şimdi istemci menü + ayar; roller zaten API’de)
+- Fiyat listesi Excel’de ürün_id otomatik eşleştirme (isim eşleşmesi var)
+- Merkezi DB canlı şifre / VPS kullanıcı senkron (masaüstü postgres users)

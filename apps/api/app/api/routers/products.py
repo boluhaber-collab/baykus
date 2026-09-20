@@ -13,6 +13,7 @@ from app.core.deps import get_db, require_roles
 from app.models.product import DEFAULT_WAREHOUSE, Product, ProductVariant, StockMovement
 from app.models.price_list import PriceList, PriceListItem
 from app.models.user import User
+from app.services.audit import write_audit
 from app.schemas.product import (
     CriticalStockItem,
     ProductCreate,
@@ -433,6 +434,178 @@ def stock_import_template(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="stok-sablon.csv"'},
     )
+
+
+
+@router.get("/bulk-price-template")
+def bulk_price_template(
+    _: User = Depends(require_roles(*READ_ROLES)),
+    fmt: str = Query(default="xlsx", pattern="^(csv|xlsx)$"),
+):
+    """Masaüstü Toplu Fiyat Güncelle — boş şablon."""
+    import csv
+    import io
+
+    headers = ["Ürün Adı", "BEDEN", "RENK", "Baskı", "Alış Fiyatı", "Satış Fiyatı"]
+    if fmt == "xlsx":
+        try:
+            from openpyxl import Workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "TopluFiyat"
+        ws.append(headers)
+        buf = io.BytesIO()
+        wb.save(buf)
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="toplu-fiyat-sablon.xlsx"'},
+        )
+    buf = io.StringIO()
+    csv.writer(buf).writerow(headers)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="toplu-fiyat-sablon.csv"'},
+    )
+
+
+@router.post("/bulk-price-import")
+async def bulk_price_import(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*WRITE_ROLES)),
+) -> dict:
+    """Desktop toplu_fiyat_guncelle — ürün adı (+beden/renk/baskı) ile alış/satış güncelle."""
+    import csv
+    import io
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Boş dosya")
+    name = (file.filename or "").lower()
+    rows: list[dict] = []
+    if name.endswith((".xlsx", ".xlsm")):
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise HTTPException(status_code=500, detail="openpyxl yüklü değil") from exc
+        wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        ws = wb.active
+        data = list(ws.iter_rows(values_only=True))
+        if not data:
+            raise HTTPException(status_code=400, detail="Boş dosya")
+        headers = [str(h or "").strip() for h in data[0]]
+        for line in data[1:]:
+            if not line or all(v is None or str(v).strip() == "" for v in line):
+                continue
+            rows.append({headers[i]: line[i] if i < len(line) else None for i in range(len(headers))})
+    else:
+        reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig", errors="replace")))
+        rows = [r for r in reader if any(str(v or "").strip() for v in r.values())]
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="Excel dosyasında okunacak satır bulunamadı")
+
+    clean = {str(k).strip().lower(): k for k in rows[0].keys()}
+    adaylar = {
+        "name": ["ürün adı", "urun adi", "ürün", "urun", "product", "name", "sku"],
+        "size": ["beden", "size"],
+        "color": ["renk", "color"],
+        "print": ["baskı", "baski", "baskı türü", "baski turu", "print"],
+        "purchase": ["alış fiyatı", "alis fiyati", "alış", "alis", "maliyet", "purchase_price"],
+        "sale": ["satış fiyatı", "satis fiyati", "satış", "satis", "fiyat", "base_price"],
+    }
+    cmap: dict[str, str] = {}
+    for hedef, isimler in adaylar.items():
+        for ad in isimler:
+            if ad in clean:
+                cmap[hedef] = clean[ad]
+                break
+    if "name" not in cmap or ("purchase" not in cmap and "sale" not in cmap):
+        raise HTTPException(
+            status_code=400,
+            detail="Excel içinde en az Ürün Adı ve Alış Fiyatı veya Satış Fiyatı sütunu olmalı.",
+        )
+
+    def _num(v):
+        if v is None or str(v).strip() == "" or str(v).strip().lower() == "nan":
+            return None
+        try:
+            return Decimal(str(v).strip().replace(",", "."))
+        except Exception:
+            return None
+
+    guncellenen = 0
+    bulunamayan = 0
+    errors: list[str] = []
+    for idx, row in enumerate(rows, start=2):
+        urun = str(row.get(cmap["name"], "") or "").strip()
+        if not urun or urun.lower() == "nan":
+            continue
+        q = db.query(Product).options(joinedload(Product.variants))
+        products = q.filter(Product.name.ilike(urun)).all()
+        if not products:
+            # try sku
+            products = db.query(Product).options(joinedload(Product.variants)).filter(Product.sku.ilike(urun)).all()
+        if not products:
+            bulunamayan += 1
+            errors.append(f"Satır {idx}: bulunamadı ({urun})")
+            continue
+        purchase = _num(row.get(cmap["purchase"])) if "purchase" in cmap else None
+        sale = _num(row.get(cmap["sale"])) if "sale" in cmap else None
+        size = str(row.get(cmap.get("size", ""), "") or "").strip() if "size" in cmap else ""
+        color = str(row.get(cmap.get("color", ""), "") or "").strip() if "color" in cmap else ""
+        print_t = str(row.get(cmap.get("print", ""), "") or "").strip() if "print" in cmap else ""
+
+        for p in products:
+            if size or color or print_t:
+                # update matching variants
+                matched = False
+                for v in p.variants or []:
+                    ok = True
+                    if size and str(getattr(v, "size", "") or "").strip().lower() != size.lower():
+                        ok = False
+                    if color and str(getattr(v, "color", "") or "").strip().lower() != color.lower():
+                        ok = False
+                    if print_t and str(getattr(v, "print_type", "") or "").strip().lower() != print_t.lower():
+                        ok = False
+                    if not ok:
+                        continue
+                    if sale is not None and hasattr(v, "price"):
+                        v.price = sale
+                    matched = True
+                    guncellenen += 1
+                if not matched:
+                    # fall through to product-level if no variant match
+                    if purchase is not None:
+                        p.purchase_price = purchase
+                    if sale is not None:
+                        p.base_price = sale
+                    guncellenen += 1
+            else:
+                if purchase is not None:
+                    p.purchase_price = purchase
+                if sale is not None:
+                    p.base_price = sale
+                guncellenen += 1
+
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="bulk_price_import",
+        entity_type="product",
+        entity_id=None,
+        detail={"updated": guncellenen, "missing": bulunamayan},
+    )
+    return {
+        "updated": guncellenen,
+        "missing": bulunamayan,
+        "errors": errors[:20],
+        "message": f"Güncellenen satır: {guncellenen}\\nBulunamayan ürün: {bulunamayan}",
+    }
 
 
 @router.post("/stock/import")

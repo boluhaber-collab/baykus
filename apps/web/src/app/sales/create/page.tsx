@@ -11,6 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import PreviousPricesModal from "@/components/PreviousPricesModal";
 
 type SaleType = "perakende" | "yeni" | "kayitli" | "internet" | "teklif";
 
@@ -102,6 +103,7 @@ function CreateSaleInner() {
     depo: string;
     whStocks: Record<string, number>;
   } | null>(null);
+  const [prevPrices, setPrevPrices] = useState<{ lineKey: string; productId: number; productName: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -678,14 +680,32 @@ function CreateSaleInner() {
                         />
                       </td>
                       <td>
-                        <input
-                          className="bk-input w-24"
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={line.unit_price}
-                          onChange={(e) => updateLine(line.key, { unit_price: e.target.value })}
-                        />
+                        <div className="flex flex-col gap-0.5">
+                          <input
+                            className="bk-input w-24"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={line.unit_price}
+                            onChange={(e) => updateLine(line.key, { unit_price: e.target.value })}
+                          />
+                          {line.product_id && (
+                            <button
+                              type="button"
+                              className="text-[10px] text-[#0f766e] hover:underline text-left whitespace-nowrap"
+                              title="Önceki Fiyatlar"
+                              onClick={() =>
+                                setPrevPrices({
+                                  lineKey: line.key,
+                                  productId: Number(line.product_id),
+                                  productName: line.description || "",
+                                })
+                              }
+                            >
+                              ↶ Önceki fiyatlar
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="tabular-nums text-xs font-semibold">{formatMoney(lineTot)}</td>
                       <td>
@@ -832,10 +852,22 @@ function CreateSaleInner() {
           </div>
         </div>
       )}
+
+      {prevPrices && (
+        <PreviousPricesModal
+          productId={prevPrices.productId}
+          productName={prevPrices.productName}
+          customerName={customers.find((c) => String(c.id) === String(customerId))?.name}
+          onClose={() => setPrevPrices(null)}
+          onPickPrice={(price) => {
+            updateLine(prevPrices.lineKey, { unit_price: String(price) });
+            setPrevPrices(null);
+          }}
+        />
+      )}
     </div>
   );
 }
-
 export default function CreateSalePage() {
   return (
     <Suspense fallback={<div className="text-sm text-baykus-muted p-4">Yükleniyor…</div>}>

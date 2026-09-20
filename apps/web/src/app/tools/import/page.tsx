@@ -5,25 +5,57 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiFetch, downloadAuthFile } from "@/lib/api";
 
-type Tab = "customers" | "stock";
+type Tab = "customers" | "stock" | "prices" | "bulk-price";
 
 type ImportResult = {
   created?: number;
   updated?: number;
   skipped?: number;
+  missing?: number;
   errors?: string[];
   message?: string;
 };
 
+const TABS: { id: Tab; label: string; color: string }[] = [
+  { id: "customers", label: "Müşteri Şablonu", color: "#e2b44d" },
+  { id: "stock", label: "Stok Şablonu", color: "#198754" },
+  { id: "prices", label: "Fiyat Listesi Şablonu", color: "#be123c" },
+  { id: "bulk-price", label: "Toplu Fiyat Güncelle", color: "#9f1239" },
+];
+
 function ImportWizardInner() {
   const sp = useSearchParams();
-  const initial: Tab = sp.get("type") === "stock" ? "stock" : "customers";
+  const typeParam = sp.get("type");
+  const initial: Tab =
+    typeParam === "stock"
+      ? "stock"
+      : typeParam === "prices" || typeParam === "price-lists"
+        ? "prices"
+        : typeParam === "bulk-price" || typeParam === "toplu-fiyat"
+          ? "bulk-price"
+          : "customers";
   const [tab, setTab] = useState<Tab>(initial);
+  const [priceListId, setPriceListId] = useState("");
+  const [priceLists, setPriceLists] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     const t = sp.get("type");
     if (t === "stock" || t === "customers") setTab(t);
+    if (t === "prices" || t === "price-lists") setTab("prices");
+    if (t === "bulk-price" || t === "toplu-fiyat") setTab("bulk-price");
   }, [sp]);
+
+  useEffect(() => {
+    if (tab !== "prices") return;
+    void apiFetch<{ id: number; name: string }[]>("/api/price-lists")
+      .then((rows) => {
+        setPriceLists(rows);
+        if (!priceListId && rows[0]) setPriceListId(String(rows[0].id));
+      })
+      .catch(() => setPriceLists([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
@@ -38,12 +70,18 @@ function ImportWizardInner() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const path = tab === "customers" ? "/api/customers/import" : "/api/products/stock/import";
+      let path = "/api/customers/import";
+      if (tab === "stock") path = "/api/products/stock/import";
+      else if (tab === "bulk-price") path = "/api/products/bulk-price-import";
+      else if (tab === "prices") {
+        if (!priceListId) throw new Error("Hedef fiyat listesi seçin");
+        path = `/api/price-lists/${priceListId}/import?mode=merge`;
+      }
       const res = await apiFetch<ImportResult>(path, { method: "POST", body: fd });
       setResult(res);
       setMsg(
         res.message ||
-          `İçe aktarma: ${res.created ?? 0} yeni, ${res.updated ?? 0} güncellendi, ${res.skipped ?? 0} atlandı`,
+          `İçe aktarma: ${res.created ?? 0} yeni, ${res.updated ?? res.updated ?? 0} güncellendi, ${res.skipped ?? res.missing ?? 0} atlandı`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "İçe aktarma hatası");
@@ -62,93 +100,149 @@ function ImportWizardInner() {
           <span className="mx-1">/</span>
           <span className="font-medium">Excel İçe Aktarma</span>
         </div>
-        <h1 className="text-xl font-bold">Excel İçe Aktarma Sihirbazı</h1>
+        <h1 className="text-xl font-bold">Excel Şablonları / İçe Aktarma</h1>
         <p className="text-sm text-baykus-muted">
-          Masaüstü «Excelden Müşteri» / «Toplu Stok» — şablon indir · doğrula · aktar (sır yok)
+          Masaüstü müşteri · stok · fiyat listesi şablonları — indir · doldur · aktar (sır yok)
         </p>
       </div>
 
       {error && <div className="mb-3 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
       {msg && <div className="mb-3 rounded-lg bg-emerald-50 text-emerald-800 px-4 py-2 text-sm">{msg}</div>}
 
-      <div className="flex gap-2 mb-4">
-        {(
-          [
-            ["customers", "Excelden Müşteri", "#e2b44d"],
-            ["stock", "Toplu Stok", "#198754"],
-          ] as const
-        ).map(([id, label, color]) => (
+      <div className="flex flex-wrap gap-2 mb-4">
+        {TABS.map((t) => (
           <button
-            key={id}
+            key={t.id}
             type="button"
             onClick={() => {
-              setTab(id);
+              setTab(t.id);
               setResult(null);
               setMsg("");
               setError("");
             }}
             className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
-            style={{
-              backgroundColor: color,
-              opacity: tab === id ? 1 : 0.55,
-            }}
+            style={{ backgroundColor: t.color, opacity: tab === t.id ? 1 : 0.55 }}
           >
-            {label}
+            {t.label}
           </button>
         ))}
       </div>
 
       <div className="bk-card p-5 space-y-4 max-w-2xl">
         <ol className="text-sm space-y-2 list-decimal pl-5 text-slate-700">
-          <li>Şablon CSV/XLSX indirin</li>
-          <li>Satırları doldurun (zorunlu: müşteri Adı / stok Ürün Adı veya SKU)</li>
+          <li>Boş şablon CSV/XLSX indirin</li>
+          <li>
+            {tab === "customers" && "Satırları doldurun (zorunlu: Ad)"}
+            {tab === "stock" && "Satırları doldurun (zorunlu: Ürün Adı veya SKU)"}
+            {tab === "prices" && "Satırları doldurun (zorunlu: Ürün; Alış / Baskısız / Baskılı / Nakışlı)"}
+            {tab === "bulk-price" && "Ürün Adı + Alış ve/veya Satış Fiyatı (isteğe bağlı BEDEN/RENK/Baskı)"}
+          </li>
           <li>Dosyayı seçip içe aktarın — sunucu openpyxl/csv ile parse eder</li>
         </ol>
 
+        {tab === "prices" && (
+          <label className="block text-sm">
+            <span className="text-xs text-baykus-muted">Hedef fiyat listesi</span>
+            <select className="bk-input mt-0.5" value={priceListId} onChange={(e) => setPriceListId(e.target.value)}>
+              <option value="">— Seçin —</option>
+              {priceLists.map((pl) => (
+                <option key={pl.id} value={pl.id}>
+                  {pl.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-baykus-muted mt-1">
+              Liste yoksa önce{" "}
+              <Link href="/price-lists" className="text-baykus-primary hover:underline">
+                Fiyat Listesi
+              </Link>{" "}
+              oluşturun.
+            </p>
+          </label>
+        )}
+
         <div className="flex flex-wrap gap-2">
-          {tab === "customers" ? (
+          {tab === "customers" && (
             <>
               <button
                 type="button"
                 className="bk-btn bk-btn-ghost text-sm"
-                onClick={() =>
-                  downloadAuthFile("/api/customers/import-template?fmt=csv", "musteri-sablon.csv")
-                }
+                onClick={() => downloadAuthFile("/api/customers/import-template?fmt=csv", "musteri-sablon.csv")}
               >
                 Şablon CSV
               </button>
               <button
                 type="button"
                 className="bk-btn bk-btn-ghost text-sm"
-                onClick={() =>
-                  downloadAuthFile("/api/customers/import-template?fmt=xlsx", "musteri-sablon.xlsx")
-                }
+                onClick={() => downloadAuthFile("/api/customers/import-template?fmt=xlsx", "musteri-sablon.xlsx")}
               >
                 Şablon Excel
               </button>
+              <Link href="/customers" className="bk-btn bk-btn-ghost text-sm">
+                Müşteriler
+              </Link>
             </>
-          ) : (
+          )}
+          {tab === "stock" && (
             <>
               <button
                 type="button"
                 className="bk-btn bk-btn-ghost text-sm"
-                onClick={() =>
-                  downloadAuthFile("/api/products/stock/import-template?fmt=csv", "stok-sablon.csv")
-                }
+                onClick={() => downloadAuthFile("/api/products/stock/import-template?fmt=csv", "stok-sablon.csv")}
               >
                 Şablon CSV
               </button>
               <button
                 type="button"
                 className="bk-btn bk-btn-ghost text-sm"
-                onClick={() =>
-                  downloadAuthFile("/api/products/stock/import-template?fmt=xlsx", "stok-sablon.xlsx")
-                }
+                onClick={() => downloadAuthFile("/api/products/stock/import-template?fmt=xlsx", "stok-sablon.xlsx")}
               >
                 Şablon Excel
               </button>
               <Link href="/stock" className="bk-btn bk-btn-ghost text-sm">
                 Stok sayfası
+              </Link>
+            </>
+          )}
+          {tab === "prices" && (
+            <>
+              <button
+                type="button"
+                className="bk-btn bk-btn-ghost text-sm"
+                onClick={() => downloadAuthFile("/api/price-lists/import-template?fmt=csv", "fiyat-listesi-sablon.csv")}
+              >
+                Şablon CSV
+              </button>
+              <button
+                type="button"
+                className="bk-btn bk-btn-ghost text-sm"
+                onClick={() => downloadAuthFile("/api/price-lists/import-template?fmt=xlsx", "fiyat-listesi-sablon.xlsx")}
+              >
+                Şablon Excel
+              </button>
+              <Link href="/price-lists" className="bk-btn bk-btn-ghost text-sm">
+                Fiyat listeleri
+              </Link>
+            </>
+          )}
+          {tab === "bulk-price" && (
+            <>
+              <button
+                type="button"
+                className="bk-btn bk-btn-ghost text-sm"
+                onClick={() => downloadAuthFile("/api/products/bulk-price-template?fmt=csv", "toplu-fiyat-sablon.csv")}
+              >
+                Şablon CSV
+              </button>
+              <button
+                type="button"
+                className="bk-btn bk-btn-ghost text-sm"
+                onClick={() => downloadAuthFile("/api/products/bulk-price-template?fmt=xlsx", "toplu-fiyat-sablon.xlsx")}
+              >
+                Şablon Excel
+              </button>
+              <Link href="/products" className="bk-btn bk-btn-ghost text-sm">
+                Ürünler
               </Link>
             </>
           )}
@@ -172,7 +266,8 @@ function ImportWizardInner() {
           <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm">
             <div>
               Eklenen: <strong>{result.created ?? 0}</strong> · Güncellenen:{" "}
-              <strong>{result.updated ?? 0}</strong> · Atlanan: <strong>{result.skipped ?? 0}</strong>
+              <strong>{result.updated ?? 0}</strong> · Atlanan / bulunamayan:{" "}
+              <strong>{result.skipped ?? result.missing ?? 0}</strong>
             </div>
             {result.errors && result.errors.length > 0 && (
               <ul className="mt-2 text-xs text-amber-800 list-disc pl-4">
@@ -187,7 +282,6 @@ function ImportWizardInner() {
     </div>
   );
 }
-
 
 export default function ImportWizardPage() {
   return (
