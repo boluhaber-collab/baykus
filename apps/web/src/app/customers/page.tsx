@@ -67,29 +67,23 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="block text-xs text-baykus-muted mb-1">Ara</label>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Ad, kod, firma, telefon…"
-            className="rounded-lg border border-baykus-line px-3 py-2 text-sm w-56"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-baykus-muted mb-1">Durum</label>
-          <select
-            value={activeFilter}
-            onChange={(e) => setActiveFilter(e.target.value as "all" | "true" | "false")}
-            className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
-          >
-            <option value="all">Tümü</option>
-            <option value="true">Aktif</option>
-            <option value="false">Pasif</option>
-          </select>
-        </div>
-        <label className="flex items-center gap-2 text-sm text-baykus-text pb-2">
+      <div className="bk-filter-bar">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Ad, kod, firma, telefon…"
+          className="bk-input max-w-[220px]"
+        />
+        <select
+          value={activeFilter}
+          onChange={(e) => setActiveFilter(e.target.value as "all" | "true" | "false")}
+          className="bk-input max-w-[140px]"
+        >
+          <option value="all">Tümü</option>
+          <option value="true">Aktif</option>
+          <option value="false">Pasif</option>
+        </select>
+        <label className="flex items-center gap-2 text-xs text-baykus-text px-1">
           <input
             type="checkbox"
             checked={hasBalance}
@@ -97,37 +91,34 @@ export default function CustomersPage() {
           />
           Sadece bakiyesi olanlar
         </label>
-        <button
-          onClick={load}
-          className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm"
-        >
-          Filtrele
-        </button>
+        <div className="flex-1" />
+        <button type="button" onClick={() => { setQ(""); setActiveFilter("all"); setHasBalance(false); }} className="bk-btn bk-btn-ghost">Temizle</button>
+        <button onClick={load} className="bk-btn bk-btn-primary">Ara</button>
       </div>
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
-        <table className="min-w-full text-sm">
-          <thead className="bg-baykus-bg text-left text-baykus-muted">
+      <div className="bk-table-wrap">
+        <table className="bk-table">
+          <thead>
             <tr>
-              <th className="px-3 py-2">Kod</th>
-              <th className="px-3 py-2">Ad</th>
-              <th className="px-3 py-2">Firma</th>
-              <th className="px-3 py-2">Şehir</th>
-              <th className="px-3 py-2">Telefon</th>
-              <th className="px-3 py-2 text-right">Bakiye</th>
-              <th className="px-3 py-2">Durum</th>
-              <th className="px-3 py-2"></th>
+              <th>Kod</th>
+              <th>Ad</th>
+              <th>Firma</th>
+              <th>Şehir</th>
+              <th>Telefon</th>
+              <th className="text-right">Bakiye</th>
+              <th>Durum</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {items.map((c) => {
               const bal = Number(c.balance ?? 0);
               return (
-                <tr key={c.id} className="border-t border-baykus-line hover:bg-baykus-bg">
+                <tr key={c.id} >
                   <td className="px-3 py-2 font-mono text-xs text-baykus-muted">{c.code || "—"}</td>
                   <td className="px-3 py-2 font-medium">
                     <Link href={`/customers/${c.id}`} className="text-baykus-primary hover:underline">

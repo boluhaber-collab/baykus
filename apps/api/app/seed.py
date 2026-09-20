@@ -1023,7 +1023,7 @@ def seed(db: Session) -> None:
             [
                 AppSetting(key="company_name", value="Baykuş Baskı"),
                 AppSetting(key="phone", value="+90 212 555 0101"),
-                AppSetting(key="theme_label", value="Varsayılan"),
+                AppSetting(key="theme_label", value="Açık"),
             ]
         )
         db.commit()

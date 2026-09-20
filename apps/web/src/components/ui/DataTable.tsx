@@ -21,7 +21,7 @@ export default function DataTable({
       {isEmpty ? (
         <div className="px-4 py-8 text-sm text-baykus-muted text-center">{empty || "Kayıt yok"}</div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="bk-table-wrap border-0 rounded-none">
           <table className="bk-table">{children}</table>
         </div>
       )}

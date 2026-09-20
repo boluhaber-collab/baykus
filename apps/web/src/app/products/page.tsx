@@ -80,17 +80,17 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4 items-center">
+      <div className="bk-filter-bar">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Ad / SKU / marka ara…"
-          className="rounded-lg border border-baykus-line px-3 py-2 text-sm min-w-[200px]"
+          className="bk-input max-w-[220px]"
         />
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
+          className="bk-input max-w-[160px]"
         >
           <option value="">Tüm kategoriler</option>
           {categories.map((c) => (
@@ -102,13 +102,13 @@ export default function ProductsPage() {
         <select
           value={productType}
           onChange={(e) => setProductType(e.target.value)}
-          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
+          className="bk-input max-w-[140px]"
         >
           <option value="">Tüm türler</option>
           <option value="stoklu">Stoklu</option>
           <option value="hizmet">Hizmet</option>
         </select>
-        <label className="flex items-center gap-2 text-sm text-baykus-text px-2">
+        <label className="flex items-center gap-2 text-xs text-baykus-text px-1">
           <input
             type="checkbox"
             checked={criticalOnly}
@@ -116,10 +116,11 @@ export default function ProductsPage() {
           />
           Sadece kritik
         </label>
-        <button
-          onClick={load}
-          className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm"
-        >
+        <div className="flex-1" />
+        <button type="button" onClick={() => { setQ(""); setCategory(""); setProductType(""); setCriticalOnly(false); }} className="bk-btn bk-btn-ghost">
+          Temizle
+        </button>
+        <button onClick={load} className="bk-btn bk-btn-primary">
           Ara
         </button>
       </div>
@@ -128,18 +129,18 @@ export default function ProductsPage() {
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-baykus-bg text-left text-baykus-muted">
+      <div className="bk-table-wrap">
+        <table className="bk-table">
+          <thead>
             <tr>
-              <th className="px-3 py-2">SKU</th>
-              <th className="px-3 py-2">Ad</th>
-              <th className="px-3 py-2">Kategori</th>
-              <th className="px-3 py-2">Tür</th>
-              <th className="px-3 py-2">Satış</th>
-              <th className="px-3 py-2">Stok</th>
-              <th className="px-3 py-2">Varyant</th>
-              <th className="px-3 py-2"></th>
+              <th>SKU</th>
+              <th>Ad</th>
+              <th>Kategori</th>
+              <th>Tür</th>
+              <th>Satış</th>
+              <th>Stok</th>
+              <th>Varyant</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -150,10 +151,10 @@ export default function ProductsPage() {
               return (
                 <tr
                   key={p.id}
-                  className={`border-t border-baykus-line hover:bg-baykus-bg ${critical ? "bg-red-50/40" : ""}`}
+                  className={critical ? "bg-red-50/40" : undefined}
                 >
-                  <td className="px-3 py-2 font-mono text-xs">{p.sku}</td>
-                  <td className="px-3 py-2 font-medium">
+                  <td className="font-mono text-xs">{p.sku}</td>
+                  <td className="font-medium">
                     <Link href={`/products/${p.id}`} className="text-baykus-primary hover:underline">
                       {p.name}
                     </Link>
@@ -192,7 +193,7 @@ export default function ProductsPage() {
             })}
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="text-center text-baykus-muted py-8">
                   Ürün yok
                 </td>
               </tr>

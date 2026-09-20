@@ -43,6 +43,16 @@ docker compose up --build
 10. **Raporlar** → hub kartları; her rapor filtre + tablo + CSV.  
 
 
+## Masaüstü IA (v2.34 hizalama)
+
+Sol menü masaüstü Baykuş Baskı merkezleriyle aynı sırada (gruplu / açılır):
+Ana Sayfa · Müşteri · Tedarik · Ürün & Stok · Satış/Sipariş · Üretim/Atölye · E-Ticaret · Finans · Fiyat/Maliyet · Raporlar · Müşteri İletişim · Evrak Dolabı · Sistem.
+
+- Üst çubuk: **Geri** + yeşil **Ana Sayfa** + breadcrumb `X > Y`
+- `/sales/create` — Satış / Teklif Oluştur (Perakende / Yeni / Kayıtlı / İnternet / Teklif)
+- Ana Sayfa: hızlı işlemler + «Stokta Var Olan Ürünler» (navy tablo başlığı)
+- Hub’lar: `/sales`, `/production`, `/ecommerce`, `/documents`, `/settings/health`
+
 ## Son parite turu (NEXT)
 
 - **Teklifler**: detayda satır+başlık inline düzenleme (PUT), PDF / siparişe dönüştür / soft iptal

@@ -14,6 +14,7 @@
   --baykus-success: #16a34a;
   --baykus-splash: #111827;
   --baykus-accent: #93c5fd;
+  --baykus-navy: #1e293b;
   --baykus-shadow: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.06);
 }
 
@@ -26,18 +27,18 @@ body {
 
 @layer components {
   .bk-card {
-    border-radius: 0.75rem;
+    border-radius: 0.5rem;
     border: 1px solid var(--baykus-line);
     background-color: var(--baykus-card);
     box-shadow: var(--baykus-shadow);
   }
   .bk-input {
     width: 100%;
-    border-radius: 0.5rem;
+    border-radius: 0.25rem;
     border: 1px solid var(--baykus-line);
     background: #fff;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.8125rem;
     color: var(--baykus-text);
   }
   .bk-input::placeholder {
@@ -46,16 +47,16 @@ body {
   .bk-input:focus {
     outline: none;
     border-color: var(--baykus-primary);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
   }
   .bk-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.375rem;
-    border-radius: 0.5rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
+    border-radius: 0.25rem;
+    padding: 0.375rem 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     transition: background-color 0.15s, opacity 0.15s;
   }
@@ -86,42 +87,93 @@ body {
   .bk-btn-danger:hover {
     background: #fef2f2;
   }
+  .bk-filter-bar {
+    border: 1px solid var(--baykus-line);
+    border-radius: 0.375rem;
+    background: #fff;
+    padding: 0.625rem 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+  .bk-table-wrap {
+    border: 1px solid var(--baykus-line);
+    border-radius: 0.375rem;
+    background: #fff;
+    overflow: auto;
+  }
   .bk-table {
     width: 100%;
     min-width: 100%;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
+    border-collapse: collapse;
   }
   .bk-table thead {
-    background-color: var(--baykus-bg);
-    color: var(--baykus-muted);
+    background-color: var(--baykus-navy);
+    color: #fff;
     text-align: left;
   }
   .bk-table th {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
     white-space: nowrap;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .bk-table th:last-child {
+    border-right: none;
   }
   .bk-table td {
-    padding: 0.375rem 0.75rem;
+    padding: 0.35rem 0.65rem;
     border-top: 1px solid var(--baykus-line);
+    border-right: 1px solid #eef2f7;
     vertical-align: middle;
   }
+  .bk-table td:last-child {
+    border-right: none;
+  }
   .bk-table tbody tr:hover {
-    background-color: rgba(244, 247, 251, 0.7);
+    background-color: rgba(244, 247, 251, 0.9);
   }
   .bk-sticky-header {
     position: sticky;
     top: 0;
     z-index: 10;
-    margin-left: -1.5rem;
-    margin-right: -1.5rem;
-    margin-bottom: 1rem;
-    padding: 0.75rem 1.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0;
     background-color: rgba(244, 247, 251, 0.95);
     backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--baykus-line);
+  }
+  .bk-hub-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+  .bk-hub-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    border: 1px solid var(--baykus-line);
+    border-radius: 0.5rem;
+    background: #fff;
+    padding: 0.875rem 1rem;
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow 0.15s, border-color 0.15s;
+  }
+  .bk-hub-card:hover {
+    border-color: var(--baykus-primary);
+    box-shadow: var(--baykus-shadow);
+  }
+  .bk-hub-card .title {
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+  .bk-hub-card .desc {
+    font-size: 0.75rem;
+    color: var(--baykus-muted);
   }
 }

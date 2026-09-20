@@ -15,6 +15,7 @@ const config: Config = {
         "baykus-success": "#16a34a",
         "baykus-splash": "#111827",
         "baykus-accent": "#93c5fd",
+        "baykus-navy": "#1e293b",
         baykus: {
           bg: "#f4f7fb",
           card: "#ffffff",
@@ -26,6 +27,7 @@ const config: Config = {
           success: "#16a34a",
           splash: "#111827",
           accent: "#93c5fd",
+          navy: "#1e293b",
           50: "#f4f7fb",
           100: "#e0effe",
           500: "#2563eb",

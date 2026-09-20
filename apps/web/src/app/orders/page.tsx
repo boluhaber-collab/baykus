@@ -70,79 +70,67 @@ export default function OrdersListPage() {
             Kanban
           </Link>
           <Link
-            href="/orders/new"
+            href="/sales/create"
             className="rounded-lg bg-baykus-primary text-white px-4 py-2 text-sm font-medium"
           >
-            + Yeni Sipariş
+            + Satış / Teklif
+          </Link>
+          <Link
+            href="/orders/new"
+            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
+          >
+            Klasik form
           </Link>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="bk-filter-bar">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="No / müşteri / not ara…"
-          className="rounded-lg border border-baykus-line px-3 py-2 text-sm min-w-[200px]"
+          className="bk-input max-w-[220px]"
         />
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
-        >
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="bk-input max-w-[160px]">
           <option value="">Tüm durumlar</option>
           {ORDER_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
+            <option key={s} value={s}>{s}</option>
           ))}
         </select>
-        <select
-          value={channel}
-          onChange={(e) => setChannel(e.target.value)}
-          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
-        >
+        <select value={channel} onChange={(e) => setChannel(e.target.value)} className="bk-input max-w-[140px]">
           <option value="">Tüm kanallar</option>
           {ORDER_CHANNELS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
+            <option key={c} value={c}>{c}</option>
           ))}
         </select>
-        <select
-          value={designStatus}
-          onChange={(e) => setDesignStatus(e.target.value)}
-          className="rounded-lg border border-baykus-line px-3 py-2 text-sm"
-        >
+        <select value={designStatus} onChange={(e) => setDesignStatus(e.target.value)} className="bk-input max-w-[140px]">
           <option value="">Tüm tasarım</option>
           {DESIGN_STATUSES.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
+            <option key={d} value={d}>{d}</option>
           ))}
         </select>
-        <button onClick={load} className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm">
-          Ara
-        </button>
+        <div className="flex-1" />
+        <button type="button" onClick={() => { setQ(""); setStatus(""); setChannel(""); setDesignStatus(""); }} className="bk-btn bk-btn-ghost">Temizle</button>
+        <button onClick={load} className="bk-btn bk-btn-primary">Ara</button>
       </div>
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-baykus-bg text-left text-baykus-muted">
+      <div className="bk-table-wrap">
+        <table className="bk-table">
+          <thead>
             <tr>
-              <th className="px-3 py-2">Sipariş No</th>
-              <th className="px-3 py-2">Müşteri</th>
-              <th className="px-3 py-2">Durum</th>
-              <th className="px-3 py-2">Kanal</th>
-              <th className="px-3 py-2">Tasarım</th>
-              <th className="px-3 py-2">Toplam</th>
-              <th className="px-3 py-2">Kalan</th>
-              <th className="px-3 py-2">Teslim</th>
-              <th className="px-3 py-2"></th>
+              <th>Sipariş No</th>
+              <th>Müşteri</th>
+              <th>Durum</th>
+              <th>Kanal</th>
+              <th>Tasarım</th>
+              <th>Toplam</th>
+              <th>Kalan</th>
+              <th>Teslim</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -155,7 +143,7 @@ export default function OrdersListPage() {
             )}
             {!loading &&
               items.map((o) => (
-                <tr key={o.id} className="border-t border-baykus-line hover:bg-baykus-bg">
+                <tr key={o.id} >
                   <td className="px-3 py-2 font-medium">
                     <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline">
                       {o.order_number}
