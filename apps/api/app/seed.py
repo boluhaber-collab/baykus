@@ -9,12 +9,15 @@ from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models import (
     AppSetting,
+    Asset,
     BankAccount,
     BankMovement,
+    Campaign,
     CariMovement,
     CashMovement,
     CashRegister,
     Customer,
+    DtfScenario,
     Expense,
     ExpenseCategory,
     Loan,
@@ -32,6 +35,7 @@ from app.models import (
     Quote,
     QuoteLine,
     Role,
+    SpecialDay,
     Supplier,
     SupplierMovement,
     User,
@@ -1267,6 +1271,148 @@ def seed(db: Session) -> None:
                     payment_method="nakit" if i == 1 else None,
                 )
             )
+        db.commit()
+
+
+    # ── Parity batch 3: assets, DTF, special days, campaigns ───────────────
+    if db.query(Asset).count() == 0:
+        db.add_all(
+            [
+                Asset(
+                    name="Epson SureColor DTF Yazıcı",
+                    category="Makine",
+                    purchase_date=date(2023, 3, 15),
+                    cost=Decimal("185000.00"),
+                    depreciation_method="straight_line",
+                    useful_life_months=60,
+                    note="Ana DTF üretim hattı",
+                    active=True,
+                ),
+                Asset(
+                    name="Isı Presi 40x60",
+                    category="Makine",
+                    purchase_date=date(2022, 8, 1),
+                    cost=Decimal("28000.00"),
+                    depreciation_method="straight_line",
+                    useful_life_months=48,
+                    note="Transfer presi",
+                    active=True,
+                ),
+                Asset(
+                    name="Dell Ofis Bilgisayarı",
+                    category="Bilişim",
+                    purchase_date=date(2024, 1, 10),
+                    cost=Decimal("22000.00"),
+                    depreciation_method="straight_line",
+                    useful_life_months=36,
+                    active=True,
+                ),
+                Asset(
+                    name="Raf Sistemi Depo",
+                    category="Demirbaş",
+                    purchase_date=date(2021, 6, 20),
+                    cost=Decimal("8500.00"),
+                    depreciation_method="none",
+                    useful_life_months=None,
+                    note="Amortisman uygulanmıyor",
+                    active=True,
+                ),
+            ]
+        )
+        db.commit()
+
+    if db.query(DtfScenario).count() == 0:
+        film = Decimal("0.0625")
+        film_p = Decimal("120.00")
+        ink = Decimal("8.50")
+        labor = Decimal("15.00")
+        waste_pct = Decimal("5")
+        qty = 50
+        film_cost = (film * film_p).quantize(Decimal("0.01"))
+        base = (film_cost + ink + labor).quantize(Decimal("0.01"))
+        waste = (base * waste_pct / Decimal("100")).quantize(Decimal("0.01"))
+        total = (base + waste).quantize(Decimal("0.01"))
+        unit = (total / Decimal(qty)).quantize(Decimal("0.0001"))
+        db.add(
+            DtfScenario(
+                name="Standart A4 DTF (demo)",
+                film_m2=film,
+                film_unit_price=film_p,
+                ink_cost=ink,
+                labor_cost=labor,
+                waste_percent=waste_pct,
+                quantity=qty,
+                note="Seed senaryo",
+                unit_cost=unit,
+                total_cost=total,
+            )
+        )
+        db.commit()
+
+    if db.query(SpecialDay).count() == 0:
+        customers = db.query(Customer).order_by(Customer.id).all()
+        c1 = customers[0].id if customers else None
+        c2 = customers[1].id if len(customers) > 1 else None
+        today = date.today()
+        upcoming = today + timedelta(days=10)
+        bday = today + timedelta(days=18)
+        db.add_all(
+            [
+                SpecialDay(
+                    name="Ali Yılmaz — firma yıldönümü",
+                    event_date=date(2010, 5, 12),
+                    day_type="yıldönümü",
+                    customer_id=c1,
+                    note="Kuruluş yıldönümü kutlaması",
+                    active=True,
+                ),
+                SpecialDay(
+                    name="Elif Kara doğum günü",
+                    event_date=date(1988, bday.month, min(bday.day, 28)),
+                    day_type="doğum günü",
+                    customer_id=c2,
+                    active=True,
+                ),
+                SpecialDay(
+                    name="23 Nisan kampanya hatırlatma",
+                    event_date=date(today.year, 4, 23),
+                    day_type="kampanya",
+                    customer_id=None,
+                    note="Ulusal Egemenlik — okul siparişleri",
+                    active=True,
+                ),
+                SpecialDay(
+                    name="Yaklaşan demo etkinlik",
+                    event_date=upcoming,
+                    day_type="kampanya",
+                    customer_id=c1,
+                    note="Dashboard widget için 10 gün içinde",
+                    active=True,
+                ),
+            ]
+        )
+        db.commit()
+
+    if db.query(Campaign).count() == 0:
+        today = date.today()
+        db.add_all(
+            [
+                Campaign(
+                    title="Yeni sezon DTF indirimi",
+                    message_template="Merhaba {isim}, DTF baskıda %10 indirim! Baykuş Baskı",
+                    start_date=today - timedelta(days=5),
+                    end_date=today + timedelta(days=25),
+                    active=True,
+                ),
+                Campaign(
+                    title="Doğum günü tebriği",
+                    message_template="İyi ki doğdun {isim}! Size özel %5 hediye çeki — Baykuş Baskı",
+                    start_date=None,
+                    end_date=None,
+                    active=True,
+                ),
+            ]
+        )
         db.commit()
 
 

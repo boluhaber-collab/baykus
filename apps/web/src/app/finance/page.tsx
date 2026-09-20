@@ -63,6 +63,18 @@ export default function FinanceOverviewPage() {
           >
             Giderler
           </Link>
+          <Link
+            href="/finance/assets"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+          >
+            Sabit kıymetler
+          </Link>
+          <Link
+            href="/finance/loans"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+          >
+            Kredi / Taksit
+          </Link>
           <button
             onClick={load}
             className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm"

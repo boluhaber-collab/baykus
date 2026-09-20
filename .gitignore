@@ -24,3 +24,6 @@ apps/api/uploads/*
 !apps/api/uploads/designs/
 apps/api/uploads/designs/*
 !apps/api/uploads/designs/.gitkeep
+
+apps/api/backups/*
+!apps/api/backups/.gitkeep

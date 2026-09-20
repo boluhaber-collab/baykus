@@ -10,6 +10,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import CurrentUser, get_db
+from app.models.crm import SpecialDay
 from app.models.customer import CariMovement, Customer
 from app.models.finance import (
     BANK_IN_TYPES,
@@ -29,6 +30,7 @@ from app.schemas.common import (
     RecentFinanceMovementBrief,
     RecentOrderBrief,
     StatusCount,
+    UpcomingSpecialDayBrief,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -171,6 +173,40 @@ def _receivables(db: Session) -> tuple[float, int, int]:
             with_bal += 1
     return _f(total), with_bal, len(customers)
 
+
+
+def _upcoming_special_days(db: Session, within_days: int = 30) -> list[UpcomingSpecialDayBrief]:
+    from datetime import date as date_cls
+
+    today = date_cls.today()
+    rows = db.query(SpecialDay).filter(SpecialDay.active.is_(True)).all()
+    items: list[UpcomingSpecialDayBrief] = []
+    for r in rows:
+        try:
+            this_year = r.event_date.replace(year=today.year)
+        except ValueError:
+            this_year = date_cls(today.year, r.event_date.month, 28)
+        if this_year < today:
+            try:
+                this_year = r.event_date.replace(year=today.year + 1)
+            except ValueError:
+                this_year = date_cls(today.year + 1, r.event_date.month, 28)
+        days = (this_year - today).days
+        if 0 <= days <= within_days:
+            items.append(
+                UpcomingSpecialDayBrief(
+                    id=r.id,
+                    name=r.name,
+                    event_date=r.event_date,
+                    day_type=r.day_type,
+                    customer_id=r.customer_id,
+                    customer_name=r.customer.name if r.customer is not None else None,
+                    days_until=days,
+                    note=r.note,
+                )
+            )
+    items.sort(key=lambda x: x.days_until)
+    return items
 
 @router.get("/kpis", response_model=KPIStats)
 def get_kpis(user: CurrentUser, db: Session = Depends(get_db)) -> KPIStats:
@@ -343,6 +379,8 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
 
     products_count = db.query(func.count(Product.id)).scalar() or 0
 
+    upcoming = _upcoming_special_days(db, within_days=30)
+
     return DashboardSummary(
         orders_today_count=int(today_row[0] or 0),
         orders_today_revenue=_f(today_row[1]),
@@ -362,4 +400,5 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         recent_cari_payments=recent_cari,
         recent_finance_movements=recent_fin,
         products_count=int(products_count),
+        upcoming_special_days=upcoming,
     )

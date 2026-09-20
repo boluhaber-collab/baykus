@@ -65,6 +65,18 @@ class RecentFinanceMovementBrief(BaseModel):
     note: str | None = None
 
 
+
+
+class UpcomingSpecialDayBrief(BaseModel):
+    id: int
+    name: str
+    event_date: date
+    day_type: str
+    customer_id: int | None = None
+    customer_name: str | None = None
+    days_until: int
+    note: str | None = None
+
 class DashboardSummary(BaseModel):
     """Real aggregates for the home dashboard."""
 
@@ -97,3 +109,6 @@ class DashboardSummary(BaseModel):
 
     # Legacy-ish counts still useful on cards
     products_count: int = 0
+
+    # CRM
+    upcoming_special_days: list[UpcomingSpecialDayBrief] = []

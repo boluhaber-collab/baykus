@@ -200,6 +200,17 @@ export type DashboardFinanceMovement = {
   note?: string | null;
 };
 
+export type UpcomingSpecialDay = {
+  id: number;
+  name: string;
+  event_date: string;
+  day_type: string;
+  customer_id?: number | null;
+  customer_name?: string | null;
+  days_until: number;
+  note?: string | null;
+};
+
 export type DashboardSummary = {
   orders_today_count: number;
   orders_today_revenue: number;
@@ -219,6 +230,7 @@ export type DashboardSummary = {
   recent_cari_payments: DashboardCariPayment[];
   recent_finance_movements: DashboardFinanceMovement[];
   products_count: number;
+  upcoming_special_days?: UpcomingSpecialDay[];
 };
 
 export const ORDER_STATUSES = [
@@ -926,3 +938,88 @@ export async function downloadAuthFile(path: string, filename: string): Promise<
   a.remove();
   URL.revokeObjectURL(a.href);
 }
+
+export type Asset = {
+  id: number;
+  name: string;
+  category?: string | null;
+  purchase_date?: string | null;
+  cost: number;
+  depreciation_method: string;
+  useful_life_months?: number | null;
+  note?: string | null;
+  active: boolean;
+  book_value?: number | null;
+  monthly_depreciation?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DtfCalcResult = {
+  film_cost: number;
+  base_cost: number;
+  waste_cost: number;
+  total_cost: number;
+  unit_cost: number;
+  quantity: number;
+};
+
+export type DtfScenario = {
+  id: number;
+  name: string;
+  film_m2: number;
+  film_unit_price: number;
+  ink_cost: number;
+  labor_cost: number;
+  waste_percent: number;
+  quantity: number;
+  note?: string | null;
+  unit_cost?: number | null;
+  total_cost?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SpecialDay = {
+  id: number;
+  name: string;
+  event_date: string;
+  day_type: string;
+  customer_id?: number | null;
+  customer_name?: string | null;
+  note?: string | null;
+  active: boolean;
+  days_until?: number | null;
+  created_at: string;
+};
+
+export type Campaign = {
+  id: number;
+  title: string;
+  message_template: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BackupInfo = {
+  filename: string;
+  size_bytes: number;
+  created_at: string;
+  path: string;
+};
+
+export type BizimHesapSettings = {
+  api_key: string;
+  api_secret: string;
+  configured: boolean;
+};
+
+export type IntegrationActionResult = {
+  ok: boolean;
+  status: string;
+  message: string;
+  detail?: Record<string, unknown> | null;
+};

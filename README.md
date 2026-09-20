@@ -53,6 +53,16 @@ docker compose up --build
 - **Denetim kaydı**: `/settings/audit` (admin); sipariş / müşteri / teklif CUD best-effort log
 - Postgres: `alembic upgrade head` (rev **008**) · SQLite: `python -m app.bootstrap_sqlite` (create_all eksik tabloları ekler)
 
+## Parite turu 3 (batch 3)
+
+- **Sabit kıymetler**: `/finance/assets` — CRUD, düz çizgi amortisman (opsiyonel), seed
+- **DTF maliyet**: `/tools/dtf` — film/mürekkep/işçilik/fire → birim+toplam; `dtf_scenarios`
+- **CRM**: `/crm/special-days`, `/crm/campaigns` + dashboard “yaklaşan özel günler” (30 gün)
+- **Yedekleme**: `/settings/backups` — zip (DB+uploads) → `apps/api/backups/`; geri yükleme manuel
+- **BizimHesap iskeleti**: `/settings/integrations` — ayar JSON; test/senkron stub (anahtarsız ağ yok)
+- Postgres: `alembic upgrade head` (rev **009**) · SQLite: `python -m app.bootstrap_sqlite`
+
+
 ## Windows (Docker yok)
 
 SQLite ile Docker / PostgreSQL olmadan çalıştırma:

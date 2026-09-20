@@ -125,6 +125,12 @@ export default function SettingsPage() {
 
   return (
     <div>
+      <div className="mb-4 flex flex-wrap gap-2 text-sm">
+        <a href="/settings/integrations" className="rounded-lg border px-3 py-1.5 hover:bg-slate-50">Entegrasyonlar</a>
+        <a href="/settings/backups" className="rounded-lg border px-3 py-1.5 hover:bg-slate-50">Yedekleme</a>
+        <a href="/settings/audit" className="rounded-lg border px-3 py-1.5 hover:bg-slate-50">Denetim kaydı</a>
+      </div>
+
       <h1 className="text-2xl font-bold mb-1">Ayarlar / Kullanıcılar</h1>
       <p className="text-slate-500 text-sm mb-6">Kullanıcılar · roller · şirket ayarları</p>
       {error && <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}

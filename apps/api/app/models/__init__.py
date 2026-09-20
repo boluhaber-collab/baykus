@@ -1,5 +1,8 @@
+from app.models.asset import Asset
 from app.models.audit import AuditLog
+from app.models.crm import Campaign, SpecialDay
 from app.models.customer import CariMovement, Customer
+from app.models.dtf import DtfScenario
 from app.models.expense import Expense, ExpenseCategory
 from app.models.finance import BankAccount, BankMovement, CashMovement, CashRegister
 from app.models.loan import Loan, LoanInstallment
@@ -25,4 +28,7 @@ __all__ = [
     "PriceList", "PriceListItem",
     "Loan", "LoanInstallment",
     "AuditLog",
+    "Asset",
+    "DtfScenario",
+    "SpecialDay", "Campaign",
 ]

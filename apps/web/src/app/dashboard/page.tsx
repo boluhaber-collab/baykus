@@ -185,6 +185,39 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Upcoming special days */}
+          <div className="rounded-xl border border-pink-200 bg-pink-50/50 p-5 shadow-sm mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-slate-800">Yaklaşan özel günler (30 gün)</h2>
+              <Link href="/crm/special-days" className="text-sm text-baykus-700 hover:underline">
+                Tümü
+              </Link>
+            </div>
+            {!data.upcoming_special_days || data.upcoming_special_days.length === 0 ? (
+              <p className="text-sm text-slate-500">Önümüzdeki 30 günde özel gün yok.</p>
+            ) : (
+              <ul className="space-y-2">
+                {data.upcoming_special_days.slice(0, 8).map((d) => (
+                  <li
+                    key={d.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-pink-100 px-3 py-2 text-sm"
+                  >
+                    <div>
+                      <span className="font-medium text-slate-800">{d.name}</span>
+                      <span className="ml-2 text-xs text-slate-500">{d.day_type}</span>
+                      {d.customer_name && (
+                        <span className="ml-2 text-xs text-slate-500">· {d.customer_name}</span>
+                      )}
+                    </div>
+                    <span className="text-xs font-semibold text-pink-800 tabular-nums">
+                      {d.days_until === 0 ? "Bugün" : `${d.days_until} gün`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="grid gap-6 lg:grid-cols-2 mb-6">
             {/* Recent orders */}
             <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">

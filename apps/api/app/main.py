@@ -2,20 +2,25 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import (
-    expenses,
+    assets,
     audit,
     auth,
+    backups,
+    crm,
     customers,
     dashboard,
+    dtf,
+    expenses,
     finance,
+    integrations,
     loans,
     orders,
     price_lists,
     products,
+    purchases,
     quotes,
     reports,
     settings as settings_router,
-    purchases,
     suppliers,
     whatsapp,
 )
@@ -45,11 +50,16 @@ for router in (
     expenses.router,
     finance.router,
     loans.router,
+    assets.router,
+    dtf.router,
+    crm.router,
     price_lists.router,
     reports.router,
     settings_router.router,
     whatsapp.router,
     audit.router,
+    backups.router,
+    integrations.router,
 ):
     app.include_router(router, prefix="/api")
 
