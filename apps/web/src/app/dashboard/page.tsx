@@ -3,31 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
+import { DashboardNote, DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
 import { QUICK_ACTIONS } from "@/lib/nav";
 
 type UsdRates = { buy: number; sell: number } | null;
-type NoteItem = { id: string; text: string; at: string };
 
 const WORKSHOP_STATUSES = ["Sipariş Alındı", "Hazırlanıyor", "Baskıda", "Hazır"] as const;
-const NOTES_KEY = "baykus_dashboard_notes";
 
 function statusCount(data: DashboardSummary, status: string): number {
   return data.status_counts.find((s) => s.status === status)?.count ?? 0;
-}
-
-function loadNotes(): NoteItem[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(NOTES_KEY);
-    return raw ? (JSON.parse(raw) as NoteItem[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveNotes(notes: NoteItem[]) {
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
 }
 
 export default function DashboardPage() {
@@ -40,7 +24,7 @@ export default function DashboardPage() {
   const [stockProducts, setStockProducts] = useState<Product[]>([]);
   const [catFilter, setCatFilter] = useState("");
   const [nameFilter, setNameFilter] = useState("");
-  const [notes, setNotes] = useState<NoteItem[]>([]);
+  const [notes, setNotes] = useState<DashboardNote[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,12 +68,21 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadNotes = useCallback(async () => {
+    try {
+      const res = await apiFetch<{ notes: DashboardNote[] }>("/api/dashboard/notes");
+      setNotes(res.notes || []);
+    } catch {
+      setNotes([]);
+    }
+  }, []);
+
   useEffect(() => {
     load();
     loadUsd();
     loadStock();
-    setNotes(loadNotes());
-  }, [load, loadUsd, loadStock]);
+    void loadNotes();
+  }, [load, loadUsd, loadStock, loadNotes]);
 
   const todayLabel = useMemo(
     () =>
@@ -158,6 +151,19 @@ export default function DashboardPage() {
     }
   }
 
+  async function persistNotes(next: DashboardNote[]) {
+    setNotes(next);
+    try {
+      const res = await apiFetch<{ notes: DashboardNote[] }>("/api/dashboard/notes", {
+        method: "PUT",
+        body: JSON.stringify({ notes: next }),
+      });
+      setNotes(res.notes || next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Not kaydedilemedi");
+    }
+  }
+
   function addNote() {
     const text = prompt("Not:");
     if (!text?.trim()) return;
@@ -165,14 +171,11 @@ export default function DashboardPage() {
       { id: Math.random().toString(36).slice(2), text: text.trim(), at: new Date().toISOString() },
       ...notes,
     ];
-    setNotes(next);
-    saveNotes(next);
+    void persistNotes(next);
   }
 
   function removeNote(id: string) {
-    const next = notes.filter((n) => n.id !== id);
-    setNotes(next);
-    saveNotes(next);
+    void persistNotes(notes.filter((n) => n.id !== id));
   }
 
   return (

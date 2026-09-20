@@ -21,10 +21,13 @@ from app.schemas.settings import (
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 SETTING_KEYS = (
-    "company_name", "phone", "theme_label",
-    "require_login", "user_mode",
+    "company_name", "phone", "whatsapp", "web_adresi", "pdf_alt_baslik",
+    "logo_dosyasi", "form_logo_dosyasi",
+    "theme_label", "require_login", "user_mode", "veri_motoru",
     "postgres_host", "postgres_port", "postgres_db", "postgres_user", "postgres_ssl",
 )
+
+# Secrets / API keys never stored via this router (BizimHesap lives under integrations).
 
 
 def _user_out(u: User) -> UserOut:
@@ -47,6 +50,27 @@ def _upsert_setting(db: Session, key: str, value: str) -> None:
         row.value = value
     else:
         db.add(AppSetting(key=key, value=value))
+
+
+def _out(m: dict[str, str]) -> AppSettingsOut:
+    return AppSettingsOut(
+        company_name=m.get("company_name", "Baykuş Baskı"),
+        phone=m.get("phone", ""),
+        whatsapp=m.get("whatsapp", ""),
+        web_adresi=m.get("web_adresi", ""),
+        pdf_alt_baslik=m.get("pdf_alt_baslik", ""),
+        logo_dosyasi=m.get("logo_dosyasi", ""),
+        form_logo_dosyasi=m.get("form_logo_dosyasi", ""),
+        theme_label=m.get("theme_label", "Varsayılan"),
+        require_login=m.get("require_login", "Evet"),
+        user_mode=m.get("user_mode", "Yönetici"),
+        veri_motoru=m.get("veri_motoru", "SQLite"),
+        postgres_host=m.get("postgres_host", ""),
+        postgres_port=m.get("postgres_port", "5432"),
+        postgres_db=m.get("postgres_db", "baykus"),
+        postgres_user=m.get("postgres_user", ""),
+        postgres_ssl=m.get("postgres_ssl", "Hayır"),
+    )
 
 
 @router.get("/users", response_model=list[UserOut])
@@ -133,19 +157,7 @@ def get_app_settings(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış", "üretim", "muhasebe")),
 ) -> AppSettingsOut:
-    m = _settings_map(db)
-    return AppSettingsOut(
-        company_name=m.get("company_name", "Baykuş Baskı"),
-        phone=m.get("phone", ""),
-        theme_label=m.get("theme_label", "Varsayılan"),
-        require_login=m.get("require_login", "Evet"),
-        user_mode=m.get("user_mode", "Yönetici"),
-        postgres_host=m.get("postgres_host", ""),
-        postgres_port=m.get("postgres_port", "5432"),
-        postgres_db=m.get("postgres_db", "baykus"),
-        postgres_user=m.get("postgres_user", ""),
-        postgres_ssl=m.get("postgres_ssl", "Hayır"),
-    )
+    return _out(_settings_map(db))
 
 
 @router.put("/app", response_model=AppSettingsOut)
@@ -157,18 +169,6 @@ def update_app_settings(
     data = payload.model_dump(exclude_unset=True)
     for key, value in data.items():
         if key in SETTING_KEYS and value is not None:
-            _upsert_setting(db, key, value)
+            _upsert_setting(db, key, str(value))
     db.commit()
-    m = _settings_map(db)
-    return AppSettingsOut(
-        company_name=m.get("company_name", "Baykuş Baskı"),
-        phone=m.get("phone", ""),
-        theme_label=m.get("theme_label", "Varsayılan"),
-        require_login=m.get("require_login", "Evet"),
-        user_mode=m.get("user_mode", "Yönetici"),
-        postgres_host=m.get("postgres_host", ""),
-        postgres_port=m.get("postgres_port", "5432"),
-        postgres_db=m.get("postgres_db", "baykus"),
-        postgres_user=m.get("postgres_user", ""),
-        postgres_ssl=m.get("postgres_ssl", "Hayır"),
-    )
+    return _out(_settings_map(db))

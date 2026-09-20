@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Customer, apiFetch, formatMoney } from "@/lib/api";
-import { HubActionButton, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
+import { HubActionButton, HubActionsBar, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
 
 type Tab = "musteriler" | "alacaklar" | "whatsapp" | "ozel";
 
@@ -92,7 +92,7 @@ function CustomersHubPageInner() {
     tab === "alacaklar" ? items.filter((c) => Number(c.balance ?? 0) > 0) : items;
 
   return (
-    <HubSection title="Müşteri Merkezi">
+    <HubSection title="Müşteri Merkezi" onRefresh={load}>
       <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
         <HubSummaryCard label="Müşteri" value={stats.total || "—"} color="#198754" href="/customers?tab=musteriler" />
         <HubSummaryCard
@@ -106,15 +106,15 @@ function CustomersHubPageInner() {
         <HubSummaryCard label="Kampanya" value={campaignCount} color="#2563eb" href="/crm/campaigns" />
       </div>
 
-      <div>
-        <div className="text-xs font-semibold text-baykus-muted mb-1.5 uppercase">İşlemler</div>
-        <div className="flex flex-wrap gap-2">
-          <HubActionButton href="/customers?tab=musteriler" label="Müşteri Listesi" color="#198754" />
-          <HubActionButton href="/customers/new" label="Yeni Müşteri" color="#2563eb" />
-          <HubActionButton href="/customers?tab=musteriler" label="Müşteri Takibi" color="#0f766e" />
-          <HubActionButton href="/customers?tab=alacaklar" label="Açık Alacaklar" color="#be123c" />
-        </div>
-      </div>
+      <HubActionsBar
+        columns={4}
+        actions={[
+          { href: "/customers?tab=musteriler", label: "Müşteri Listesi", color: "#198754" },
+          { href: "/customers/new", label: "Yeni Müşteri", color: "#0f766e" },
+          { href: "/customers/track", label: "Müşteri Takibi", color: "#0f766e" },
+          { href: "/customers/receivables", label: "Açık Alacaklar", color: "#be123c" },
+        ]}
+      />
 
       <HubTabs
         tabs={TABS}

@@ -833,15 +833,23 @@ export type WhatsAppLog = {
 export type AppSettings = {
   company_name: string;
   phone: string;
+  whatsapp?: string;
+  web_adresi?: string;
+  pdf_alt_baslik?: string;
+  logo_dosyasi?: string;
+  form_logo_dosyasi?: string;
   theme_label: string;
   require_login?: string;
   user_mode?: string;
+  veri_motoru?: string;
   postgres_host?: string;
   postgres_port?: string;
   postgres_db?: string;
   postgres_user?: string;
   postgres_ssl?: string;
 };
+
+export type DashboardNote = { id: string; text: string; at: string };
 
 export type ExpenseCategory = {
   id: number;

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DashboardSummary, Product, apiFetch, formatMoney, stockBadgeClass } from "@/lib/api";
-import { HubActionButton, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
+import { HubActionsBar, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
 
 type Tab = "urunler" | "kritik" | "rapor";
 
@@ -98,27 +98,27 @@ function ProductsHubPageInner() {
   }
 
   return (
-    <HubSection title="Ürün & Stok Merkezi">
+    <HubSection title="Ürün & Stok Merkezi" onRefresh={load}>
       <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
         <HubSummaryCard label="Ürün" value={stats.products} color="#2563eb" />
         <HubSummaryCard label="Varyant" value={stats.variants} color="#0f766e" />
-        <HubSummaryCard label="Stok Adedi" value={stats.qty} color="#198754" />
-        <HubSummaryCard label="Kritik" value={stats.critical} color="#be123c" href="/stock/critical" />
-        <HubSummaryCard label="Stok Değeri" value={formatMoney(Number(stats.value))} color="#f59e0b" href="/reports/stock" />
+        <HubSummaryCard label="Stok Adedi" value={stats.qty} color="#16a34a" />
+        <HubSummaryCard label="Kritik" value={stats.critical} color="#dc2626" href="/stock/critical" />
+        <HubSummaryCard label="Stok Değeri" value={formatMoney(Number(stats.value))} color="#7c3aed" href="/reports/stock" />
       </div>
 
-      <div>
-        <div className="text-xs font-semibold text-baykus-muted mb-1.5 uppercase">İşlemler</div>
-        <div className="flex flex-wrap gap-2">
-          <HubActionButton href="/products?tab=urunler" label="Ürün Yönetimi" color="#2563eb" />
-          <HubActionButton href="/products?tab=variants" label="Kartlar/Varyantlar" color="#0f766e" />
-          <HubActionButton href="/stock" label="Stok Yönetimi" color="#198754" />
-          <HubActionButton href="/stock/critical" label="Kritik Stok" color="#be123c" />
-          <HubActionButton href="/reports/stock" label="Stok Raporu" color="#f59e0b" />
-          <HubActionButton href="/products/new" label="Hızlı Varyant" color="#1f6feb" />
-          <HubActionButton href="/stock" label="Depolar" color="#1e293b" />
-        </div>
-      </div>
+      <HubActionsBar
+        columns={6}
+        actions={[
+          { href: "/products?tab=urunler", label: "Ürün Yönetimi", color: "#0ea5e9" },
+          { href: "/products?tab=variants", label: "Kartlar / Varyantlar", color: "#0284c7" },
+          { href: "/stock", label: "Stok Yönetimi", color: "#0369a1" },
+          { href: "/stock/critical", label: "Kritik Stok", color: "#be123c" },
+          { href: "/reports/stock", label: "Stok Raporu", color: "#2563eb" },
+          { href: "/products/new", label: "Hızlı Varyant", color: "#f59e0b" },
+          { href: "/stock/warehouses", label: "Depolar", color: "#14b8a6" },
+        ]}
+      />
 
       <HubTabs tabs={TABS} active={tab} onChange={(id) => setTab(id as Tab)} />
 
@@ -244,23 +244,21 @@ function ProductsHubPageInner() {
       )}
 
       {tab === "rapor" && (
-        <div className="bk-hub-grid">
-          <Link href="/reports/stock" className="bk-hub-card">
-            <span className="title">Stok Raporu</span>
-            <span className="desc">Değer ve kritik stok özeti</span>
-          </Link>
-          <Link href="/stock" className="bk-hub-card">
-            <span className="title">Stok Özeti</span>
-            <span className="desc">Depo bazlı bakış</span>
-          </Link>
-          <Link href="/stock/critical" className="bk-hub-card">
-            <span className="title">Kritik Stok</span>
-            <span className="desc">Eşik altı ürünler</span>
-          </Link>
-          <Link href="/products/new" className="bk-hub-card">
-            <span className="title">Yeni Ürün / Varyant</span>
-            <span className="desc">Hızlı kart oluştur</span>
-          </Link>
+        <div className="bk-card p-4 space-y-2">
+          <p className="text-sm text-baykus-muted mb-2">
+            Stok ve ürün işlemlerini tek merkezden yönetin.
+          </p>
+          <HubActionsBar
+            title="Rapor / Araçlar"
+            columns={1}
+            actions={[
+              { href: "/reports/stock", label: "Stok Durumu Raporu", color: "#2563eb" },
+              { href: "/stock/critical", label: "Kritik Stok Listesini Göster", color: "#be123c" },
+              { href: "/products?tab=urunler", label: "Toplu Ürün / Stok Aktarımı", color: "#0ea5e9" },
+              { href: "/stock", label: "Stok Yönetimi", color: "#0369a1" },
+              { href: "/stock/warehouses", label: "Depolar", color: "#14b8a6" },
+            ]}
+          />
         </div>
       )}
     </HubSection>

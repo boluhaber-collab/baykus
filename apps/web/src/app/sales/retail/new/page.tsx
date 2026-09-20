@@ -8,6 +8,7 @@ import {
   CashRegister,
   Product,
   ProductDetail,
+  ProductVariant,
   apiFetch,
   formatMoney,
 } from "@/lib/api";
@@ -59,6 +60,11 @@ export default function PerakendeSatisGirPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [variantPick, setVariantPick] = useState<{
+    product: Product;
+    detail: ProductDetail;
+    variants: ProductVariant[];
+  } | null>(null);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -127,45 +133,68 @@ export default function PerakendeSatisGirPage() {
     return Number.isFinite(n) ? n : 0;
   }, [tahsilat]);
 
-  async function addProduct(p: Product) {
-    let variantId: number | null = null;
-    let secenek = "";
-    let price = Number(p.base_price || 0);
-    let depo = p.warehouse || "Ana Depo";
-    try {
-      const detail = await apiFetch<ProductDetail>(`/api/products/${p.id}`);
-      if (detail.variants?.length === 1) {
-        const v = detail.variants[0]!;
-        variantId = v.id;
-        secenek = [v.color, v.size].filter(Boolean).join(" / ");
-        price = Number(v.price || price);
-      } else if (detail.variants && detail.variants.length > 1) {
-        const v = detail.variants.find((x) => (x.stock_qty || 0) > 0) || detail.variants[0]!;
-        variantId = v.id;
-        secenek = [v.color, v.size, v.name].filter(Boolean).join(" / ");
-        price = Number(v.price || price);
-      }
-      depo = detail.warehouse || depo;
-    } catch {
-      /* use list row */
-    }
+  function pushCartLine(
+    p: Product,
+    opts: { variantId: number | null; secenek: string; price: number; depo: string },
+  ) {
     const key = Math.random().toString(36).slice(2);
     const line: CartLine = {
       key,
       product_id: p.id,
-      variant_id: variantId,
+      variant_id: opts.variantId,
       urun: p.name,
-      secenek,
-      depo,
+      secenek: opts.secenek,
+      depo: opts.depo,
       miktar: 1,
-      birim_fiyat: price,
+      birim_fiyat: opts.price,
       kdv: 0,
       indirim: 0,
-      toplam: price,
+      toplam: opts.price,
     };
     setCart((prev) => [...prev, line]);
     setSelectedKey(key);
     setSearch("");
+    setVariantPick(null);
+  }
+
+  async function addProduct(p: Product) {
+    let price = Number(p.base_price || 0);
+    let depo = p.warehouse || "Ana Depo";
+    try {
+      const detail = await apiFetch<ProductDetail>(`/api/products/${p.id}`);
+      depo = detail.warehouse || depo;
+      const variants = detail.variants || [];
+      if (variants.length > 1) {
+        setVariantPick({ product: p, detail, variants });
+        return;
+      }
+      if (variants.length === 1) {
+        const v = variants[0]!;
+        pushCartLine(p, {
+          variantId: v.id,
+          secenek: [v.color, v.size].filter(Boolean).join(" / "),
+          price: Number(v.price || price),
+          depo,
+        });
+        return;
+      }
+    } catch {
+      /* use list row */
+    }
+    pushCartLine(p, { variantId: null, secenek: "", price, depo });
+  }
+
+  function confirmVariant(v: ProductVariant) {
+    if (!variantPick) return;
+    const p = variantPick.product;
+    const price = Number(v.price || p.base_price || 0);
+    const depo = variantPick.detail.warehouse || p.warehouse || "Ana Depo";
+    pushCartLine(p, {
+      variantId: v.id,
+      secenek: [v.color, v.size, v.name].filter(Boolean).join(" / "),
+      price,
+      depo,
+    });
   }
 
   function updateLine(key: string, patch: Partial<CartLine>) {
@@ -524,6 +553,45 @@ export default function PerakendeSatisGirPage() {
           </div>
         </fieldset>
       </div>
+
+
+      {variantPick && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl border border-slate-200">
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <div>
+                <div className="text-sm font-bold">Varyant Seç</div>
+                <div className="text-xs text-baykus-muted">{variantPick.product.name}</div>
+              </div>
+              <button
+                type="button"
+                className="text-slate-500 hover:text-slate-800 text-lg leading-none"
+                onClick={() => setVariantPick(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="max-h-72 overflow-auto p-2 space-y-1">
+              {variantPick.variants.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => confirmVariant(v)}
+                  className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-baykus-primary hover:bg-sky-50 transition"
+                >
+                  <div className="text-sm font-medium">
+                    {[v.color, v.size, v.name].filter(Boolean).join(" / ") || v.sku || `Varyant #${v.id}`}
+                  </div>
+                  <div className="text-xs text-baykus-muted flex justify-between mt-0.5">
+                    <span>Stok: {v.stock_qty ?? 0}</span>
+                    <span className="font-semibold text-baykus-text">{formatMoney(Number(v.price || 0))}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <StatusFooter />
     </div>

@@ -12,20 +12,23 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Müşteri Merkezi
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Müşteri Merkezi (tek) | `/customers` | done |
-| Müşteri Listesi / Yeni / Takip / Açık Alacaklar | `/customers`, `/customers/new`, `/customers/track`, `/customers/receivables` | done |
+| Müşteri Merkezi (tek) | `/customers` hub — özet kartlar + büyük İşlemler düğmeleri | done |
+| Müşteri Listesi / Yeni / Takip / Açık Alacaklar | hub CTA → `/customers`, `/customers/new`, `/customers/track`, `/customers/receivables` | done |
+| Sidebar | tek satır (alt yaprak yok; masaüstü `tek`) | done |
 
 ## Tedarik Merkezi
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Tedarik Merkezi | `/suppliers` | done |
-| Tedarikçiler / Alış Hareketleri / Borç-Alacak / Satın Alma Talebi | `/suppliers`, `/purchases`, `/suppliers/payables`, `/purchases/new` | done |
+| Tedarik Merkezi (tek) | `/suppliers` hub — özet + İşlemler | done |
+| Tedarikçiler / Alış / Borç-Alacak / Ödeme / Satın Alma | `#0f766e/#198754/#7c3aed/#334155/#be123c` hub CTA | done |
+| Sidebar | tek satır | done |
 
 ## Ürün & Stok Merkezi
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Ürün & Stok Merkezi | `/products` | done |
-| Ürün Yönetimi / Kartlar / Stok / Kritik / Stok Raporu / Depolar | `/products`, `?tab=variants`, `/stock`, `/stock/critical`, `/reports/stock`, `/stock/warehouses` | done |
+| Ürün & Stok Merkezi (tek) | `/products` hub — özet + İşlemler (6+Depolar) | done |
+| Ürün Yönetimi / Kartlar / Stok / Kritik / Rapor / Hızlı Varyant / Depolar | masaüstü renkleri; Depolar → `/stock/warehouses` | done |
+| Sidebar | tek satır | done |
 
 ## Satış / Sipariş
 | Masaüstü | Web | Durum |
@@ -101,9 +104,9 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 ## Sistem
 | Masaüstü | Web | Durum |
 |----------|-----|-------|
-| Ayarlar | `/settings` | done |
+| Ayarlar | `/settings` sekmeli (Genel/Kullanıcılar/Entegrasyonlar/Yedek/Sistem/YARDIM) | done |
 | Yetki / Kilit Modu | `/settings/lock-mode` | done |
-| Kullanıcı Yönetimi | `/settings` | done |
+| Kullanıcı Yönetimi | `/settings?tab=kullanicilar` | done |
 | İşlem Geçmişi | `/settings/audit` | done |
 | Yedekleme | `/settings/backups` | done |
 | Yedek Test Et | `/settings/backups` (Yedek Test Et düğmesi) | done |
@@ -160,3 +163,19 @@ Revizyon: Alembic **012** (`design_approved_at`, `design_whatsapp_at`, design_st
 | Dashboard payables + top seller | `DashboardSummary.payables_total`, `top_selling_product` | done |
 
 Spec: `docs/DIRECT_SALES_SPEC.md` · ekran görüntüleri: `docs/parity-shots/`
+
+## Hub + Ayarlar (batch 7 — tek merkez UX)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Sidebar `tek` hub'lar | Müşteri / Tedarik / Ürün&Stok / Evrak — tek satır, alt liste yok | done |
+| Hub İşlemler büyük düğmeler | `HubActionsBar` — masaüstü `modern_button` boyutu/renkleri | done |
+| Müşteri Merkezi CTA | Listesi · Yeni · Takibi · Açık Alacaklar | done |
+| Tedarik Merkezi CTA | Tedarikçiler · Alış · Borç/Alacak · Ödeme · Satın Alma | done |
+| Ürün & Stok CTA | Yönetim · Kartlar · Stok · Kritik · Rapor · Hızlı Varyant · Depolar | done |
+| `/settings` sekmeler | Genel (Firma/Logo/PDF/WA) · Kullanıcılar · Entegrasyonlar · Yedek · Sistem · YARDIM | done |
+| Ayar kaydı (non-secret) | `PUT /api/settings/app` — whatsapp, web, pdf_alt, logo yolları, tema, veri motoru, PG host | done |
+| API key / BizimHesap sırları | commit edilmez; `/settings/integrations` ayrı | done |
+| Dashboard notlar | `GET/PUT /api/dashboard/notes` (AppSetting JSON) | done |
+| Perakende varyant seçici | çoklu varyantta modal picker | done |
+

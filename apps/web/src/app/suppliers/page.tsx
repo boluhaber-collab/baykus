@@ -9,7 +9,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
-import { HubActionButton, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
+import { HubActionButton, HubActionsBar, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
 
 type Tab = "tedarikciler" | "borc" | "alislar" | "satinalma";
 
@@ -87,25 +87,25 @@ export default function SuppliersHubPage() {
   }
 
   return (
-    <HubSection title="Tedarik Merkezi">
+    <HubSection title="Tedarik Merkezi" onRefresh={load}>
       <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
-        <HubSummaryCard label="Tedarikçi" value={stats.suppliers} color="#198754" />
+        <HubSummaryCard label="Tedarikçi" value={stats.suppliers} color="#0f766e" />
         <HubSummaryCard label="Toplam Alış" value={formatMoney(stats.totalPurchase)} color="#2563eb" />
-        <HubSummaryCard label="Toplam Ödeme" value={formatMoney(Math.max(0, stats.totalPurchase - stats.openBal))} color="#15803d" />
-        <HubSummaryCard label="Açık Bakiye" value={formatMoney(stats.openBal)} color="#be123c" href="/suppliers/payables" />
-        <HubSummaryCard label="Satın Alma" value={stats.purchaseCount} color="#f59e0b" href="/purchases" />
+        <HubSummaryCard label="Toplam Ödeme" value={formatMoney(Math.max(0, stats.totalPurchase - stats.openBal))} color="#16a34a" />
+        <HubSummaryCard label="Açık Bakiye" value={formatMoney(stats.openBal)} color="#dc2626" href="/suppliers/payables" />
+        <HubSummaryCard label="Satın Alma" value={stats.purchaseCount} color="#7c3aed" href="/purchases" />
       </div>
 
-      <div>
-        <div className="text-xs font-semibold text-baykus-muted mb-1.5 uppercase">İşlemler</div>
-        <div className="flex flex-wrap gap-2">
-          <HubActionButton href="/suppliers" label="Tedarikçiler" color="#198754" />
-          <HubActionButton href="/purchases" label="Alış Hareketleri" color="#2563eb" />
-          <HubActionButton href="/suppliers/payables" label="Borç/Alacak" color="#be123c" />
-          <HubActionButton href="/suppliers/payables" label="Tedarikçi Ödemesi" color="#0f766e" />
-          <HubActionButton href="/purchases/new" label="Satın Alma Talebi" color="#f59e0b" />
-        </div>
-      </div>
+      <HubActionsBar
+        columns={5}
+        actions={[
+          { href: "/suppliers?tab=tedarikciler", label: "Tedarikçiler", color: "#0f766e" },
+          { href: "/purchases", label: "Alış Hareketleri", color: "#198754" },
+          { href: "/suppliers/payables", label: "Borç / Alacak", color: "#7c3aed" },
+          { href: "/suppliers/payables?pay=1", label: "Tedarikçi Ödemesi", color: "#334155" },
+          { href: "/purchases/new", label: "Satın Alma Talebi", color: "#be123c" },
+        ]}
+      />
 
       <HubTabs tabs={TABS} active={tab} onChange={(id) => setTab(id as Tab)} />
       {error && <div className="mb-3 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}

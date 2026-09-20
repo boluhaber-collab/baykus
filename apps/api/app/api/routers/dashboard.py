@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from datetime import datetime
 from decimal import Decimal
 
@@ -11,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import CurrentUser, get_db
 from app.models.crm import SpecialDay
+from app.models.settings_model import AppSetting
 from app.models.customer import CariMovement, Customer
 from app.models.finance import (
     BANK_IN_TYPES,
@@ -22,6 +25,7 @@ from app.models.finance import (
 )
 from app.models.order import CLOSED_STATUSES, ORDER_STATUSES, Order
 from app.models.product import Product
+from app.schemas.settings import DashboardNotesOut, DashboardNotesUpdate
 from app.schemas.common import (
     DashboardSummary,
     KPIStats,
@@ -661,3 +665,41 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         products_count=int(products_count),
         upcoming_special_days=upcoming,
     )
+
+
+NOTES_KEY = "dashboard_notes"
+
+
+def _notes_upsert(db: Session, value: str) -> None:
+    row = db.query(AppSetting).filter(AppSetting.key == NOTES_KEY).first()
+    if row:
+        row.value = value
+    else:
+        db.add(AppSetting(key=NOTES_KEY, value=value))
+
+
+@router.get("/notes", response_model=DashboardNotesOut)
+def get_dashboard_notes(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardNotesOut:
+    row = db.query(AppSetting).filter(AppSetting.key == NOTES_KEY).first()
+    if not row or not row.value:
+        return DashboardNotesOut(notes=[])
+    try:
+        raw = json.loads(row.value)
+        if isinstance(raw, list):
+            return DashboardNotesOut(notes=raw)
+    except Exception:
+        pass
+    return DashboardNotesOut(notes=[])
+
+
+@router.put("/notes", response_model=DashboardNotesOut)
+def put_dashboard_notes(
+    payload: DashboardNotesUpdate,
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> DashboardNotesOut:
+    # Cap to keep settings row small
+    notes = [n.model_dump() for n in payload.notes[:100]]
+    _notes_upsert(db, json.dumps(notes, ensure_ascii=False))
+    db.commit()
+    return DashboardNotesOut(notes=notes)

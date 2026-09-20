@@ -84,7 +84,7 @@ export default function Sidebar() {
 
       <nav className="flex-1 px-1.5 py-2 space-y-0.5 overflow-y-auto text-[13px]">
         {NAV_GROUPS.map((group) => {
-          const hasChildren = group.items.length > 0;
+          const hasChildren = group.items.length > 0 && !group.tek;
           const isOpen = open[group.id] ?? false;
           const active = groupIsActive(pathname, group);
           const siblingHrefs = group.items.map((i) => i.href.split("?")[0]);

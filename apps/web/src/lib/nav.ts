@@ -13,6 +13,8 @@ export type NavGroup = {
   href?: string;
   items: NavLeaf[];
   defaultOpen?: boolean;
+  /** Masaüstü "tek" — sidebar tek satır; alt sayfalar hub düğmelerinden */
+  tek?: boolean;
 };
 
 /**
@@ -34,6 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "👥",
     color: "#6ee7b7",
     href: "/customers",
+    tek: true,
     items: [
       { href: "/customers", label: "Müşteri Listesi" },
       { href: "/customers/new", label: "Yeni Müşteri" },
@@ -47,11 +50,12 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "🏭",
     color: "#a7f3d0",
     href: "/suppliers",
+    tek: true,
     items: [
       { href: "/suppliers", label: "Tedarikçiler" },
       { href: "/purchases", label: "Alış Hareketleri" },
       { href: "/suppliers/payables", label: "Borç / Alacak" },
-      { href: "/suppliers/payables", label: "Tedarikçi Ödemesi" },
+      { href: "/suppliers/payables?pay=1", label: "Tedarikçi Ödemesi" },
       { href: "/purchases/new", label: "Satın Alma Talebi" },
     ],
   },
@@ -61,6 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "📦",
     color: "#38bdf8",
     href: "/products",
+    tek: true,
     items: [
       { href: "/products", label: "Ürün Yönetimi" },
       { href: "/products?tab=variants", label: "Kartlar / Varyantlar" },
@@ -178,6 +183,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "📁",
     color: "#fcd34d",
     href: "/documents",
+    tek: true,
     items: [{ href: "/documents", label: "Evrak Dolabı" }],
   },
   {
