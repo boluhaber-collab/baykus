@@ -94,7 +94,7 @@ export default function NewCustomerPage() {
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
-      <form onSubmit={onSubmit} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+      <form onSubmit={onSubmit} data-baykus-save className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Kod</label>

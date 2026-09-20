@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Product, apiFetch } from "@/lib/api";
 import { code128Svg } from "@/lib/code128";
 
 type Row = { id: number; name: string; sku: string; barcode: string; selected: boolean };
 
 export default function ProductLabelsPage() {
+  const search = useSearchParams();
+  const preselectId = Number(search.get("product_id") || 0);
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
@@ -26,7 +29,7 @@ export default function ProductLabelsPage() {
           name: p.name,
           sku: p.sku,
           barcode: (p as { barcode?: string | null }).barcode || p.sku,
-          selected: false,
+          selected: preselectId > 0 ? p.id === preselectId : false,
         })),
       );
     } catch (e) {
@@ -34,7 +37,7 @@ export default function ProductLabelsPage() {
     } finally {
       setLoading(false);
     }
-  }, [q]);
+  }, [q, preselectId]);
 
   useEffect(() => {
     void load();

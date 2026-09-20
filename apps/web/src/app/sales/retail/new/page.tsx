@@ -293,6 +293,7 @@ export default function PerakendeSatisGirPage() {
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
+          data-baykus-save
           disabled={busy}
           onClick={() => void saveSale()}
           className="bk-btn text-sm font-bold text-white px-4 py-2"

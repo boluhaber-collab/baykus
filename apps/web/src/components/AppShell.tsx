@@ -5,12 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import { getToken } from "@/lib/api";
+import { useBaykusHotkeys } from "@/hooks/useBaykusHotkeys";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const isLogin = pathname === "/login";
+
+  useBaykusHotkeys(!isLogin && ready);
 
   useEffect(() => {
     if (isLogin) {

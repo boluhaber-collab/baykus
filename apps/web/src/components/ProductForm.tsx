@@ -150,7 +150,7 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-baykus-500";
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} data-baykus-save className="space-y-6">
       {error && (
         <div className="rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}

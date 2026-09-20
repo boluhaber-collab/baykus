@@ -166,85 +166,119 @@ export default function SupplierDetailPage() {
   }
 
   const bal = Number(supplier.balance ?? 0);
+  const moves = statement?.movements || [];
+  const toplamBorc =
+    Number(statement?.opening_balance ?? supplier.opening_balance ?? 0) +
+    moves.reduce((s, m) => s + Number(m.debit || 0), 0);
+  const toplamOdeme = moves.reduce((s, m) => s + Number(m.credit || 0), 0);
   const input =
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-baykus-500";
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link href="/suppliers" className="text-sm text-baykus-600 hover:underline">
-            ← Tedarikçiler
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-2">{supplier.name}</h1>
-          <p className="text-slate-500 text-sm">
-            {supplier.code ? `${supplier.code} · ` : ""}
-            {supplier.city || "—"}
-            {supplier.is_active === false ? " · Pasif" : ""}
-          </p>
+          <div className="text-xs text-baykus-muted mb-1">
+            <Link href="/suppliers" className="text-baykus-primary hover:underline">Tedarik Merkezi</Link>
+            <span className="mx-1">›</span>
+            <span className="font-medium">{supplier.name}</span>
+          </div>
+          <div className="rounded-xl border border-[#e5d7b8] bg-[#f4ead5] px-4 py-3 mt-1">
+            <h1 className="text-xl font-bold text-slate-700">{supplier.name}</h1>
+            <p className="text-sm text-slate-600 mt-0.5">
+              {[supplier.code, supplier.phone, supplier.city, supplier.address]
+                .filter(Boolean)
+                .join("  |  ") || "Tedarikçi bilgisi kaydedilmemiş."}
+              {supplier.is_active === false ? " · Pasif" : ""}
+            </p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/purchases/new?supplier_id=${id}`}
-            className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm"
-          >
-            + Satın Alma
-          </Link>
-          <button
-            onClick={() => setEditing((v) => !v)}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
-          >
-            {editing ? "Düzenlemeyi kapat" : "Düzenle"}
-          </button>
-          <button onClick={onDelete} className="rounded-lg border border-red-200 text-red-700 px-4 py-2 text-sm">
-            Sil
-          </button>
+        <div className="rounded-xl border-4 border-slate-500 bg-[#fffde7] px-4 py-3 max-w-md text-sm text-emerald-600 min-w-[200px]">
+          {(supplier.notes || "").trim() || "Bu tedarikçi için özel not bulunmuyor."}
         </div>
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
+        <div className="rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-4 mb-6">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="text-xs text-slate-500 mb-1">Borç bakiyesi (ödenmesi gereken)</div>
-          <div className={`text-2xl font-bold tabular-nums ${bal > 0 ? "text-amber-700" : "text-slate-800"}`}>
-            {formatMoney(bal)}
-          </div>
-          <div className="text-xs text-slate-400 mt-2">
-            Açılış: {formatMoney(Number(supplier.opening_balance ?? 0))}
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#e68778" }}>
+          <div className="text-[11px] font-bold text-center">Açık Bakiye</div>
+          <div className="text-xl font-bold tabular-nums text-center">{formatMoney(bal)}</div>
+          <div className="text-[10px] text-center opacity-90">
+            {bal > 0 ? "tedarikçiye borç" : bal < 0 ? "tedarikçiden alacak" : "hesap kapalı"}
           </div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
-          <div className="text-xs text-slate-500 mb-2">İletişim / vergi</div>
-          <div className="grid sm:grid-cols-2 gap-2 text-sm">
-            <div>
-              <span className="text-slate-500">Telefon:</span> {supplier.phone || "—"}
-            </div>
-            <div>
-              <span className="text-slate-500">E-posta:</span> {supplier.email || "—"}
-            </div>
-            <div>
-              <span className="text-slate-500">Vergi No:</span> {supplier.tax_number || "—"}
-            </div>
-            <div>
-              <span className="text-slate-500">Vergi Dairesi:</span> {supplier.tax_office || "—"}
-            </div>
-            <div className="sm:col-span-2">
-              <span className="text-slate-500">Adres:</span> {supplier.address || "—"}
-            </div>
-            {supplier.notes && (
-              <div className="sm:col-span-2">
-                <span className="text-slate-500">Not:</span> {supplier.notes}
-              </div>
-            )}
-          </div>
+        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#7fb5df" }}>
+          <div className="text-[11px] font-bold text-center">Toplam Borç</div>
+          <div className="text-xl font-bold tabular-nums text-center">{formatMoney(toplamBorc)}</div>
+        </div>
+        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#8bd0a7" }}>
+          <div className="text-[11px] font-bold text-center">Toplam Ödeme / Mahsup</div>
+          <div className="text-xl font-bold tabular-nums text-center">{formatMoney(toplamOdeme)}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href={`/purchases/new?supplier_id=${id}`}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
+          style={{ background: "#334155" }}
+        >
+          Alış Yap
+        </Link>
+        <button
+          type="button"
+          onClick={() => {
+            setPayType("payment");
+            setPayAmount(bal > 0 ? String(bal) : "");
+            document.getElementById("supplier-pay-form")?.scrollIntoView({ behavior: "smooth" });
+          }}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
+          style={{ background: "#198754" }}
+        >
+          Ödeme / Tahsilat
+        </button>
+        <a
+          href="#supplier-ekstre"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+        >
+          Hesap Ekstresi
+        </a>
+        <Link
+          href={`/suppliers/payables?fis=1&supplier_id=${id}`}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
+          style={{ background: "#7c3aed" }}
+        >
+          Borç-Alacak Fişi
+        </Link>
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
+          style={{ background: "#7fb5df" }}
+        >
+          {editing ? "Düzenlemeyi kapat" : "Kartı Düzenle"}
+        </button>
+        <button onClick={onDelete} className="rounded-lg border border-red-200 text-red-700 px-3 py-2 text-sm">
+          Sil
+        </button>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm text-sm grid sm:grid-cols-2 gap-2">
+        <div><span className="text-slate-500">Telefon:</span> {supplier.phone || "—"}</div>
+        <div><span className="text-slate-500">E-posta:</span> {supplier.email || "—"}</div>
+        <div><span className="text-slate-500">Vergi No:</span> {supplier.tax_number || "—"}</div>
+        <div><span className="text-slate-500">Vergi Dairesi:</span> {supplier.tax_office || "—"}</div>
+        <div className="sm:col-span-2"><span className="text-slate-500">Adres:</span> {supplier.address || "—"}</div>
+        <div className="sm:col-span-2 text-xs text-slate-400">
+          Açılış: {formatMoney(Number(supplier.opening_balance ?? 0))}
         </div>
       </div>
 
       {editing && (
-        <form onSubmit={saveEdit} className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <form onSubmit={saveEdit} data-baykus-save className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
           <h2 className="font-semibold text-slate-800">Kartı düzenle</h2>
           <div className="grid sm:grid-cols-2 gap-4">
             {(
@@ -310,7 +344,7 @@ export default function SupplierDetailPage() {
       )}
 
       <div className="grid lg:grid-cols-2 gap-6 mb-6">
-        <form onSubmit={addMovement} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+        <form id="supplier-pay-form" onSubmit={addMovement} data-baykus-save className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
           <h2 className="font-semibold text-slate-800">Ödeme / hareket</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             <div>
@@ -422,9 +456,9 @@ export default function SupplierDetailPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div id="supplier-ekstre" className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
-          <h2 className="font-semibold text-slate-800">Ekstre</h2>
+          <h2 className="font-semibold text-slate-800">Hesap Ekstresi</h2>
           {statement && (
             <div className="text-xs text-slate-500">
               Açılış {formatMoney(Number(statement.opening_balance))} · Kapanış{" "}

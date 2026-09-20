@@ -416,7 +416,7 @@ function CreateSaleInner() {
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
       {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
-      <form onSubmit={onSubmit} className="space-y-3">
+      <form onSubmit={onSubmit} data-baykus-save className="space-y-3">
         <fieldset className="rounded border bg-white px-3 py-3">
           <legend className="px-1 text-xs font-semibold">Satış Bilgileri</legend>
           <div className="flex flex-wrap gap-2 mb-3">

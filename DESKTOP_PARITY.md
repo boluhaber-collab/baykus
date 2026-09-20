@@ -318,3 +318,21 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI / otomat
 API: voucher PDF (`build_supplier_voucher_pdf`). Alembic yok.
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI / postgres canlı şifre.
+
+
+## Batch 15 — Detay kartları + global kısayollar (2026-09-20)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Müşteri kart detay (`musteri_kart_detay_penceresi` / `musteri_kart_ozeti`) | `/customers/[id]` — özet Açık Bakiye / Toplam Borç / Toplam Tahsilat + son satış · işlemler (Satış, Teklif, Tahsilat, WA, Cari PDF, Mutabakat, Takip, Devir) · sekmeler Bilgi / Hareketler / Siparişler / Notlar / WhatsApp | done |
+| Tedarikçi detay (`tedarikci_detay_penceresi`) | `/suppliers/[id]` — kimlik+not · bakiye kartları · Alış / Ödeme / Ekstre / Borç-Alacak Fişi / Kartı Düzenle · ekstre + alışlar | done |
+| Ürün kart / varyant (`urun_kartlari_varyant_paneli`) | `/products/[id]` — BEDEN/RENK/Baskı/Satış/Alış/Stok tablosu · depo bazlı stok (`GET /api/products/{id}/warehouse-stocks`) · Barkod/Etiket + Hızlı Varyant link | done |
+| Sipariş detay toolbar (`siparis_detay_penceresi_ac`) | `/orders/[id]` — tek toolbar: Durum · Tasarım · WA · İş Emri PDF · Tahsilat · Yazdır (+ yaşam çizgisi/düzenle) | done |
+| Satın alma detay | `/purchases/[id]` — özet kartlar · kalem tablosu + dip toplam · Onay/Ödeme/Fiş/Ekstre/Yazdır CTA | done |
+| Global kısayollar | `useBaykusHotkeys` (AppShell): Ctrl+S / F1 → `[data-baykus-save]` · F2 → `/sales/retail/new` · Escape → geri | done |
+
+API: `GET /api/products/{id}/warehouse-stocks`. Alembic yok.
+
+`data-baykus-save`: ProductForm, OrderForm, customers/new, sales/create, retail/new, müşteri/tedarikçi/sipariş kaydet formları.
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI.

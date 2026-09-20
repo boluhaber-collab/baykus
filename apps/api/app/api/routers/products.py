@@ -599,6 +599,71 @@ def get_product(
     return _detail(product, movements)
 
 
+@router.get("/{product_id}/warehouse-stocks")
+def product_warehouse_stocks(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+) -> list[dict]:
+    """Depo bazlı stok satırları — ürün kartı / varyant paneli parity."""
+    from app.models.warehouse import WarehouseStock
+
+    product = _get_product(db, product_id)
+    rows = (
+        db.query(WarehouseStock)
+        .filter(WarehouseStock.product_id == product_id)
+        .order_by(WarehouseStock.warehouse.asc())
+        .all()
+    )
+    out: list[dict] = []
+    for r in rows:
+        variant_name = None
+        variant_sku = None
+        if r.variant_id:
+            v = db.get(ProductVariant, r.variant_id)
+            if v:
+                variant_name = v.name
+                variant_sku = v.sku
+        out.append(
+            {
+                "warehouse": r.warehouse,
+                "product_id": r.product_id,
+                "variant_id": r.variant_id,
+                "variant_name": variant_name,
+                "variant_sku": variant_sku,
+                "quantity": int(r.quantity or 0),
+            }
+        )
+    if not out:
+        # Legacy: single warehouse on product / variants
+        wh = product.warehouse or DEFAULT_WAREHOUSE
+        if product.variants:
+            for v in product.variants:
+                out.append(
+                    {
+                        "warehouse": wh,
+                        "product_id": product.id,
+                        "variant_id": v.id,
+                        "variant_name": v.name,
+                        "variant_sku": v.sku,
+                        "quantity": int(v.stock_qty or 0),
+                    }
+                )
+        else:
+            out.append(
+                {
+                    "warehouse": wh,
+                    "product_id": product.id,
+                    "variant_id": None,
+                    "variant_name": None,
+                    "variant_sku": None,
+                    "quantity": int(product.stock_qty or 0),
+                }
+            )
+    return out
+
+
+
 @router.put("/{product_id}", response_model=ProductDetail)
 def update_product(
     product_id: int,

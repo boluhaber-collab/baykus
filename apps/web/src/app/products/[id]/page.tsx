@@ -27,6 +27,9 @@ export default function ProductDetailPage() {
   const [note, setNote] = useState("");
   const [stockBusy, setStockBusy] = useState(false);
   const [priceLists, setPriceLists] = useState<ProductPriceListRef[]>([]);
+  const [warehouseStocks, setWarehouseStocks] = useState<
+    { warehouse: string; variant_id?: number | null; variant_name?: string | null; variant_sku?: string | null; quantity: number }[]
+  >([]);
 
 
   const load = useCallback(async () => {
@@ -39,6 +42,12 @@ export default function ProductDetailPage() {
         setPriceLists(pls);
       } catch {
         setPriceLists([]);
+      }
+      try {
+        const wh = await apiFetch<typeof warehouseStocks>(`/api/products/${id}/warehouse-stocks`);
+        setWarehouseStocks(wh);
+      } catch {
+        setWarehouseStocks([]);
       }
       if (data.variants?.length && !variantId) {
         setVariantId(String(data.variants[0].id));
@@ -140,6 +149,26 @@ export default function ProductDetailPage() {
           >
             {editing ? "Formu Kapat" : "Düzenle"}
           </button>
+          <Link
+            href={`/products/labels?product_id=${id}`}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ background: "#0ea5e9" }}
+          >
+            Barkod / Etiket Yazdır
+          </Link>
+          <Link
+            href="/products?tab=variants"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ background: "#334155" }}
+          >
+            Hızlı Varyant / Stok
+          </Link>
+          <Link
+            href="/stock/warehouses"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+          >
+            Depolar
+          </Link>
           <button
             type="button"
             onClick={onDelete}
@@ -231,19 +260,28 @@ export default function ProductDetailPage() {
             </div>
           )}
 
-          {product.variants?.length > 0 && (
-            <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
+          {/* Varyant stokları — urun_kartlari_varyant_paneli */}
+          <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="font-semibold text-sm text-slate-800">Varyant Stokları</h2>
+              <div className="text-xs text-slate-500 flex gap-3">
+                <span>Satış: {formatMoney(Number(product.base_price))}</span>
+                <span>Alış: {formatMoney(Number(product.purchase_price || 0))}</span>
+                <span>Maliyet: {formatMoney(Number(product.cost || 0))}</span>
+              </div>
+            </div>
+            {product.variants?.length > 0 ? (
               <table className="min-w-full text-sm">
                 <thead className="bg-slate-50 text-left text-slate-600">
                   <tr>
-                    <th className="px-4 py-3">Varyant</th>
-                    <th className="px-4 py-3">SKU</th>
-                    <th className="px-4 py-3">Renk</th>
-                    <th className="px-4 py-3">Beden</th>
+                    <th className="px-4 py-3">BEDEN</th>
+                    <th className="px-4 py-3">RENK</th>
                     <th className="px-4 py-3">Baskı</th>
+                    <th className="px-4 py-3">Varyant / SKU</th>
                     <th className="px-4 py-3">Barkod</th>
-                    <th className="px-4 py-3">Fiyat</th>
-                    <th className="px-4 py-3">Stok</th>
+                    <th className="px-4 py-3 text-right">Satış Fiyatı</th>
+                    <th className="px-4 py-3 text-right">Alış Fiyatı</th>
+                    <th className="px-4 py-3 text-right">Stok</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -252,14 +290,19 @@ export default function ProductDetailPage() {
                       key={v.id}
                       className={`border-t border-slate-100 ${v.is_critical ? "bg-red-50/50" : ""}`}
                     >
-                      <td className="px-4 py-3 font-medium">{v.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{v.sku}</td>
-                      <td className="px-4 py-3">{v.color || "—"}</td>
                       <td className="px-4 py-3">{v.size || "—"}</td>
+                      <td className="px-4 py-3">{v.color || "—"}</td>
                       <td className="px-4 py-3">{v.print_type || "—"}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{v.barcode || "—"}</td>
-                      <td className="px-4 py-3">{formatMoney(Number(v.price))}</td>
                       <td className="px-4 py-3">
+                        <div className="font-medium">{v.name}</div>
+                        <div className="font-mono text-xs text-slate-500">{v.sku}</div>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs">{v.barcode || "—"}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{formatMoney(Number(v.price))}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-500">
+                        {formatMoney(Number(product.purchase_price || 0))}
+                      </td>
+                      <td className="px-4 py-3 text-right">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${stockBadgeClass(v.stock_qty, thr, v.is_critical)}`}
                         >
@@ -270,8 +313,50 @@ export default function ProductDetailPage() {
                   ))}
                 </tbody>
               </table>
+            ) : (
+              <p className="px-4 py-4 text-sm text-slate-500">
+                Varyant yok — ana stok: {total} ({product.warehouse || "Ana Depo"})
+              </p>
+            )}
+          </div>
+
+          {/* Stok by warehouse */}
+          <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
+            <div className="px-4 py-3 border-b border-slate-100 flex justify-between">
+              <h2 className="font-semibold text-sm">Depo Bazlı Stok</h2>
+              <Link href="/stock/warehouses" className="text-xs text-baykus-primary hover:underline">
+                Depo yönetimi
+              </Link>
             </div>
-          )}
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-left text-slate-600">
+                <tr>
+                  <th className="px-4 py-2">Depo</th>
+                  <th className="px-4 py-2">Varyant</th>
+                  <th className="px-4 py-2 text-right">Miktar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {warehouseStocks.map((w, i) => (
+                  <tr key={`${w.warehouse}-${w.variant_id ?? "p"}-${i}`} className="border-t border-slate-100">
+                    <td className="px-4 py-2 font-medium">{w.warehouse}</td>
+                    <td className="px-4 py-2 text-slate-600">
+                      {w.variant_name || "Ana ürün"}
+                      {w.variant_sku ? ` (${w.variant_sku})` : ""}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium">{w.quantity}</td>
+                  </tr>
+                ))}
+                {warehouseStocks.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-4 py-4 text-center text-slate-400">
+                      Depo stok satırı yok
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
           {product.product_type !== "hizmet" && (
             <form

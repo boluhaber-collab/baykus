@@ -344,7 +344,8 @@ export default function OrderDetailPage() {
             {order.channel ? ` · ${order.channel}` : ""}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
+        {/* Tek toolbar — durum, tasarım, WA, iş emri PDF, tahsilat, yazdır */}
+        <div className="flex flex-wrap gap-2 items-center print:hidden">
           <label className="text-xs text-slate-500">Durum</label>
           <select
             disabled={statusBusy}
@@ -360,10 +361,24 @@ export default function OrderDetailPage() {
           </select>
           <button
             type="button"
-            onClick={() => window.print()}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            onClick={() => document.getElementById("order-design")?.scrollIntoView({ behavior: "smooth" })}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-white"
+            style={{ background: "#7c3aed" }}
           >
-            Yazdır
+            Tasarım
+          </button>
+          <button
+            type="button"
+            disabled={!order.customer_phone || waBusy}
+            onClick={() => {
+              const tpl = designTemplates[0] || templates[0];
+              if (tpl) void openWhatsApp(tpl);
+              else document.getElementById("order-design")?.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+            style={{ background: "#15803d" }}
+          >
+            WhatsApp
           </button>
           <button
             type="button"
@@ -374,20 +389,35 @@ export default function OrderDetailPage() {
                 setError(e instanceof Error ? e.message : "PDF hatası");
               }
             }}
-            className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm font-medium"
+            className="rounded-lg bg-slate-800 text-white px-3 py-2 text-sm font-medium"
           >
             İş Emri PDF
           </button>
+          <button
+            type="button"
+            onClick={() => document.getElementById("order-tahsilat")?.scrollIntoView({ behavior: "smooth" })}
+            className="rounded-lg px-3 py-2 text-sm font-medium text-white"
+            style={{ background: "#198754" }}
+          >
+            Tahsilat
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+          >
+            Yazdır
+          </button>
           <Link
             href={`/orders/${id}/timeline`}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
           >
             Yaşam Çizgisi
           </Link>
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
           >
             {editing ? "Formu Kapat" : "Düzenle"}
           </button>
@@ -395,7 +425,7 @@ export default function OrderDetailPage() {
             <button
               type="button"
               onClick={softCancel}
-              className="rounded-lg border border-red-200 text-red-700 px-4 py-2 text-sm"
+              className="rounded-lg border border-red-200 text-red-700 px-3 py-2 text-sm"
             >
               İptal Et
             </button>
@@ -434,7 +464,7 @@ export default function OrderDetailPage() {
           </div>
 
           {/* Design approval + WhatsApp — one screen block */}
-          <div className="rounded-xl border border-violet-200 bg-[#faf5ff] p-4 shadow-sm space-y-3">
+          <div id="order-design" className="rounded-xl border border-violet-200 bg-[#faf5ff] p-4 shadow-sm space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-semibold text-sm text-violet-950">Tasarım Onay Akışı</h2>
               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${designStatusBadgeClass(designStatus)}`}>
@@ -545,8 +575,9 @@ export default function OrderDetailPage() {
           </div>
 
           {/* Payment */}
-          {Number(order.remaining_amount) > 0 && (
-            <form onSubmit={submitPayment} className="rounded-xl border border-baykus-line bg-white p-4 shadow-sm space-y-3">
+          <div id="order-tahsilat">
+          {Number(order.remaining_amount) > 0 ? (
+            <form onSubmit={submitPayment} data-baykus-save className="rounded-xl border border-baykus-line bg-white p-4 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold text-sm text-baykus-text">Tahsilat kaydet</h2>
                 <span className="text-xs text-baykus-muted">
@@ -632,7 +663,28 @@ export default function OrderDetailPage() {
                 </ul>
               )}
             </form>
+          ) : (
+            <div className="rounded-xl border border-baykus-line bg-white p-4 shadow-sm text-sm text-slate-600">
+              <h2 className="font-semibold text-sm text-baykus-text mb-2">Tahsilat</h2>
+              <p className="text-emerald-700">Kalan bakiye yok — sipariş tahsilatı tamamlandı.</p>
+              {(order.payments || []).length > 0 && (
+                <ul className="text-xs text-baykus-muted divide-y divide-baykus-line border-t border-baykus-line mt-2 pt-2">
+                  {order.payments.map((pay) => (
+                    <li key={pay.id} className="py-1.5 flex justify-between gap-2">
+                      <span>
+                        {String(pay.paid_at).slice(0, 10)} · {pay.method}
+                        {pay.notes ? ` — ${pay.notes}` : ""}
+                      </span>
+                      <span className="tabular-nums font-medium text-emerald-700">
+                        {formatMoney(Number(pay.amount))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
+          </div>
 
           {order.notes && (
             <div className="rounded-xl border bg-white p-4 shadow-sm text-sm text-slate-700">
