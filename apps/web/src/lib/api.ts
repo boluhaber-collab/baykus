@@ -225,6 +225,15 @@ export type UpcomingSpecialDay = {
   note?: string | null;
 };
 
+export type LoanDueBrief = {
+  installment_id: number;
+  loan_id: number;
+  loan_title: string;
+  due_date: string;
+  amount: number;
+  days_until: number;
+};
+
 export type DashboardSummary = {
   orders_today_count: number;
   orders_today_revenue: number;
@@ -232,8 +241,22 @@ export type DashboardSummary = {
   orders_month_revenue: number;
   open_orders: number;
   status_counts: DashboardStatusCount[];
+  collections_today?: number;
+  internet_sales_today_revenue?: number;
+  internet_sales_today_count?: number;
+  month_net_profit?: number;
+  month_label?: string;
   critical_stock_count: number;
   low_stock_items: DashboardLowStock[];
+  stock_value?: number;
+  variants_count?: number;
+  stock_qty_total?: number;
+  due_today_count?: number;
+  due_soon_count?: number;
+  overdue_deliveries_count?: number;
+  open_workshop_jobs?: number;
+  loan_due_count?: number;
+  loan_due_items?: LoanDueBrief[];
   customer_count: number;
   receivables_total: number;
   receivables_customer_count: number;

@@ -77,6 +77,15 @@ class UpcomingSpecialDayBrief(BaseModel):
     days_until: int
     note: str | None = None
 
+class LoanDueBrief(BaseModel):
+    installment_id: int
+    loan_id: int
+    loan_title: str
+    due_date: date
+    amount: float
+    days_until: int
+
+
 class DashboardSummary(BaseModel):
     """Real aggregates for the home dashboard."""
 
@@ -88,9 +97,29 @@ class DashboardSummary(BaseModel):
     open_orders: int = 0
     status_counts: list[StatusCount] = []
 
-    # Stock
+    # Top strip extras
+    collections_today: float = 0.0
+    internet_sales_today_revenue: float = 0.0
+    internet_sales_today_count: int = 0
+    month_net_profit: float = 0.0
+    month_label: str = ""
+
+    # Stock / assets
     critical_stock_count: int = 0
     low_stock_items: list[LowStockBrief] = []
+    stock_value: float = 0.0
+    variants_count: int = 0
+    stock_qty_total: int = 0
+
+    # Deliveries / workshop
+    due_today_count: int = 0
+    due_soon_count: int = 0
+    overdue_deliveries_count: int = 0
+    open_workshop_jobs: int = 0
+
+    # Loans
+    loan_due_count: int = 0
+    loan_due_items: list[LoanDueBrief] = []
 
     # Customers / cari
     customer_count: int = 0

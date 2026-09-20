@@ -30,12 +30,12 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "👥",
     href: "/customers",
     items: [
-      { href: "/customers", label: "Müşteri listesi" },
-      { href: "/customers/new", label: "Yeni müşteri" },
-      { href: "/cari", label: "Cari / Alacaklar" },
-      { href: "/customers/receivables", label: "Açık alacaklar" },
-      { href: "/crm/special-days", label: "Özel günler" },
-      { href: "/crm/campaigns", label: "Kampanyalar" },
+      { href: "/customers", label: "Müşteri Listesi" },
+      { href: "/customers/new", label: "Yeni Müşteri" },
+      { href: "/customers?tab=track", label: "Müşteri Takibi" },
+      { href: "/customers/receivables", label: "Açık Alacaklar" },
+      { href: "/whatsapp", label: "WhatsApp" },
+      { href: "/crm/special-days", label: "Özel Gün / Kampanya" },
     ],
   },
   {
@@ -45,10 +45,10 @@ export const NAV_GROUPS: NavGroup[] = [
     href: "/suppliers",
     items: [
       { href: "/suppliers", label: "Tedarikçiler" },
-      { href: "/purchases", label: "Alış hareketleri" },
-      { href: "/purchases/new", label: "Yeni satın alma" },
-      { href: "/payables", label: "Borçlar" },
-      { href: "/suppliers/payables", label: "Tedarikçi borçları" },
+      { href: "/purchases", label: "Alış Hareketleri" },
+      { href: "/suppliers/payables", label: "Borç / Alacak" },
+      { href: "/suppliers/payables", label: "Tedarikçi Ödemesi" },
+      { href: "/purchases/new", label: "Satın Alma Talebi" },
     ],
   },
   {
@@ -57,10 +57,13 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "📦",
     href: "/products",
     items: [
-      { href: "/products", label: "Ürünler" },
-      { href: "/products/new", label: "Yeni ürün" },
-      { href: "/stock", label: "Stok özeti" },
-      { href: "/stock/critical", label: "Kritik stok" },
+      { href: "/products", label: "Ürün Yönetimi" },
+      { href: "/products?tab=variants", label: "Kartlar / Varyantlar" },
+      { href: "/stock", label: "Stok Yönetimi" },
+      { href: "/stock/critical", label: "Kritik Stok" },
+      { href: "/reports/stock", label: "Stok Raporu" },
+      { href: "/products/new", label: "Hızlı Varyant" },
+      { href: "/stock", label: "Depolar" },
     ],
   },
   {
@@ -70,12 +73,14 @@ export const NAV_GROUPS: NavGroup[] = [
     href: "/sales",
     defaultOpen: true,
     items: [
-      { href: "/sales", label: "Satış merkezi" },
+      { href: "/orders", label: "Sipariş Merkezi" },
+      { href: "/orders", label: "Satışlar" },
       { href: "/sales/create", label: "Satış / Teklif Oluştur" },
-      { href: "/orders", label: "Sipariş listesi" },
-      { href: "/orders/kanban", label: "Sipariş Kanban" },
+      { href: "/sales/create?type=perakende", label: "Perakende" },
       { href: "/quotes", label: "Teklifler" },
-      { href: "/orders/new", label: "Klasik sipariş formu" },
+      { href: "/orders", label: "Sipariş Listesi" },
+      { href: "/orders?status=Teslim%20Edildi", label: "Teslim Edilen" },
+      { href: "/orders/kanban", label: "Yaşam Çizgisi" },
     ],
   },
   {
@@ -184,25 +189,25 @@ export type Crumb = { label: string; href?: string };
 
 const PATH_LABELS: Record<string, string> = {
   "/dashboard": "Ana Sayfa",
-  "/sales": "Satış Merkezi",
+  "/sales": "Satış / Sipariş",
   "/sales/create": "Satış / Teklif Oluştur",
   "/production": "Üretim / Atölye",
   "/ecommerce": "E-Ticaret",
   "/documents": "Evrak Dolabı",
-  "/customers": "Müşteriler",
+  "/customers": "Müşteri Merkezi",
   "/customers/new": "Yeni müşteri",
   "/customers/receivables": "Açık alacaklar",
   "/cari": "Cari / Alacaklar",
-  "/products": "Ürünler",
+  "/products": "Ürün & Stok Merkezi",
   "/products/new": "Yeni ürün",
   "/stock": "Stok",
   "/stock/critical": "Kritik stok",
-  "/orders": "Sipariş listesi",
+  "/orders": "Sipariş Merkezi",
   "/orders/new": "Yeni sipariş",
   "/orders/kanban": "Kanban",
   "/quotes": "Teklifler",
   "/quotes/new": "Yeni teklif",
-  "/suppliers": "Tedarikçiler",
+  "/suppliers": "Tedarik Merkezi",
   "/purchases": "Alış hareketleri",
   "/payables": "Borçlar",
   "/finance": "Finans",
@@ -278,15 +283,15 @@ export function titleForPath(pathname: string): string {
   return crumbs[crumbs.length - 1]?.label || "Baykuş Baskı";
 }
 
-/** Desktop Ana Sayfa quick actions */
+/** Desktop Ana Sayfa quick actions (exact desktop colors) */
 export const QUICK_ACTIONS = [
-  { id: "satis_belgeleri", label: "Satışlar", href: "/orders", color: "bg-teal-600 hover:bg-teal-700" },
-  { id: "siparis_listesi", label: "Sipariş Listesi", href: "/orders", color: "bg-emerald-700 hover:bg-emerald-800" },
-  { id: "atolye_paneli", label: "Atölye Paneli", href: "/production", color: "bg-orange-500 hover:bg-orange-600" },
-  { id: "gider_takibi", label: "Gider Takibi", href: "/finance/expenses", color: "bg-red-600 hover:bg-red-700" },
-  { id: "fiyat_listesi", label: "Fiyat Listesi", href: "/price-lists", color: "bg-pink-700 hover:bg-pink-800" },
-  { id: "alis_hareketleri", label: "Alış Hareketleri", href: "/purchases", color: "bg-sky-500 hover:bg-sky-600" },
-  { id: "satis_teklif_olustur", label: "Satış / Teklif Oluştur", href: "/sales/create", color: "bg-blue-800 hover:bg-blue-900" },
+  { id: "satis_belgeleri", label: "Satışlar", href: "/orders", hex: "#0f766e" },
+  { id: "siparis_listesi", label: "Sipariş Listesi", href: "/orders", hex: "#0f766e" },
+  { id: "atolye_paneli", label: "Üretim Akış Paneli", href: "/orders/kanban", hex: "#f59e0b" },
+  { id: "gider_takibi", label: "Gider Takibi", href: "/finance/expenses", hex: "#be123c" },
+  { id: "fiyat_listesi", label: "Fiyat Listesi", href: "/price-lists", hex: "#be123c" },
+  { id: "alis_hareketleri", label: "Alış Hareketleri", href: "/purchases", hex: "#198754" },
+  { id: "satis_teklif_olustur", label: "Satış / Teklif Oluştur", href: "/sales/create", hex: "#1f6feb" },
 ] as const;
 
 /** @deprecated flat list kept for older imports */

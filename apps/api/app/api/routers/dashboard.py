@@ -25,6 +25,7 @@ from app.models.product import Product
 from app.schemas.common import (
     DashboardSummary,
     KPIStats,
+    LoanDueBrief,
     LowStockBrief,
     RecentCariPaymentBrief,
     RecentFinanceMovementBrief,
@@ -208,6 +209,158 @@ def _upcoming_special_days(db: Session, within_days: int = 30) -> list[UpcomingS
     items.sort(key=lambda x: x.days_until)
     return items
 
+
+def _stock_totals(db: Session) -> tuple[float, int, int]:
+    """Return (stock_value_cost, variants_count, stock_qty_total)."""
+    products = (
+        db.query(Product)
+        .options(joinedload(Product.variants))
+        .filter(Product.is_active.is_(True), Product.product_type != "hizmet")
+        .all()
+    )
+    value = Decimal("0")
+    variants = 0
+    qty_total = 0
+    for p in products:
+        unit = _dec(p.cost) if _dec(p.cost) > 0 else _dec(p.purchase_price)
+        if p.variants:
+            for v in p.variants:
+                q = int(v.stock_qty or 0)
+                variants += 1
+                qty_total += q
+                value += unit * q
+        else:
+            q = int(p.stock_qty or 0)
+            qty_total += q
+            value += unit * q
+    return _f(value), variants, qty_total
+
+
+def _month_net_profit(db: Session, month_start: datetime) -> float:
+    from datetime import date as date_cls
+    from calendar import monthrange
+
+    from app.models.expense import Expense
+    from app.models.supplier import Purchase
+
+    revenue = (
+        db.query(func.coalesce(func.sum(Order.total_amount), 0))
+        .filter(Order.created_at >= month_start, Order.status != "Sipariş İptali")
+        .scalar()
+    )
+    today = date_cls.today()
+    _, last = monthrange(today.year, today.month)
+    month_end = date_cls(today.year, today.month, last)
+    purchase_cost = (
+        db.query(func.coalesce(func.sum(Purchase.total_amount), 0))
+        .filter(
+            Purchase.status == "confirmed",
+            Purchase.purchase_date >= month_start.date(),
+            Purchase.purchase_date <= month_end,
+        )
+        .scalar()
+    )
+    expenses = (
+        db.query(func.coalesce(func.sum(Expense.amount), 0))
+        .filter(Expense.expense_date >= month_start.date(), Expense.expense_date <= month_end)
+        .scalar()
+    )
+    return _f(_dec(revenue) - _dec(purchase_cost) - _dec(expenses))
+
+
+def _delivery_counts(db: Session) -> tuple[int, int, int]:
+    """due_today, due_soon (1-3 days), overdue open deliveries."""
+    from datetime import date as date_cls, timedelta
+
+    today = date_cls.today()
+    soon = today + timedelta(days=3)
+    open_q = db.query(Order).filter(Order.status.notin_(list(CLOSED_STATUSES)))
+    due_today = 0
+    due_soon = 0
+    overdue = 0
+    for o in open_q.all():
+        d = o.due_date or o.delivery_date
+        if not d:
+            continue
+        if d < today:
+            overdue += 1
+        elif d == today:
+            due_today += 1
+        elif today < d <= soon:
+            due_soon += 1
+    return due_today, due_soon, overdue
+
+
+def _loan_dues(db: Session, within_days: int = 7) -> list[LoanDueBrief]:
+    from datetime import date as date_cls, timedelta
+
+    from app.models.loan import Loan, LoanInstallment
+
+    today = date_cls.today()
+    until = today + timedelta(days=within_days)
+    rows = (
+        db.query(LoanInstallment)
+        .join(Loan)
+        .filter(
+            LoanInstallment.is_paid.is_(False),
+            Loan.status == "aktif",
+            LoanInstallment.due_date <= until,
+        )
+        .order_by(LoanInstallment.due_date.asc())
+        .limit(10)
+        .all()
+    )
+    items: list[LoanDueBrief] = []
+    for r in rows:
+        items.append(
+            LoanDueBrief(
+                installment_id=r.id,
+                loan_id=r.loan_id,
+                loan_title=r.loan.title if r.loan is not None else "Kredi",
+                due_date=r.due_date,
+                amount=_f(r.amount),
+                days_until=(r.due_date - today).days,
+            )
+        )
+    return items
+
+
+def _collections_today(db: Session, today_start: datetime, tomorrow: datetime) -> float:
+    from datetime import date as date_cls
+
+    today = today_start.date()
+    cash = (
+        db.query(func.coalesce(func.sum(CashMovement.amount), 0))
+        .filter(
+            CashMovement.movement_type.in_(CASH_IN_TYPES),
+            CashMovement.movement_date == today,
+        )
+        .scalar()
+    )
+    bank = (
+        db.query(func.coalesce(func.sum(BankMovement.amount), 0))
+        .filter(
+            BankMovement.movement_type.in_(BANK_IN_TYPES),
+            BankMovement.movement_date == today,
+        )
+        .scalar()
+    )
+    # also cari payments credited today
+    cari = (
+        db.query(func.coalesce(func.sum(CariMovement.credit), 0))
+        .filter(
+            CariMovement.movement_type.in_(("payment", "deposit")),
+            CariMovement.movement_date == today,
+        )
+        .scalar()
+    )
+    # Prefer cash+bank; if zero fall back to cari (avoid double count when both linked)
+    total = _dec(cash) + _dec(bank)
+    if total == 0:
+        total = _dec(cari)
+    return _f(total)
+
+
 @router.get("/kpis", response_model=KPIStats)
 def get_kpis(user: CurrentUser, db: Session = Depends(get_db)) -> KPIStats:
     """Legacy thin KPIs — real numbers, no placeholders."""
@@ -381,6 +534,40 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
 
     upcoming = _upcoming_special_days(db, within_days=30)
 
+    # Internet sales today
+    net_channels = ("internet", "Trendyol", "Hepsiburada", "N11")
+    net_row = (
+        db.query(
+            func.count(Order.id),
+            func.coalesce(func.sum(Order.total_amount), 0),
+        )
+        .filter(
+            Order.created_at >= today_start,
+            Order.created_at < tomorrow,
+            Order.status != "Sipariş İptali",
+            Order.channel.in_(net_channels),
+        )
+        .one()
+    )
+
+    stock_value, variants_count, stock_qty_total = _stock_totals(db)
+    due_today, due_soon, overdue = _delivery_counts(db)
+    loan_items = _loan_dues(db, within_days=7)
+    collections = _collections_today(db, today_start, tomorrow)
+    month_profit = _month_net_profit(db, month_start)
+
+    open_workshop = sum(
+        int(s.count)
+        for s in status_counts
+        if s.status in ("Sipariş Alındı", "Hazırlanıyor", "Baskıda", "Hazır")
+    )
+
+    TR_MONTHS = [
+        "", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+        "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
+    ]
+    month_label = TR_MONTHS[month_start.month]
+
     return DashboardSummary(
         orders_today_count=int(today_row[0] or 0),
         orders_today_revenue=_f(today_row[1]),
@@ -388,8 +575,22 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         orders_month_revenue=_f(month_row[1]),
         open_orders=int(open_orders),
         status_counts=status_counts,
+        collections_today=collections,
+        internet_sales_today_revenue=_f(net_row[1]),
+        internet_sales_today_count=int(net_row[0] or 0),
+        month_net_profit=month_profit,
+        month_label=month_label,
         critical_stock_count=critical_count,
         low_stock_items=low_items,
+        stock_value=stock_value,
+        variants_count=variants_count,
+        stock_qty_total=stock_qty_total,
+        due_today_count=due_today,
+        due_soon_count=due_soon,
+        overdue_deliveries_count=overdue,
+        open_workshop_jobs=open_workshop,
+        loan_due_count=len(loan_items),
+        loan_due_items=loan_items,
         customer_count=cust_count,
         receivables_total=recv_total,
         receivables_customer_count=recv_cust,
