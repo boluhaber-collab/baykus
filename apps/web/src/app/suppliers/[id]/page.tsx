@@ -8,6 +8,7 @@ import {
   SupplierDetail,
   SupplierStatement,
   apiFetch,
+  downloadPdf,
   formatMoney,
 } from "@/lib/api";
 import { decodeHtmlEntities } from "@/lib/htmlEntities";
@@ -268,8 +269,41 @@ export default function SupplierDetailPage() {
     }, 50);
   }
 
-  function scrollEkstre() {
-    document.getElementById("supplier-ekstre")?.scrollIntoView({ behavior: "smooth" });
+  function openEkstre() {
+    setShowSecondary(true);
+    setTimeout(() => {
+      document.getElementById("supplier-ekstre")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
+  async function downloadStatementPdf() {
+    try {
+      await downloadPdf(
+        `/api/suppliers/${id}/statement-pdf`,
+        `tedarikci_ekstre_${id}.pdf`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "PDF hatası");
+    }
+  }
+
+  async function downloadVoucherPdf() {
+    try {
+      const amount = Math.abs(Number(supplier?.balance ?? 0));
+      const tip = Number(supplier?.balance ?? 0) > 0 ? "Borç Fişi" : "Alacak Fişi";
+      const p = new URLSearchParams({
+        tip,
+        amount: String(amount),
+        date: new Date().toISOString().slice(0, 10),
+        note: "Hesap ekstresi",
+      });
+      await downloadPdf(
+        `/api/suppliers/${id}/voucher-pdf?${p}`,
+        `tedarikci-fis-${id}.pdf`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "PDF hatası");
+    }
   }
 
   const purchasesPanel = (
@@ -450,7 +484,22 @@ export default function SupplierDetailPage() {
             label: "Hesap Ekstresi",
             icon: "📑",
             variant: "white",
-            onClick: scrollEkstre,
+            onClick: () => void downloadStatementPdf(),
+            menu: [
+              {
+                label: "Hesap ekstresi PDF",
+                onClick: () => void downloadStatementPdf(),
+              },
+              {
+                label: "Hareketler / ekstre",
+                onClick: openEkstre,
+              },
+              {
+                label: "Borç-Alacak Fişi PDF",
+                onClick: () => void downloadVoucherPdf(),
+              },
+              { label: "Borç listesi", href: "/suppliers/payables" },
+            ],
           },
           {
             key: "sms",
@@ -498,7 +547,7 @@ export default function SupplierDetailPage() {
             footerLabel: "tamamı için tıklayın...",
             footerOnClick: () => {
               setShowSecondary(true);
-              setTimeout(scrollEkstre, 50);
+              setTimeout(openEkstre, 50);
             },
             children: purchasesPanel,
           },
@@ -510,7 +559,7 @@ export default function SupplierDetailPage() {
             footerLabel: "tamamı için tıklayın...",
             footerOnClick: () => {
               setShowSecondary(true);
-              setTimeout(scrollEkstre, 50);
+              setTimeout(openEkstre, 50);
             },
             children: paymentsPanel,
           },

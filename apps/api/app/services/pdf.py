@@ -690,14 +690,17 @@ def build_cari_statement_pdf(
     rows: list[dict[str, Any]],
     closing_balance: Any,
     settings: dict[str, str] | None = None,
+    *,
+    party_label: str = "Müşteri",
+    doc_title: str = "Cari Hesap Dökümü",
 ) -> bytes:
     buf, c, width, height = _new_doc()
     settings = settings or {}
     from datetime import datetime
 
-    y = pdf_modern_baslik(c, width, height, "Cari Hesap Dökümü", "Baykuş Baskı", settings)
+    y = pdf_modern_baslik(c, width, height, doc_title, "Baykuş Baskı", settings)
 
-    pdf_modern_kutu(c, 1.4 * cm, y, 5.7 * cm, 0.9 * cm, "Müşteri", customer_name)
+    pdf_modern_kutu(c, 1.4 * cm, y, 5.7 * cm, 0.9 * cm, party_label, customer_name)
     pdf_modern_kutu(c, 7.4 * cm, y, 4.6 * cm, 0.9 * cm, "Hareket", str(len(rows)))
     pdf_modern_kutu(
         c,
@@ -751,7 +754,7 @@ def build_cari_statement_pdf(
         ["Tarih", "İşlem", "Borç", "Alacak", "Bakiye", "Açıklama"],
         tablo,
         oranlar=[1.1, 1.3, 1.15, 1.15, 1.15, 3.0],
-        sayfa_baslik="Cari Hesap Dökümü",
+        sayfa_baslik=doc_title,
         alt_baslik="Baykuş Baskı",
         settings=settings,
     )

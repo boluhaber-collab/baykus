@@ -443,6 +443,55 @@ def supplier_statement(
     )
 
 
+@router.get("/{supplier_id}/statement-pdf")
+def supplier_statement_pdf(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
+):
+    """Tedarikçi hesap ekstresi PDF — cari döküm şablonu ile."""
+    from fastapi.responses import Response
+    from app.models.settings_model import AppSetting
+    from app.services.pdf import build_cari_statement_pdf
+
+    stmt = supplier_statement(
+        supplier_id=supplier_id,
+        db=db,
+        _=_,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    detail = [
+        {
+            "id": m.id,
+            "date": m.movement_date.isoformat() if hasattr(m.movement_date, "isoformat") else m.movement_date,
+            "type": m.movement_type,
+            "debit": float(m.debit or 0),
+            "credit": float(m.credit or 0),
+            "balance": float(m.running_balance) if m.running_balance is not None else None,
+            "note": m.note,
+        }
+        for m in stmt.movements
+    ]
+    settings_map = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
+    pdf_bytes = build_cari_statement_pdf(
+        stmt.supplier_name,
+        detail,
+        float(stmt.closing_balance),
+        settings_map,
+        party_label="Tedarikçi",
+        doc_title="Tedarikçi Hesap Ekstresi",
+    )
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in stmt.supplier_name)[:40]
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="tedarikci_ekstre_{supplier_id}_{safe}.pdf"'},
+    )
+
+
 @router.get("/{supplier_id}/voucher-pdf")
 def supplier_voucher_pdf(
     supplier_id: int,

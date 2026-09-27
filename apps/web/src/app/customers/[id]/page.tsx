@@ -514,14 +514,15 @@ export default function CustomerDetailPage() {
             label: "Hesap Ekstresi",
             icon: "📑",
             variant: "white",
+            onClick: () => void downloadCariPdf(),
             menu: [
-              {
-                label: "Hareketler sekmesi",
-                onClick: () => openSecondary("hareketler"),
-              },
               {
                 label: "Cari döküm PDF",
                 onClick: () => void downloadCariPdf(),
+              },
+              {
+                label: "Hareketler sekmesi",
+                onClick: () => openSecondary("hareketler"),
               },
               { label: "Mutabakat mektubu", href: `/customers/${id}/mutabakat` },
               { label: "Cari raporlar", href: "/reports/cari-statements" },
