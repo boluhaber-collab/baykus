@@ -191,21 +191,43 @@ Web **`/tools/import`** veya `POST /api/customers/import` hâlâ kullanılabilir
 
 ## 4) Hesaplarım (kasa / banka / ortak)
 
-BizimHesap B2B API’sinde kasa/banka hareketi **yok**. Kaynak: panel **Hesaplarım → Kasa Raporu** Excel export’ları (Baykuş masaüstü aktarım paketiyle aynı dosyalar).
+BizimHesap B2B API’sinde kasa/banka **hareketi yok** (`GET /cashiers` yalnızca id+title listeler). Kaynak: panel **Hesaplarım** → hesap detayı DataTables endpoint’i:
+
+`POST /web/services/json.asmx/GetCashTrx` (`guid=<hesap GUID>`, form-encoded DataTables params)
 
 ### Kaynak dosyalar
 
-`tmp/bizimhesap/hesaplarim/` (gitignore — **xlsx commit etmeyin**):
+`tmp/bizimhesap/hesaplarim/` (gitignore — **xlsx/json commit etmeyin**):
 
 | Dosya | İçerik |
 |-------|--------|
-| `banka_hesaplari.xlsx` | Hesap listesi: Hesap Türü, Banka Adı, Hesap Adı, IBAN, … |
-| `banka_hareketleri.xlsx` | Banka + şirket ortağı hareketleri (~949) |
-| `kasa_hareketleri.xlsx` | TL Kasa hareketleri (~287) |
-| `raporlar/*.xlsx` | Ham BH `KASA RAPORU` export’ları (referans) |
-| `manifest.json` | Dönem / eşleme özeti |
+| `banka_hesaplari.xlsx` | Hesap listesi (tür / kurum / ad / `BH-ACC-{GUID}`) |
+| `banka_hareketleri.xlsx` | Banka + POS + KK + ortak hareketleri |
+| `kasa_hareketleri.xlsx` | TL Kasa hareketleri |
+| `per_account/*.json` | Hesap başı ham GetCashTrx satırları |
+| `manifest.json` | Canlı bakiyeler, tarih aralığı, sayımlar |
 
-Dönem (bu pakette): **01.07.2025 – 25.08.2026**.
+### Dönem / canlı bakiyeler (scrape 27.09.2026 Europe/Istanbul)
+
+Tam geçmiş (hesap başına ilk–son hareket). Örnek:
+
+| Hesap | Tür | Canlı bakiye | Hareket |
+|-------|-----|-------------:|--------:|
+| TL Kasa | Kasa | 402,06 | 314 |
+| Garanti Bankası | Banka | 1.687,39 | 430 |
+| AKBANK | Banka | 1.582,93 | 101 |
+| QNB KREDİ HESABI | Banka | 0,00 | 13 |
+| VAKIFBANK | Banka | 0,00 | 74 |
+| Banka TL Hesabı | Banka | 14.024,63 | 32 |
+| FON HESABI | Banka | 0,00 | 12 |
+| Vafıkbank (6972) | Kredi Kartı | −40.202,82 | 135 |
+| Vakıfbank (0083) | Kredi Kartı | 0,00 | 197 |
+| BAYKUŞ.COM | POS | 0,00 | 4 |
+| POS Hesabı | POS | 0,00 | 0 |
+| ENGİN (Engin KARAGÖZ) | Şirket Ortağı | **−768.011,78** | 64 |
+| NEVİN (Nevin KARAGÖZ) | Şirket Ortağı | 81.589,67 | 23 |
+
+> Not: Kullanıcı ekran görüntüsündeki TL Kasa ~2.155.087 / Garanti ~71.956 vb. canlı panel ile uyuşmuyordu; **Engin −768.011,78** canlı ile birebir. Import **canlı GetCashTrx** bakiyelerini hedefler (±0,01).
 
 ### Eşleme
 
@@ -213,10 +235,11 @@ Dönem (bu pakette): **01.07.2025 – 25.08.2026**.
 |----|--------|
 | TL Kasa | `CashRegister` adı `TL Kasa` |
 | Hesap Türü=`Banka` | `BankAccount.account_type=Banka` |
-| Hesap Türü=`Şirket Ortağı` | `BankAccount.account_type=Şirket Ortağı` (Engin / Nevin) |
-| Tahsilat / Ödeme / Para Girişi–Çıkışı | kasa: `tahsilat`/`odeme`/`gider`/`transfer_*` — banka: `deposit`/`withdrawal`/`fee`/`transfer_*` |
+| `POS` / `Kredi Kartı` / `Şirket Ortağı` | aynı `account_type` |
+| Borç / Alacak (panel) | Giriş / Çıkış → kasa `tahsilat`/`odeme`/`gider`/`transfer_*` — banka `deposit`/`withdrawal`/`fee`/`transfer_*` |
+| Trx GUID | `notes = BH_IMPORT:BH-TRX:{guid} \| Hareket=… \| Cari=… \| …` |
 
-Not alanı: `BH_IMPORT:{Aktarım ID} | …` (idempotent yeniden çalıştırma).
+UI: `/finance/banks/{id}` hareket listesini gösterir (Engin ortak kartı dahil). Kasa sayfasında **Tüm geçmiş** filtresi tüm `cash_movements` satırlarını listeler.
 
 ### Linux / box
 
@@ -232,7 +255,7 @@ python -m app.scripts.import_bizimhesap_hesaplar
 
 ### Windows PC
 
-1. `tmp\bizimhesap\hesaplarim\` altına xlsx + `manifest.json` kopyalayın (git’te yok).
+1. `tmp\bizimhesap\hesaplarim\` altına xlsx + `manifest.json` (+ isteğe `per_account/`) kopyalayın.
 2. Çalıştırın:
 
 ```powershell
@@ -240,8 +263,6 @@ cd C:\Users\engin\Desktop\baykus\apps\api
 .\.venv\Scripts\Activate.ps1
 $env:DATABASE_URL = "sqlite:///./baykus.db"
 python scripts\import_bizimhesap_hesaplar.py
-# dry-run:
-python scripts\import_bizimhesap_hesaplar.py --dry-run
 ```
 
 ### Faydalı bayraklar
@@ -251,30 +272,24 @@ python scripts\import_bizimhesap_hesaplar.py --dry-run
 | `--hesap-dir DIR` | Kaynak klasör (varsayılan `../../tmp/bizimhesap/hesaplarim`) |
 | `--dry-run` | Sadece parse / sayım |
 | `--skip-backup` | SQLite yedeğini atla |
-| `--keep-demo` | Seed `Ziraat İşletme` / `Garanti Ticari` / demo hareketleri silme |
+| `--keep-demo` | Seed bankaları / demo hareketleri silme |
 
 ### Ne yapar?
 
 1. `baykus.db` → `apps/api/backups/baykus_pre_bh_hesaplar_*.db`
-2. Varsayılan: demo kasa/banka siler; expense/loan FK’lerini null’lar
-3. Önceki `BH_IMPORT:` etiketli cash/bank hareketlerini siler (**idempotent**)
-4. `TL Kasa` + banka/ortak hesapları upsert (`notes` içinde `BH_IMPORT:{key}`)
-5. Hareketleri yazar; `opening_balance=0`
+2. Varsayılan: tüm kasa/banka hareketlerini + banka hesaplarını siler; expense/loan FK null
+3. `TL Kasa` + banka/POS/KK/ortak upsert (`notes` içinde `BH_IMPORT:BH-ACC:{GUID}`)
+4. Hareketleri yazar; `opening_balance=0`; canlı bakiye = hareket toplamı
+5. `manifest.json` bakiyeleri ile reconcile (±0,01)
 
-### Beklenen smoke (kutu koşusu)
+### Canlı yeniden scrape (box)
 
-| Metrik | Değer |
-|--------|--------|
-| Kasa | 1 (`TL Kasa`) |
-| Banka | 7 |
-| Şirket Ortağı | 2 (Engin, Nevin) |
-| `cash_movements` | 287 |
-| `bank_movements` | 949 |
+Oturum çerezi gerekir (`uygulama.bizimhesap.com`). Hesap listesi `/web/ngn/acc/ngnaccounts`; hareketler `GetCashTrx`. Çıktıyı `tmp/bizimhesap/hesaplarim/` altına yazıp script’i yeniden çalıştırın.
 
 ### OOS / boşluklar
 
-- **FON HESABI**: virman açıklamalarında geçiyor; ayrı hesap satırı yok → oluşturulmadı.
-- Canlı panel scrape bu pakette dönem sonu **25.08.2026**; daha yeni hareketler için BH’den yeni Kasa Raporu export’u alıp aynı klasöre koyup script’i yeniden çalıştırın.
+- **Banka EUR Hesabı**: B2B `/cashiers` listesinde; UI’da gizli, 0 hareket.
+- Eski kısmi paket (01.07.2025–25.08.2026 Kasa Raporu) bakiyeleri bozuyordu — `hesaplarim_old_partial/` arşivinde.
 
 ## 5) Güvenlik
 
@@ -293,5 +308,6 @@ python scripts\import_bizimhesap_hesaplar.py --dry-run
 | Cari bakiyeler kayıp / çift | Yeniden çalıştırın (BH_IMPORT hareketleri silinip yeniden yazılır); `--keep-demo` ile demo karışmasın |
 | PDF’de satır kaçtı | `--dry-run` çıktısındaki `parse_unmatched_total` / `pdfs_continuity_warn`; best-effort — master list yine %100 yazılır |
 | Kasa/banka demo kaldı | `--keep-demo` kullanmayın; script seed Ziraat/Garanti Ticari + demo hareketleri siler |
+| Canlı bakiye ≠ Baykuş | `manifest.json` reconcile; GetCashTrx paketini yenileyin |
 | `unmatched_bank_moves` > 0 | `banka_hareketleri` Hesap sütunu `banka_hesaplari` ile `Banka Adı - Hesap Adı` eşleşmeli |
 | openpyxl yok | `pip install openpyxl` (apps/api venv) |

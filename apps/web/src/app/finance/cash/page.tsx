@@ -135,6 +135,16 @@ export default function CashPage() {
         >
           Bugün
         </button>
+        <button
+          type="button"
+          className="bk-btn bk-btn-ghost text-xs"
+          onClick={() => {
+            setFromDate("2020-01-01");
+            setToDate(todayStr());
+          }}
+        >
+          Tüm geçmiş
+        </button>
         {main && (
           <div className="ml-auto rounded border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs">
             <span className="text-emerald-800">{main.name} · Açılış </span>

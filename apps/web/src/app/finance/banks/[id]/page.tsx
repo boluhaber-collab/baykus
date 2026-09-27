@@ -11,6 +11,14 @@ import {
   formatMoney,
 } from "@/lib/api";
 
+function displayNote(note: string | null | undefined): string {
+  if (!note) return "—";
+  // BH_IMPORT:{id} | Hareket=... | Cari=... | description | Kaynak=...
+  const parts = note.split(" | ").filter(Boolean);
+  const rest = parts.filter((p) => !p.startsWith("BH_IMPORT:") && !p.startsWith("Kaynak="));
+  return rest.join(" · ") || note;
+}
+
 const BANK_TYPES = [
   { value: "deposit", label: "Yatırma / Havale giriş" },
   { value: "withdrawal", label: "Çekim" },
@@ -332,7 +340,7 @@ export default function BankDetailPage() {
                     {BANK_TYPE_LABELS[m.movement_type] || m.movement_type}
                   </td>
                   <td className="px-4 py-2.5 text-slate-500 max-w-xs truncate">
-                    {m.note || "—"}
+                    {displayNote(m.note)}
                     {m.customer_name ? ` · ${m.customer_name}` : ""}
                   </td>
                   <td

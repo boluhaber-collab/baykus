@@ -28,6 +28,7 @@ Wipe / upsert policy (see docs/BIZIMHESAP_IMPORT.md §6):
 from __future__ import annotations
 
 import argparse
+import html
 import hashlib
 import os
 import re
@@ -244,6 +245,7 @@ def load_moves(xlsx: Path, *, kind: str) -> list[dict[str, Any]]:
     i_aid = col("Aktarım ID", "Aktarim ID", "Transfer ID")
     i_cat = col("Ödeme Türü", "Odeme Turu", "Category")
     i_src = col("Kaynak", "Source")
+    i_must = col("Müşteri", "Musteri", "Counterparty")
 
     out: list[dict[str, Any]] = []
     for n, r in enumerate(rows[1:], start=1):
@@ -258,14 +260,15 @@ def load_moves(xlsx: Path, *, kind: str) -> list[dict[str, Any]]:
             v = r[i]
             return default if v is None else v
 
-        islem = str(cell(i_islem, "")).strip()
-        acik = str(cell(i_acik, "")).strip()
+        islem = html.unescape(str(cell(i_islem, "")).strip())
+        acik = html.unescape(str(cell(i_acik, "")).strip())
         giris = money(cell(i_giris, 0))
         cikis = money(cell(i_cikis, 0))
         aid = str(cell(i_aid, "")).strip() or None
         if not aid:
             aid = f"BH-{kind.upper()}-{n:05d}-{slug_key(str(d), islem, acik, str(giris), str(cikis))}"
-        hesap = str(cell(i_hesap, "")).strip() or None if kind == "bank" else None
+        hesap = html.unescape(str(cell(i_hesap, "")).strip()) or None if kind == "bank" else None
+        muster = html.unescape(str(cell(i_must, "")).strip()) or None if i_must is not None else None
         out.append(
             {
                 "date": d,
@@ -277,47 +280,47 @@ def load_moves(xlsx: Path, *, kind: str) -> list[dict[str, Any]]:
                 "aktarim_id": aid,
                 "category": str(cell(i_cat, "")).strip() or None,
                 "source": str(cell(i_src, "")).strip() or None,
+                "counterparty": muster,
             }
         )
     return out
 
 
 def map_cash_type(islem: str, aciklama: str, giris: Decimal, cikis: Decimal) -> tuple[str, Decimal]:
-    low = f"{islem} {aciklama}".lower()
     amount = giris if giris > 0 else cikis
     if amount <= 0:
         amount = max(giris, cikis)
     islem_l = islem.lower()
-    if "tahsilat" in islem_l:
+    acik_l = (aciklama or "").lower()
+    if "tahsilat" in islem_l or "borç fiş" in islem_l or "borc fis" in islem_l:
         return "tahsilat", giris or amount
     if "ödeme" in islem_l or "odeme" in islem_l:
-        # gider vs odeme
-        if "gider" in low or "masraf" in low:
+        if "gider" in acik_l or "masraf" in acik_l:
             return "gider", cikis or amount
         return "odeme", cikis or amount
     if "para giriş" in islem_l or "para giris" in islem_l:
         return "transfer_in", giris or amount
     if "para çıkış" in islem_l or "para cikis" in islem_l:
         return "transfer_out", cikis or amount
-    if "alacak" in islem_l:
+    if "alacak fiş" in islem_l or "alacak fis" in islem_l:
         return "odeme", cikis or amount
-    if "borç" in islem_l or "borc" in islem_l:
-        return "tahsilat", giris or amount
-    # fallback by amounts
     if giris > 0:
         return "tahsilat", giris
     return "odeme", cikis or amount
 
 
 def map_bank_type(islem: str, aciklama: str, giris: Decimal, cikis: Decimal) -> tuple[str, Decimal]:
-    low = f"{islem} {aciklama}".lower()
+    """Map BH Tipi to BankMovement. Prefer işlem label over açıklama keywords.
+
+    Important: descriptions like "AÇILIŞ MASRAFLARI" on Para Girişi must NOT become fee.
+    """
     amount = giris if giris > 0 else cikis
     if amount <= 0:
         amount = max(giris, cikis)
     islem_l = islem.lower()
-    if "masraf" in low or "komisyon" in low or "fee" in low:
-        return "fee", cikis or amount
-    if "tahsilat" in islem_l:
+    acik_l = (aciklama or "").lower()
+    # Explicit movement types first
+    if "tahsilat" in islem_l or "borç fiş" in islem_l or "borc fis" in islem_l:
         return "deposit", giris or amount
     if "ödeme" in islem_l or "odeme" in islem_l:
         return "withdrawal", cikis or amount
@@ -325,17 +328,30 @@ def map_bank_type(islem: str, aciklama: str, giris: Decimal, cikis: Decimal) -> 
         return "transfer_in", giris or amount
     if "para çıkış" in islem_l or "para cikis" in islem_l:
         return "transfer_out", cikis or amount
-    if "alacak" in islem_l:
+    if "alacak fiş" in islem_l or "alacak fis" in islem_l:
         return "withdrawal", cikis or amount
-    if "borç" in islem_l or "borc" in islem_l:
-        return "deposit", giris or amount
+    # Fee only when işlem itself is a fee/masraf OR outflow with fee keywords
+    if islem_l in ("masraf", "komisyon", "fee") or (
+        cikis > 0 and giris <= 0 and any(k in acik_l for k in ("masraf", "komisyon", "fee"))
+    ):
+        return "fee", cikis or amount
     if giris > 0:
         return "deposit", giris
     return "withdrawal", cikis or amount
 
 
-def movement_note(aid: str, aciklama: str, source: str | None = None) -> str:
+def movement_note(
+    aid: str,
+    aciklama: str,
+    source: str | None = None,
+    counterparty: str | None = None,
+    islem: str | None = None,
+) -> str:
     parts = [f"{BH_NOTE_PREFIX}{aid}"]
+    if islem:
+        parts.append(f"Hareket={islem}")
+    if counterparty:
+        parts.append(f"Cari={counterparty[:120]}")
     if aciklama:
         parts.append(aciklama[:400])
     if source:
@@ -410,17 +426,14 @@ def clear_demo_and_bh(db, *, clear_demo: bool) -> dict[str, int]:
             db.delete(m)
         db.flush()
 
-        # Delete demo / non-BH bank accounts
+        # Delete ALL bank accounts (demo + prior BH) so renamed live accounts do not duplicate
         for acc in db.query(BankAccount).all():
-            notes = acc.notes or ""
-            is_bh = notes.startswith(BH_NOTE_PREFIX) or f"| {BH_NOTE_PREFIX}" in notes or BH_NOTE_PREFIX in notes
             is_demo = (acc.name in DEMO_BANK_NAMES) or ((acc.iban or "") in DEMO_BANK_IBANS)
-            if is_demo or not is_bh:
-                db.delete(acc)
-                if is_demo:
-                    stats["deleted_demo_banks"] += 1
-                else:
-                    stats["deleted_orphan_banks"] += 1
+            db.delete(acc)
+            if is_demo:
+                stats["deleted_demo_banks"] += 1
+            else:
+                stats["deleted_orphan_banks"] += 1
         db.flush()
 
         # Reset cash registers to a single TL Kasa shell (re-upserted later)
@@ -558,9 +571,10 @@ def run_import(hesap_dir: Path, *, clear_demo: bool, dry_run: bool) -> dict[str,
         "unmatched_bank_moves": 0,
         "skipped_zero_amount": 0,
         "oos_gaps": [
-            "FON HESABI appears in transfer descriptions but has no stand-alone account row",
-            "Import pack period ends ~25.08.2026 (BH Kasa Raporu exports); live panel refresh not included",
+            "Banka EUR Hesabı exists in B2B /cashiers but has 0 movements and is hidden on Hesaplarım UI",
+            "User screenshot TL Kasa ~2.155.087 was stale vs live panel 402,06 (2026-09-27); live used as truth",
         ],
+        "reconcile_targets": {},
     }
     for a in accounts:
         t = a["account_type"]
@@ -610,7 +624,7 @@ def run_import(hesap_dir: Path, *, clear_demo: bool, dry_run: bool) -> dict[str,
                     amount=amount,
                     movement_date=m["date"],
                     category=m.get("category"),
-                    note=movement_note(m["aktarim_id"], m["aciklama"], m.get("source")),
+                    note=movement_note(m["aktarim_id"], m["aciklama"], m.get("source"), m.get("counterparty"), m.get("islem")),
                 )
             )
             stats["cash_movements_written"] += 1
@@ -639,7 +653,7 @@ def run_import(hesap_dir: Path, *, clear_demo: bool, dry_run: bool) -> dict[str,
                     amount=amount,
                     movement_date=m["date"],
                     category=m.get("category"),
-                    note=movement_note(m["aktarim_id"], m["aciklama"], m.get("source")),
+                    note=movement_note(m["aktarim_id"], m["aciklama"], m.get("source"), m.get("counterparty"), m.get("islem")),
                 )
             )
             stats["bank_movements_written"] += 1
@@ -698,6 +712,60 @@ def run_import(hesap_dir: Path, *, clear_demo: bool, dry_run: bool) -> dict[str,
             bal = money(a.opening_balance) + money(row)
             samples.append(f"{a.account_type} {a.institution or ''} / {a.name}: bal={bal}")
         stats["sample_balances"] = samples
+
+        # Reconcile vs live targets from manifest.json (if present)
+        import json
+        man_path = hesap_dir / "manifest.json"
+        targets = {}
+        if man_path.is_file():
+            man = json.loads(man_path.read_text(encoding="utf-8"))
+            for a in man.get("accounts") or []:
+                key = a.get("name") or ""
+                if a.get("balance") is not None:
+                    targets[key] = money(a["balance"])
+        recon = []
+        # map Baykuş names back to BH titles
+        name_to_bh = {
+            "TL Kasa": "TL Kasa",
+            "Engin KARAGÖZ": "ENGİN",
+            "Nevin KARAGÖZ": "NEVİN",
+            "AKBANK": "AKBANK",
+            "Garanti Bankası": "Garanti Bankası",
+            "QNB KREDİ HESABI": "QNB KREDİ HESABI",
+            "VAKIFBANK": "VAKIFBANK",
+            "6972": "Vafıkbank (6972)",
+            "0083": "Vakıfbank (0083)",
+            "BAYKUŞ.COM": "BAYKUŞ.COM",
+            "POS Hesabı": "POS Hesabı",
+            "FON HESABI": "FON HESABI",
+            "Banka TL Hesabı": "Banka TL Hesabı",
+        }
+        for line in samples:
+            # "KASA TL Kasa: bal=..." or "Banka Akbank / AKBANK: bal=..."
+            try:
+                left, bal_s = line.rsplit("bal=", 1)
+                bal = money(bal_s)
+            except ValueError:
+                continue
+            bh_name = None
+            if left.startswith("KASA "):
+                bh_name = left[5:].rstrip(": ").strip()
+            else:
+                # type inst / name
+                if " / " in left:
+                    nm = left.split(" / ", 1)[1].rstrip(": ").strip()
+                else:
+                    nm = left.split(" ", 1)[-1].rstrip(": ").strip()
+                bh_name = name_to_bh.get(nm, nm)
+            tgt = targets.get(bh_name)
+            if tgt is None:
+                recon.append(f"{bh_name}: baykus={bal} target=MISSING")
+            else:
+                diff = (bal - tgt).quantize(Decimal("0.01"))
+                ok = abs(diff) <= Decimal("0.01")
+                recon.append(f"{bh_name}: baykus={bal} bh={tgt} diff={diff} {'OK' if ok else 'FAIL'}")
+        stats["reconcile"] = recon
+        stats["reconcile_ok"] = all(x.endswith("OK") for x in recon if "target=MISSING" not in x)
     finally:
         db.close()
 
@@ -775,6 +843,10 @@ def main(argv: list[str] | None = None) -> int:
             safe_print("    oos_gaps:")
             for g in v:
                 safe_print(f"      - {g}")
+        elif k == "reconcile":
+            safe_print("    reconcile:")
+            for s in v:
+                safe_print(f"      {s}")
         else:
             safe_print(f"    {k}: {v}")
 
