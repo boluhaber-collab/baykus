@@ -512,3 +512,24 @@ Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPA
 - BizimHesap live · Selenium WhatsApp Desktop
 - `/stock/transfer` ayrı rota yok (warehouses transfer modalı + CTA yeterli)
 - Saf ayar formları / new form sayfaları (zaten yeterli; hub-like değil)
+
+## Batch 24 — Expandable hareket detayı (müşteri/tedarikçi) (2026-09-27)
+
+BizimHesap-style satır genişletme (+/−) — canlı BizimHesap sync değil; yalnızca UX parity.
+
+| Özellik | Web | Durum |
+|--------|-----|-------|
+| ExpandableMovementTable | `apps/web/src/components/ExpandableMovementTable.tsx` — yeşil `+` / gri `−` · bordered panel · Ürün/Hizmet·Fiyat·Tutar · açıklama · CTA | done |
+| Müşteri kartı ekstre | `/customers/[id]` Hareketler — satır +/− · `order_id` varsa `GET /api/orders/{id}` kalemleri · «Satış/Sipariş ekranına git» | done |
+| Müşteri son siparişler | Aynı kart Siparişler sekmesi — expandable satış satırları | done |
+| Tedarikçi alışlar | `/suppliers/[id]` «Önceki ürün/hizmet alışları» — +/− · `GET /api/purchases/{id}` · «Alış ekranına git» | done |
+| Tedarikçi ekstre | Hesap ekstresi hareketleri expandable · purchase bağlıysa kalem + CTA | done |
+| Parity shots | `docs/parity-shots/expand-row-*.png` | done |
+| API | Mevcut `GET /api/orders/{id}` + `GET /api/purchases/{id}` (lazy expand); Alembic yok | done |
+| Smoke | `tsc --noEmit` · health/login if up | done |
+
+### Kalan (dürüst)
+- Ayrı «İade» hareket tablosu / iade rotası yok → CTA «İade ekranına git» henüz bağlanamaz
+- Hareketlerde `created_by` kullanıcı adı şemada yok → panelde kullanıcı satırı çoğu kayıtta boş
+- Ödeme satırında Yazdır/Resim/Değiştir/Sil aksiyon şeridi (BizimHesap) bilinçli olarak eklenmedi — sadece detay + mevcut rota CTA
+

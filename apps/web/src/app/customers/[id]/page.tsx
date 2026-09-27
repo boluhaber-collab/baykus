@@ -17,6 +17,10 @@ import {
 import CustomerTahsilatModal from "@/components/CustomerTahsilatModal";
 import CustomerDevirModal from "@/components/CustomerDevirModal";
 import StatusFooter from "@/components/StatusFooter";
+import ExpandableMovementTable, {
+  linesFromOrder,
+} from "@/components/ExpandableMovementTable";
+import type { CariMovement, CustomerOrderBrief, OrderDetail } from "@/lib/api";
 
 type TabKey = "bilgi" | "hareketler" | "siparisler" | "notlar" | "whatsapp";
 
@@ -649,65 +653,103 @@ export default function CustomerDetailPage() {
                 </span>
               )}
             </div>
-            <div className="bk-table-wrap">
-              <table className="bk-table">
-                <thead>
-                  <tr>
-                    <th>Tarih</th>
-                    <th>Tip</th>
-                    <th>Not / Sipariş</th>
-                    <th className="text-right">Borç</th>
-                    <th className="text-right">Alacak</th>
-                    <th className="text-right">Bakiye</th>
+            <ExpandableMovementTable<CariMovement>
+              rows={statement?.movements || []}
+              emptyText="Hareket yok"
+              getNote={(m) => m.note}
+              getCta={(m) =>
+                m.order_id
+                  ? {
+                      href: `/orders/${m.order_id}`,
+                      label:
+                        m.movement_type === "sale"
+                          ? "Satış ekranına git"
+                          : "Sipariş ekranına git",
+                    }
+                  : null
+              }
+              loadDetail={async (m) => {
+                if (!m.order_id) {
+                  return { lines: [], note: m.note || null };
+                }
+                const order = await apiFetch<OrderDetail>(`/api/orders/${m.order_id}`);
+                const detail = linesFromOrder(order);
+                return {
+                  lines: detail.lines,
+                  note: m.note || detail.note || null,
+                };
+              }}
+              leadingRows={
+                statement ? (
+                  <tr className="border-t border-slate-100 bg-slate-50/50">
+                    <td className="bk-expand-td" />
+                    <td className="text-slate-500" colSpan={5}>
+                      Açılış bakiyesi
+                    </td>
+                    <td className="text-right tabular-nums font-medium">
+                      {formatMoney(Number(statement.opening_balance))}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {statement && (
-                    <tr className="border-t border-slate-100 bg-slate-50/50">
-                      <td className="px-4 py-2 text-slate-500" colSpan={5}>
-                        Açılış bakiyesi
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums font-medium">
-                        {formatMoney(Number(statement.opening_balance))}
-                      </td>
-                    </tr>
-                  )}
-                  {(statement?.movements || []).map((m) => (
-                    <tr key={m.id} className="border-t border-slate-100">
-                      <td className="px-4 py-2 whitespace-nowrap">{m.movement_date}</td>
-                      <td className="px-4 py-2">{CARI_TYPE_LABELS[m.movement_type] || m.movement_type}</td>
-                      <td className="px-4 py-2 text-slate-600">
-                        {m.note || "—"}
-                        {m.order_number && (
-                          <>
-                            {" "}
-                            <Link href={`/orders/${m.order_id}`} className="text-baykus-600 hover:underline">
-                              {m.order_number}
-                            </Link>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums">
-                        {Number(m.debit) > 0 ? formatMoney(Number(m.debit)) : "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums">
-                        {Number(m.credit) > 0 ? formatMoney(Number(m.credit)) : "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums font-medium">
-                        {m.running_balance != null ? formatMoney(Number(m.running_balance)) : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                  {(!statement || statement.movements.length === 0) && (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                        Hareket yok
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                ) : null
+              }
+              columns={[
+                {
+                  key: "date",
+                  header: "Tarih",
+                  render: (m) => <span className="whitespace-nowrap">{m.movement_date}</span>,
+                },
+                {
+                  key: "type",
+                  header: "Tip",
+                  render: (m) => CARI_TYPE_LABELS[m.movement_type] || m.movement_type,
+                },
+                {
+                  key: "note",
+                  header: "Not / Sipariş",
+                  className: "text-slate-600",
+                  render: (m) => (
+                    <>
+                      {m.note || "—"}
+                      {m.order_number && (
+                        <>
+                          {" "}
+                          <Link
+                            href={`/orders/${m.order_id}`}
+                            className="text-baykus-600 hover:underline"
+                          >
+                            {m.order_number}
+                          </Link>
+                        </>
+                      )}
+                    </>
+                  ),
+                },
+                {
+                  key: "debit",
+                  header: "Borç",
+                  align: "right",
+                  render: (m) =>
+                    Number(m.debit) > 0 ? formatMoney(Number(m.debit)) : "—",
+                },
+                {
+                  key: "credit",
+                  header: "Alacak",
+                  align: "right",
+                  render: (m) =>
+                    Number(m.credit) > 0 ? formatMoney(Number(m.credit)) : "—",
+                },
+                {
+                  key: "bal",
+                  header: "Bakiye",
+                  align: "right",
+                  className: "font-medium",
+                  render: (m) =>
+                    m.running_balance != null
+                      ? formatMoney(Number(m.running_balance))
+                      : "—",
+                },
+              ]}
+            />
           </div>
         </div>
       )}
@@ -716,31 +758,53 @@ export default function CustomerDetailPage() {
         <div className="grid lg:grid-cols-2 gap-6">
           <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b flex justify-between">
-              <h2 className="font-semibold">Son siparişler</h2>
+              <h2 className="font-semibold">Son siparişler / satışlar</h2>
               <Link href={`/sales/create?type=kayitli&customer_id=${id}`} className="text-xs text-baykus-primary hover:underline">
                 + Satış
               </Link>
             </div>
-            <ul className="divide-y text-sm">
-              {(customer.recent_orders || []).map((o) => (
-                <li key={o.id} className="px-5 py-3 flex justify-between gap-3">
-                  <div>
+            <ExpandableMovementTable<CustomerOrderBrief>
+              rows={customer.recent_orders || []}
+              emptyText="Sipariş yok"
+              getCta={(o) => ({ href: `/orders/${o.id}`, label: "Satış ekranına git" })}
+              loadDetail={async (o) => {
+                const order = await apiFetch<OrderDetail>(`/api/orders/${o.id}`);
+                return linesFromOrder(order);
+              }}
+              columns={[
+                {
+                  key: "date",
+                  header: "Tarih",
+                  render: (o) => (
+                    <span className="whitespace-nowrap">{o.created_at?.slice(0, 10) || "—"}</span>
+                  ),
+                },
+                {
+                  key: "no",
+                  header: "No",
+                  render: (o) => (
                     <Link href={`/orders/${o.id}`} className="font-medium text-baykus-700 hover:underline">
                       {o.order_number}
                     </Link>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {o.created_at?.slice(0, 10)} · kalan {formatMoney(Number(o.remaining_amount))}
-                    </div>
-                  </div>
-                  <span className={`rounded-full px-2 py-0.5 text-xs h-fit ${statusBadgeClass(o.status)}`}>
-                    {o.status}
-                  </span>
-                </li>
-              ))}
-              {(customer.recent_orders || []).length === 0 && (
-                <li className="px-5 py-6 text-center text-slate-400">Sipariş yok</li>
-              )}
-            </ul>
+                  ),
+                },
+                {
+                  key: "status",
+                  header: "Durum",
+                  render: (o) => (
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(o.status)}`}>
+                      {o.status}
+                    </span>
+                  ),
+                },
+                {
+                  key: "tutar",
+                  header: "Tutar",
+                  align: "right",
+                  render: (o) => formatMoney(Number(o.total_amount)),
+                },
+              ]}
+            />
           </div>
           <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b flex justify-between">

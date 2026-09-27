@@ -12,6 +12,14 @@ import {
   formatMoney,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import ExpandableMovementTable, {
+  linesFromPurchase,
+} from "@/components/ExpandableMovementTable";
+import type {
+  PurchaseDetail,
+  SupplierMovement,
+  SupplierPurchaseBrief,
+} from "@/lib/api";
 
 export default function SupplierDetailPage() {
   const params = useParams();
@@ -447,28 +455,55 @@ export default function SupplierDetailPage() {
           </button>
         </form>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-semibold text-slate-800 mb-3">Son satın almalar</h2>
-          <ul className="space-y-2 text-sm">
-            {(supplier.recent_purchases || []).map((p) => (
-              <li key={p.id} className="flex justify-between gap-2 border-b border-slate-100 pb-2">
-                <Link href={`/purchases/${p.id}`} className="text-baykus-700 hover:underline">
-                  {p.purchase_number}
-                </Link>
-                <span className="text-slate-500">{p.status}</span>
-                <span className="tabular-nums font-medium">{formatMoney(Number(p.total_amount))}</span>
-              </li>
-            ))}
-            {(supplier.recent_purchases || []).length === 0 && (
-              <li className="text-slate-400">Kayıt yok</li>
-            )}
-          </ul>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100">
+            <h2 className="font-semibold text-slate-800">Önceki ürün/hizmet alışları</h2>
+          </div>
+          <ExpandableMovementTable<SupplierPurchaseBrief>
+            rows={supplier.recent_purchases || []}
+            emptyText="Kayıt yok"
+            getCta={(p) => ({ href: `/purchases/${p.id}`, label: "Alış ekranına git" })}
+            loadDetail={async (p) => {
+              const purchase = await apiFetch<PurchaseDetail>(`/api/purchases/${p.id}`);
+              return linesFromPurchase(purchase);
+            }}
+            columns={[
+              {
+                key: "date",
+                header: "Tarih",
+                render: (p) => (
+                  <span className="whitespace-nowrap">{p.purchase_date}</span>
+                ),
+              },
+              {
+                key: "no",
+                header: "No",
+                render: (p) => (
+                  <Link href={`/purchases/${p.id}`} className="text-baykus-700 hover:underline">
+                    {p.purchase_number}
+                  </Link>
+                ),
+              },
+              {
+                key: "status",
+                header: "Durum",
+                className: "text-red-700",
+                render: (p) => p.status,
+              },
+              {
+                key: "tutar",
+                header: "Tutar",
+                align: "right",
+                render: (p) => formatMoney(Number(p.total_amount)),
+              },
+            ]}
+          />
         </div>
       </div>
 
       <div id="supplier-ekstre" className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
-          <h2 className="font-semibold text-slate-800">Hesap Ekstresi</h2>
+          <h2 className="font-semibold text-slate-800">Hesap Ekstresi / Hareketler</h2>
           {statement && (
             <div className="text-xs text-slate-500">
               Açılış {formatMoney(Number(statement.opening_balance))} · Kapanış{" "}
@@ -478,55 +513,78 @@ export default function SupplierDetailPage() {
             </div>
           )}
         </div>
-        <div className="bk-table-wrap">
-        <table className="bk-table">
-          <thead>
-            <tr>
-              <th>Tarih</th>
-              <th>Tip</th>
-              <th>Belge</th>
-              <th>Not</th>
-              <th className="text-right">Borç</th>
-              <th className="text-right">Alacak</th>
-              <th className="text-right">Bakiye</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(statement?.movements || []).map((m) => (
-              <tr key={m.id} className="border-t border-slate-100">
-                <td className="px-4 py-2 whitespace-nowrap">{m.movement_date}</td>
-                <td className="px-4 py-2">{SUPPLIER_MOVEMENT_LABELS[m.movement_type] || m.movement_type}</td>
-                <td className="px-4 py-2">
-                  {m.purchase_id ? (
-                    <Link href={`/purchases/${m.purchase_id}`} className="text-baykus-600 hover:underline">
-                      {m.purchase_number || `#${m.purchase_id}`}
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="px-4 py-2 text-slate-500">{m.note || "—"}</td>
-                <td className="px-4 py-2 text-right tabular-nums">
-                  {Number(m.debit) > 0 ? formatMoney(Number(m.debit)) : "—"}
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums">
-                  {Number(m.credit) > 0 ? formatMoney(Number(m.credit)) : "—"}
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums font-medium">
-                  {m.running_balance != null ? formatMoney(Number(m.running_balance)) : "—"}
-                </td>
-              </tr>
-            ))}
-            {(statement?.movements || []).length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-center text-baykus-muted py-6">
-                  Hareket yok
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        </div>
+        <ExpandableMovementTable<SupplierMovement>
+          rows={statement?.movements || []}
+          emptyText="Hareket yok"
+          getNote={(m) => m.note}
+          getCta={(m) => {
+            if (m.purchase_id) {
+              return { href: `/purchases/${m.purchase_id}`, label: "Alış ekranına git" };
+            }
+            return null;
+          }}
+          loadDetail={async (m) => {
+            if (!m.purchase_id) {
+              return { lines: [], note: m.note || null };
+            }
+            const purchase = await apiFetch<PurchaseDetail>(`/api/purchases/${m.purchase_id}`);
+            const detail = linesFromPurchase(purchase);
+            return {
+              lines: detail.lines,
+              note: m.note || detail.note || null,
+            };
+          }}
+          columns={[
+            {
+              key: "date",
+              header: "Tarih",
+              render: (m) => <span className="whitespace-nowrap">{m.movement_date}</span>,
+            },
+            {
+              key: "type",
+              header: "Tip",
+              render: (m) => SUPPLIER_MOVEMENT_LABELS[m.movement_type] || m.movement_type,
+            },
+            {
+              key: "doc",
+              header: "Belge",
+              render: (m) =>
+                m.purchase_id ? (
+                  <Link href={`/purchases/${m.purchase_id}`} className="text-baykus-600 hover:underline">
+                    {m.purchase_number || `#${m.purchase_id}`}
+                  </Link>
+                ) : (
+                  "—"
+                ),
+            },
+            {
+              key: "note",
+              header: "Not",
+              className: "text-slate-500",
+              render: (m) => m.note || "—",
+            },
+            {
+              key: "debit",
+              header: "Borç",
+              align: "right",
+              render: (m) => (Number(m.debit) > 0 ? formatMoney(Number(m.debit)) : "—"),
+            },
+            {
+              key: "credit",
+              header: "Alacak",
+              align: "right",
+              render: (m) => (Number(m.credit) > 0 ? formatMoney(Number(m.credit)) : "—"),
+            },
+            {
+              key: "bal",
+              header: "Bakiye",
+              align: "right",
+              className: "font-medium",
+              render: (m) =>
+                m.running_balance != null ? formatMoney(Number(m.running_balance)) : "—",
+            },
+          ]}
+        />
       </div>
       <StatusFooter onRefresh={load} />
     </div>
