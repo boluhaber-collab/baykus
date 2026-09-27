@@ -9,7 +9,6 @@ from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models import (
     AppSetting,
-    Asset,
     BankAccount,
     BankMovement,
     Campaign,
@@ -1283,52 +1282,10 @@ def seed(db: Session) -> None:
         db.commit()
 
 
-    # ── Parity batch 3: assets, DTF, special days, campaigns ───────────────
-    if db.query(Asset).count() == 0:
-        db.add_all(
-            [
-                Asset(
-                    name="Epson SureColor DTF Yazıcı",
-                    category="Makine",
-                    purchase_date=date(2023, 3, 15),
-                    cost=Decimal("185000.00"),
-                    depreciation_method="straight_line",
-                    useful_life_months=60,
-                    note="Ana DTF üretim hattı",
-                    active=True,
-                ),
-                Asset(
-                    name="Isı Presi 40x60",
-                    category="Makine",
-                    purchase_date=date(2022, 8, 1),
-                    cost=Decimal("28000.00"),
-                    depreciation_method="straight_line",
-                    useful_life_months=48,
-                    note="Transfer presi",
-                    active=True,
-                ),
-                Asset(
-                    name="Dell Ofis Bilgisayarı",
-                    category="Bilişim",
-                    purchase_date=date(2024, 1, 10),
-                    cost=Decimal("22000.00"),
-                    depreciation_method="straight_line",
-                    useful_life_months=36,
-                    active=True,
-                ),
-                Asset(
-                    name="Raf Sistemi Depo",
-                    category="Demirbaş",
-                    purchase_date=date(2021, 6, 20),
-                    cost=Decimal("8500.00"),
-                    depreciation_method="none",
-                    useful_life_months=None,
-                    note="Amortisman uygulanmıyor",
-                    active=True,
-                ),
-            ]
-        )
-        db.commit()
+    # ── Parity batch 3: DTF, special days, campaigns ───────────────────────
+    # Demirbaş seed intentionally omitted — use BizimHesap import:
+    #   python -m app.scripts.import_bizimhesap_demirbas
+    # (see docs/BIZIMHESAP_IMPORT.md). Demo Epson/Dell/Raf rows removed.
 
     if db.query(DtfScenario).count() == 0:
         film = Decimal("0.0625")

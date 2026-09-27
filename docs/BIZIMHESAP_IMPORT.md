@@ -1,6 +1,6 @@
 # BizimHesap → Baykuş içe aktarma
 
-Bu rehber **ürün / depo / stok** API importunu, **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)** ve **Hesaplarım (kasa / banka / ortak)** aşamalarını açıklar.
+Bu rehber **ürün / depo / stok** API importunu, **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)**, **Hesaplarım (kasa / banka / ortak)** ve **Demirbaşlar** aşamalarını açıklar.
 
 ## 1) Token alma
 
@@ -291,12 +291,94 @@ Oturum çerezi gerekir (`uygulama.bizimhesap.com`). Hesap listesi `/web/ngn/acc/
 - **Banka EUR Hesabı**: B2B `/cashiers` listesinde; UI’da gizli, 0 hareket.
 - Eski kısmi paket (01.07.2025–25.08.2026 Kasa Raporu) bakiyeleri bozuyordu — `hesaplarim_old_partial/` arşivinde.
 
-## 5) Güvenlik
+
+## 5) Demirbaşlar (sabit kıymet)
+
+BizimHesap B2B API’sinde demirbaş **yok**. Kaynak: panel **Nakit Yönetimi → Demirbaşlar**:
+
+| Endpoint | İçerik |
+|----------|--------|
+| `GET /web/ngn/org/ngnassets` | Demirbaş listesi (isim + GUID linkleri) |
+| `GET /web/ngn/org/ngnasset?rc=1&guid={GUID}` | Detay: ad, alış tutarı, alış tarihi, seri no |
+
+### Kaynak dosyalar
+
+`tmp/bizimhesap/demirbas/` (gitignore — **xlsx/json/html commit etmeyin**):
+
+| Dosya | İçerik |
+|-------|--------|
+| `assets.json` | Normalize demirbaş listesi + meta |
+| `demirbaslar.xlsx` | Excel özet (Ad / Kategori / Seri / Tarih / Tutar / GUID) |
+| `manifest.json` | Kaynak / scrape zamanı / sayım |
+| `assets_raw.json` / `asset_*.html` | Ham panel (opsiyonel) |
+
+### Linux / box
+
+```bash
+cd /path/to/baykus-web
+./scripts/import-bizimhesap-demirbas.sh
+# canlı scrape (panel login; box-secrets veya env USER/PASSWORD):
+./scripts/import-bizimhesap-demirbas.sh --live
+# veya:
+cd apps/api && source .venv/bin/activate
+export DATABASE_URL=sqlite:///./baykus.db
+python scripts/import_bizimhesap_demirbas.py --from-cache ../../tmp/bizimhesap/demirbas
+python -m app.scripts.import_bizimhesap_demirbas
+```
+
+### Windows PC
+
+1. `tmp\bizimhesap\demirbas\assets.json` (+ isteğe xlsx/manifest) kopyalayın.
+2. Çalıştırın:
+
+```powershell
+cd C:\Users\engin\Desktop\baykus\apps\api
+.\.venv\Scripts\Activate.ps1
+$env:DATABASE_URL = "sqlite:///./baykus.db"
+python scripts\import_bizimhesap_demirbas.py
+# canlı:
+python scripts\import_bizimhesap_demirbas.py --live
+```
+
+### Faydalı bayraklar
+
+| Bayrak | Anlam |
+|--------|--------|
+| `--from-cache DIR` | `assets.json` klasörü (varsayılan `../../tmp/bizimhesap/demirbas`) |
+| `--live` | Panel scrape + cache yaz + import |
+| `--dry-run` | Sadece parse / sayım |
+| `--skip-backup` | SQLite yedeğini atla |
+| `--keep-existing-assets` | Tüm assets silme; yalnız `BH_IMPORT:` / `BH_FROM_STOCK:` satırlarını yenile |
+
+### Ne yapar?
+
+1. `baykus.db` → `apps/api/backups/baykus_pre_bh_demirbas_*.db`
+2. Varsayılan: **tüm** `assets` satırlarını siler (seed demo Epson/Dell/Raf dahil)
+3. BH demirbaşlarını `assets` tablosuna yazar (`note=BH_IMPORT:BH-ASSET:{guid}`)
+4. Stoktaki makine / yazıcı / ünite ürünlerini tespit eder (`app.integrations.demirbas_classify`):
+   - Bilinen BH inventory orphan id’leri (TRANSFER BASKI MAKİNASI, ŞAPKA BASKI ÜNİTESİ, EPSON A3 FOTO YAZICI, ÇİFT KUPA BARDAK BASKI MAKİNASI, …)
+   - İsim sezgiseli: makina/makine/yazıcı/ünite/pres (malzeme/hizmet hariç)
+5. BH’de karşılığı olmayan makineleri `BH_FROM_STOCK:{sku}` notuyla demirbaşa ekler
+6. Bu ürünleri stoktan **siler** (warehouse_stocks / variants / movements; sipariş satırı FK null)
+7. Stok import (`import_bizimhesap_stock`) aynı sınıflandırıcıyla demirbaş orphan’larını **atlar** — dashboard **STOKTA VAR OLAN ÜRÜNLER** yalnız satılabilir ürünleri gösterir
+
+### Beklenen smoke (27.09.2026 scrape)
+
+| Metrik | Değer |
+|--------|------:|
+| BH demirbaş | 5 |
+| Örnek | EPSON L 18050 A3 FOTOG.YAZICISI 35.995,40 · FREESUB 40×50 transfer 33.206,00 · ŞAPKA BASKI ÜNİTESİ 2.153,15 |
+| Stoktan taşınan orphan’lar | TRANSFER BASKI MAKİNASI, ŞAPKA BASKI ÜNİTESİ, EPSON A3 FOTO YAZICI, ÇİFT KUPA… (isim eşleşmesiyle BH satırına bağlanır veya `BH_FROM_STOCK`) |
+
+UI: **Finans → Demirbaşlar** (`/finance/assets`).
+
+
+## 6) Güvenlik
 
 - Token, ham JSON dump’ları, ekstre PDF’leri, Hesaplarım xlsx ve `*.db` **commit edilmez** (`tmp/`, `*.db`, `.env` gitignore’da).
-- Commit edilenler: `scripts/import_bizimhesap_*.py`, `app/scripts/…` sarmalayıcıları, `docs/BIZIMHESAP_IMPORT.md`, `scripts/import-bizimhesap-*.sh`.
+- Commit edilenler: `scripts/import_bizimhesap_*.py`, `app/scripts/…` sarmalayıcıları, `app/integrations/demirbas_classify.py`, `docs/BIZIMHESAP_IMPORT.md`, `scripts/import-bizimhesap-*.sh`.
 
-## 6) Sorun giderme
+## 7) Sorun giderme
 
 | Belirti | Çözüm |
 |--------|--------|
@@ -311,3 +393,6 @@ Oturum çerezi gerekir (`uygulama.bizimhesap.com`). Hesap listesi `/web/ngn/acc/
 | Canlı bakiye ≠ Baykuş | `manifest.json` reconcile; GetCashTrx paketini yenileyin |
 | `unmatched_bank_moves` > 0 | `banka_hareketleri` Hesap sütunu `banka_hesaplari` ile `Banka Adı - Hesap Adı` eşleşmeli |
 | openpyxl yok | `pip install openpyxl` (apps/api venv) |
+| Demirbaş demo kaldı | `--keep-existing-assets` kullanmayın; script tüm assets siler |
+| Makineler stokta görünüyor | demirbaş import’u çalıştırın; stock import demirbaş orphan’ları atlar |
+| `--live` login fail | `BIZIMHESAP_USER`/`PASSWORD` (box-secrets); reCAPTCHA nadiren engeller — cache kullanın |

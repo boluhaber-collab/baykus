@@ -307,6 +307,7 @@ def import_all(
         "inventory_matched": 0,
         "inventory_unmatched": 0,
         "inventory_orphans_created": 0,
+        "inventory_demirbas_skipped": 0,
         "stock_movements": 0,
     }
 
@@ -467,6 +468,11 @@ def import_all(
 
             if matched is None and not rows:
                 title = (item.get("title") or "").strip() or f"Stok {bh_id[:8]}"
+                from app.integrations.demirbas_classify import is_demirbas_title
+                if is_demirbas_title(title, bh_id):
+                    stats.setdefault("inventory_demirbas_skipped", 0)
+                    stats["inventory_demirbas_skipped"] += 1
+                    continue
                 prod = product_map.get(bh_id)
                 if not prod:
                     orphan_sku = sku_product(bh_id or hashlib.sha1(title.encode()).hexdigest()[:32])
