@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export function getApiBase(): string {
   return API_URL;
@@ -1040,17 +1040,29 @@ export async function downloadPdf(path: string, filename: string): Promise<void>
     throw new Error("Yetkisiz");
   }
   if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || data.message || `PDF hatası: ${res.status}`);
+    const text = await res.text().catch(() => "");
+    let message = `PDF hatası: ${res.status}`;
+    try {
+      const data = text ? JSON.parse(text) : {};
+      if (typeof data.detail === "string") message = data.detail;
+      else if (data.message) message = data.message;
+    } catch {
+      if (text && text.length < 200) message = text;
+    }
+    throw new Error(message);
   }
   const blob = await res.blob();
+  if (!blob || blob.size === 0) {
+    throw new Error("PDF boş döndü");
+  }
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
+  a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(a.href);
+  URL.revokeObjectURL(url);
 }
 
 

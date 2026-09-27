@@ -87,6 +87,15 @@ def _supplier_out(supplier: Supplier, balance: Decimal) -> SupplierOut:
     )
 
 
+def _ascii_filename(name: str, *, fallback: str = "dosya", max_len: int = 40) -> str:
+    """Starlette encodes Content-Disposition as latin-1; keep ASCII only.
+    str.isalnum() is True for Turkish letters (Ş/İ/Ğ) which then crash headers.
+    """
+    raw = "".join(c if (c.isascii() and (c.isalnum() or c in "-_")) else "_" for c in (name or ""))
+    raw = raw.strip("_")[:max_len] or fallback
+    return raw
+
+
 def _movement_out(m: SupplierMovement, running: Decimal | None = None) -> SupplierMovementOut:
     purchase_number = None
     if m.purchase is not None:
@@ -484,7 +493,7 @@ def supplier_statement_pdf(
         party_label="Tedarikçi",
         doc_title="Tedarikçi Hesap Ekstresi",
     )
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in stmt.supplier_name)[:40]
+    safe = _ascii_filename(stmt.supplier_name, fallback=f"tedarikci_{supplier_id}")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -541,10 +550,10 @@ def supplier_voucher_pdf(
     pdf_bytes = build_supplier_voucher_pdf(
         supplier.name, tip_out, amount_out, date_out, due_out, note_out, settings
     )
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in supplier.name)[:40]
+    safe = _ascii_filename(supplier.name, fallback=f"tedarikci_{supplier_id}")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="fis-{safe}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="fis-{supplier_id}-{safe}.pdf"'},
     )
 

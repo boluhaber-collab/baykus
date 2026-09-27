@@ -34,3 +34,6 @@ apps/api/backups/*
 # BizimHesap probe / import caches (may contain large dumps)
 tmp/bizimhesap/
 tmp/
+
+.env.local
+apps/web/.env.local
