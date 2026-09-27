@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
+import { decodeHtmlEntities } from "@/lib/htmlEntities";
 import StatusFooter from "@/components/StatusFooter";
 
 const PERIODS = [
@@ -506,7 +507,7 @@ export default function ExpensesPage() {
                       {st}
                     </span>
                   </td>
-                  <td className="text-xs text-baykus-muted max-w-[160px] truncate">{e.note || "—"}</td>
+                  <td className="text-xs text-baykus-muted max-w-[160px] truncate">{decodeHtmlEntities(e.note) || "—"}</td>
                   <td className="text-right text-xs whitespace-nowrap space-x-2">
                     {!e.is_posted && (
                       <>

@@ -388,14 +388,22 @@ def scrape(out_dir: Path, include_oos: bool = False) -> dict:
         name = info["name"]
         print(f"  GetCashTrx {name} ({guid[:8]}…)", flush=True)
         rows, total = get_cash_trx(opener, guid)
-        # Normalize rows to list-of-lists
+        # Normalize rows to list-of-lists; decode HTML entities in text cells
+        # so per_account JSON never re-injects &#246; etc. on enrich.
         norm = []
         for r in rows:
             if isinstance(r, dict):
                 # unexpected
-                norm.append([r.get(str(i), "") for i in range(11)])
+                cells = [r.get(str(i), "") for i in range(11)]
             else:
-                norm.append(list(r))
+                cells = list(r)
+            decoded = []
+            for i, c in enumerate(cells):
+                if isinstance(c, str):
+                    decoded.append(htmlmod.unescape(c))
+                else:
+                    decoded.append(c)
+            norm.append(decoded)
 
         # Final balance from first row (desc order) or page
         final_from_moves = None

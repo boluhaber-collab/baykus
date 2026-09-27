@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, ReactNode, useCallback, useState } from "react";
 import { formatMoney } from "@/lib/api";
+import { decodeHtmlEntities } from "@/lib/htmlEntities";
 
 export type ExpandLineItem = {
   label: string;
@@ -70,8 +71,8 @@ function ExpandPanel({
   const loading = detail?.loading;
   const error = detail?.error;
   const lines = detail?.lines || [];
-  const note = (detail?.note ?? fallbackNote ?? "").trim();
-  const userName = (detail?.userName || "").trim();
+  const note = decodeHtmlEntities(detail?.note ?? fallbackNote ?? "").trim();
+  const userName = decodeHtmlEntities(detail?.userName || "").trim();
 
   return (
     <div className="bk-expand-panel">
@@ -89,7 +90,7 @@ function ExpandPanel({
           <tbody>
             {lines.map((line, i) => (
               <tr key={i}>
-                <td>{line.label}</td>
+                <td>{decodeHtmlEntities(line.label)}</td>
                 <td className="num tabular-nums">{formatMoney(line.price)}</td>
                 <td className="num tabular-nums">{formatMoney(line.amount)}</td>
               </tr>

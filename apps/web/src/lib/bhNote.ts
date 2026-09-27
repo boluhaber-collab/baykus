@@ -6,6 +6,7 @@
  */
 
 import type { ExpandDetailPayload, ExpandLineItem } from "@/components/ExpandableMovementTable";
+import { decodeHtmlEntities } from "@/lib/htmlEntities";
 
 const BH_PREFIX = "BH_IMPORT:";
 
@@ -90,7 +91,7 @@ function parseKalemEntry(entry: string): ExpandLineItem | null {
 }
 
 export function parseBhNote(note: string | null | undefined): BhNoteParts {
-  const raw = (note || "").trim();
+  const raw = decodeHtmlEntities(note || "").trim();
   if (!raw) {
     return { isBh: false, displayNote: null };
   }

@@ -11,6 +11,7 @@ import {
   formatMoney,
   statusBadgeClass,
 } from "@/lib/api";
+import { decodeHtmlEntities } from "@/lib/htmlEntities";
 
 const CASH_TYPES = [
   { value: "tahsilat", label: "Tahsilat" },
@@ -322,7 +323,7 @@ export default function CashPage() {
                       <td className="text-xs">{m.source}</td>
                       <td className="text-xs">{m.account}</td>
                       <td className="text-xs">{CASH_TYPE_LABELS[m.movement_type] || m.movement_type}</td>
-                      <td className="text-xs text-baykus-muted max-w-[200px] truncate">{m.note || "—"}</td>
+                      <td className="text-xs text-baykus-muted max-w-[200px] truncate">{decodeHtmlEntities(m.note) || "—"}</td>
                       <td className="text-right tabular-nums text-emerald-700">
                         {m.in_amount ? formatMoney(m.in_amount) : ""}
                       </td>

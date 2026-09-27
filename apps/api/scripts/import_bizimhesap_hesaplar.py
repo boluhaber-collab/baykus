@@ -262,19 +262,19 @@ def load_moves(xlsx: Path, *, kind: str) -> list[dict[str, Any]]:
             v = r[i]
             return default if v is None else v
 
-        islem = html.unescape(str(cell(i_islem, "")).strip())
-        acik = html.unescape(str(cell(i_acik, "")).strip())
+        islem = decode_html_entities(cell(i_islem, "")).strip()
+        acik = decode_html_entities(cell(i_acik, "")).strip()
         giris = money(cell(i_giris, 0))
         cikis = money(cell(i_cikis, 0))
         aid = str(cell(i_aid, "")).strip() or None
         if not aid:
             aid = f"BH-{kind.upper()}-{n:05d}-{slug_key(str(d), islem, acik, str(giris), str(cikis))}"
-        hesap = html.unescape(str(cell(i_hesap, "")).strip()) or None if kind == "bank" else None
-        muster = html.unescape(str(cell(i_must, "")).strip()) or None if i_must is not None else None
+        hesap = decode_html_entities(cell(i_hesap, "")).strip() or None if kind == "bank" else None
+        muster = decode_html_entities(cell(i_must, "")).strip() or None if i_must is not None else None
         # Prefer explicit Müşteri; else per-account "Hesap" column (cari/group)
         if not muster and i_hesap_col is not None:
-            muster = html.unescape(str(cell(i_hesap_col, "")).strip()) or None
-        kullanici = html.unescape(str(cell(i_user, "")).strip()) or None if i_user is not None else None
+            muster = decode_html_entities(cell(i_hesap_col, "")).strip() or None
+        kullanici = decode_html_entities(cell(i_user, "")).strip() or None if i_user is not None else None
         out.append(
             {
                 "date": d,
@@ -355,6 +355,15 @@ def movement_note(
     islem: str | None = None,
     kullanici: str | None = None,
 ) -> str:
+    from app.utils.html_text import decode_html_entities
+
+    # Defensive: decode even if a caller forgot html.unescape / decode_html_entities.
+    islem = decode_html_entities(islem).strip() or None
+    kullanici = decode_html_entities(kullanici).strip() or None
+    counterparty = decode_html_entities(counterparty).strip() or None
+    aciklama = decode_html_entities(aciklama).strip()
+    source = decode_html_entities(source).strip() or None
+
     parts = [f"{BH_NOTE_PREFIX}{aid}"]
     if islem:
         parts.append(f"Hareket={islem}")
@@ -560,6 +569,7 @@ def enrich_notes_from_per_account(db, hesap_dir: Path) -> int:
     """Backfill Kullanıcı=/Cari= into movement notes from GetCashTrx JSON dumps."""
     import json
     from app.models.finance import BankMovement, CashMovement
+    from app.utils.html_text import decode_html_entities
 
     per = hesap_dir / "per_account"
     if not per.is_dir():
@@ -576,11 +586,12 @@ def enrich_notes_from_per_account(db, hesap_dir: Path) -> int:
             guid = str(row[8] or "").strip()
             if not guid:
                 continue
+            # GetCashTrx JSON keeps HTML entities (&#246;); always decode on read.
             by_guid[guid] = {
-                "kullanici": str(row[2] or "").strip(),
-                "hesap": str(row[3] or "").strip(),
-                "aciklama": str(row[4] or "").strip(),
-                "islem": str(row[1] or "").strip(),
+                "kullanici": decode_html_entities(row[2]).strip(),
+                "hesap": decode_html_entities(row[3]).strip(),
+                "aciklama": decode_html_entities(row[4]).strip(),
+                "islem": decode_html_entities(row[1]).strip(),
             }
     if not by_guid:
         return 0

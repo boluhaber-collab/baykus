@@ -10,6 +10,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import { decodeHtmlEntities } from "@/lib/htmlEntities";
 import StatusFooter from "@/components/StatusFooter";
 import ExpandableMovementTable, {
   linesFromPurchase,
@@ -794,7 +795,7 @@ export default function SupplierDetailPage() {
                     key: "note",
                     header: "Not",
                     className: "text-slate-500",
-                    render: (m) => detailFromBhNote(m.note).note || m.note || "—",
+                    render: (m) => detailFromBhNote(m.note).note || decodeHtmlEntities(m.note) || "—",
                   },
                   {
                     key: "debit",

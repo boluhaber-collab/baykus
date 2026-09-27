@@ -30,6 +30,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from app.utils.html_text import decode_html_entities
+
 API_ROOT = Path(__file__).resolve().parents[1]
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
@@ -266,7 +268,7 @@ def _belge_and_aciklama(rest: str, moneys: list[str]) -> tuple[str, str]:
         if re.match(r"^(?=.*\d)[A-Z0-9./_-]{4,}$", t0, re.I):
             belge = t0
             aciklama = " ".join(toks[1:])
-    return belge, aciklama
+    return decode_html_entities(belge).strip(), decode_html_entities(aciklama).strip()
 
 
 UNIT_RE = re.compile(
@@ -488,7 +490,7 @@ def load_party_list(xlsx: Path) -> list[dict[str, str]]:
     for row in rows[1:]:
         if not row or all(c is None or str(c).strip() == "" for c in row):
             continue
-        name = str(row[i_name] or "").strip()
+        name = decode_html_entities(row[i_name]).strip()
         if not name:
             continue
         guid = str(row[i_guid] or "").strip() if i_guid is not None else ""
@@ -513,6 +515,10 @@ def movement_note(
     line_idx: int,
     kalems: list[str] | None = None,
 ) -> str:
+    hareket = decode_html_entities(hareket).strip()
+    belge = decode_html_entities(belge).strip()
+    aciklama = decode_html_entities(aciklama).strip()
+    payment_method = decode_html_entities(payment_method).strip()
     parts = [
         f"{BH_NOTE_PREFIX}{guid}:{line_idx}",
         f"Hareket={hareket}",

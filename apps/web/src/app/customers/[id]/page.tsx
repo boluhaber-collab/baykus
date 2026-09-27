@@ -14,6 +14,7 @@ import {
   statusBadgeClass,
   quoteStatusBadgeClass,
 } from "@/lib/api";
+import { decodeHtmlEntities } from "@/lib/htmlEntities";
 import CustomerTahsilatModal from "@/components/CustomerTahsilatModal";
 import CustomerDevirModal from "@/components/CustomerDevirModal";
 import StatusFooter from "@/components/StatusFooter";
@@ -917,7 +918,7 @@ export default function CustomerDetailPage() {
                         className: "text-slate-600",
                         render: (m) => (
                           <>
-                            {detailFromBhNote(m.note).note || m.note || "—"}
+                            {detailFromBhNote(m.note).note || decodeHtmlEntities(m.note) || "—"}
                             {m.order_number && (
                               <>
                                 {" "}

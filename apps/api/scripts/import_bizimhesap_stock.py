@@ -32,6 +32,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from app.utils.html_text import decode_html_entities
+
 # Allow `python scripts/import_bizimhesap_stock.py` from apps/api
 API_ROOT = Path(__file__).resolve().parents[1]
 if str(API_ROOT) not in sys.path:
@@ -357,7 +359,7 @@ def import_all(
             (str(r.get("category")).strip() for r in rows if (r.get("category") or "").strip()), None
         )
         description_bits = []
-        desc = next((str(r.get("description")).strip() for r in rows if (r.get("description") or "").strip()), "")
+        desc = next((decode_html_entities(r.get("description")).strip() for r in rows if (r.get("description") or "").strip()), "")
         if desc:
             description_bits.append(desc)
         unit = next((str(r.get("unit")).strip() for r in rows if (r.get("unit") or "").strip()), "")
@@ -378,7 +380,7 @@ def import_all(
         # Aggregate qty from BH product.quantity (per-row); warehouse inventory overrides later
         prod = Product(
             sku=sku_product(bh_id),
-            name=title.strip(),
+            name=decode_html_entities(title).strip(),
             category=category,
             brand=brand,
             product_type="stoklu",
@@ -482,7 +484,7 @@ def import_all(
                     else:
                         prod = Product(
                             sku=orphan_sku,
-                            name=title[:255],
+                            name=decode_html_entities(title)[:255],
                             product_type="stoklu",
                             description=f"BH_ID={bh_id} | orphan_from_inventory",
                             base_price=Decimal("0.00"),

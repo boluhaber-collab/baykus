@@ -30,6 +30,8 @@ Wipe / upsert policy (docs/BIZIMHESAP_IMPORT.md § demirbaş):
 
 from __future__ import annotations
 
+from app.utils.html_text import decode_html_entities
+
 import argparse
 import json
 import os
@@ -370,11 +372,11 @@ def run_import(
 
         # Insert BH assets
         for src in assets_src:
-            name = (src.get("name") or "").strip()
+            name = decode_html_entities(src.get("name")).strip()
             if not name:
                 continue
             guid = (src.get("guid") or "").strip()
-            note = (src.get("note") or "").strip() or (f"{BH_NOTE_PREFIX}{guid}" if guid else None)
+            note = decode_html_entities(src.get("note")).strip() or (f"{BH_NOTE_PREFIX}{guid}" if guid else None)
             row = Asset(
                 name=name[:200],
                 category=(src.get("category") or "Demirbaş")[:100],

@@ -205,6 +205,14 @@ BizimHesap B2B API’sinde kasa/banka **hareketi yok** (`GET /cashiers` yalnızc
 | `banka_hareketleri.xlsx` | Banka + POS + KK + ortak hareketleri |
 | `kasa_hareketleri.xlsx` | TL Kasa hareketleri |
 | `per_account/*.json` | Hesap başı ham GetCashTrx satırları |
+
+### HTML entities (Türkçe karakter)
+
+GetCashTrx JSON satırlarında Türkçe harfler bazen `&#246;` (ö) / `&#231;` (ç) gibi HTML numeric entity olarak gelir.
+- Scrape + import artık tüm metin alanlarında `decode_html_entities` / `html.unescape` uygular.
+- Mevcut DB için: `python scripts/repair_html_entities.py` (veya `python -m app.scripts.repair_html_entities`).
+- Frontend `decodeHtmlEntities` display safety net (`src/lib/htmlEntities.ts` + `bhNote.ts`).
+
 | `manifest.json` | Canlı bakiyeler, tarih aralığı, sayımlar |
 
 ### Dönem / canlı bakiyeler (scrape 27.09.2026 Europe/Istanbul)
