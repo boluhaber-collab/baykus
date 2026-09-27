@@ -16,7 +16,7 @@ $Cors = "http://localhost:3000,http://127.0.0.1:3000"
 if (-not (Test-Path $EnvFile)) {
     Write-Host "==> .env yok — oluşturuluyor (SQLite)" -ForegroundColor Yellow
     @"
-# Windows yerel — SQLite (Alembic kullanmayın; create_all + seed)
+# Windows yerel — SQLite (Alembic kullanmayın; create_all + essentials seed (no demo))
 DATABASE_URL=$SqliteUrl
 SECRET_KEY=baykus-dev-secret-change-in-production
 CORS_ORIGINS=$Cors
@@ -56,7 +56,7 @@ if (-not (Test-Path $VenvPython)) {
 Write-Host "==> pip install -r requirements.txt" -ForegroundColor Cyan
 & $VenvPip install -r requirements.txt
 
-Write-Host "==> SQLite bootstrap (create_all + seed)" -ForegroundColor Cyan
+Write-Host "==> SQLite bootstrap (create_all + essentials seed (no demo))" -ForegroundColor Cyan
 & $VenvPython -m app.bootstrap_sqlite
 
 Write-Host ""

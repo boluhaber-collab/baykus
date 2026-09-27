@@ -1,8 +1,11 @@
-"""SQLite bootstrap: create_all + seed when tables are missing.
+"""SQLite bootstrap: create_all + essential seed (roles/users only).
+
+No demo SIP/TKL/M-00x catalog — commercial data comes from BizimHesap imports.
+To purge leftover seed rows: python -m app.scripts.wipe_demo_data
 
 Windows / Docker-suz yerel geliştirme:
   cd apps/api
-  .\\.venv\\Scripts\\Activate.ps1
+  .\.venv\Scripts\Activate.ps1
   $env:DATABASE_URL = "sqlite:///./baykus.db"
   python -m app.bootstrap_sqlite
 
