@@ -1,6 +1,6 @@
 # BizimHesap → Baykuş içe aktarma
 
-Bu rehber **ürün / depo / stok** API importunu, **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)**, **Hesaplarım (kasa / banka / ortak)** ve **Demirbaşlar** aşamalarını açıklar.
+Bu rehber **ürün / depo / stok** API importunu, **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)**, **Hesaplarım (kasa / banka / ortak)**, **Demirbaşlar** ve **Masraflar (gider)** aşamalarını açıklar.
 
 ## 1) Token alma
 
@@ -389,12 +389,109 @@ python scripts\import_bizimhesap_demirbas.py --live
 UI: **Finans → Demirbaşlar** (`/finance/assets`).
 
 
-## 6) Güvenlik
+
+
+## 6) Masraflar (gider / masraf kalemleri)
+
+BizimHesap B2B API’sinde masraf **yok**. Kaynak: panel **Nakit Yönetimi → Masraflar**:
+
+| Endpoint | İçerik |
+|----------|--------|
+| `GET /web/ngn/acc/ngncosts` | Masraf listesi (vade, masraf hesabı, tutar, ödeme şekli, durum, not, GUID) |
+| `GET /web/ngn/acc/ngncostitems` | Masraf kalemleri (Ana Grup + Alt Hesap) |
+| `GET /web/ngn/acc/ngncostentry?rc=1&guid={GUID}` | Detay (belge no, kasa/banka, tutar) — opsiyonel `--enrich` |
+
+### Kaynak dosyalar
+
+`tmp/bizimhesap/masraflar/` (gitignore):
+
+| Dosya | İçerik |
+|-------|--------|
+| `categories.json` | Grup + kalem (ör. Mali Giderler / Banka Masrafları) |
+| `expenses.json` | Normalize masraf satırları |
+| `manifest.json` | Kaynak / scrape zamanı / sayım |
+| `_page_ngncosts.html` / `_page_ngncostitems.html` | Ham panel (opsiyonel) |
+
+### Linux / box
+
+```bash
+cd /path/to/baykus-web
+./scripts/import-bizimhesap-masraflar.sh --live
+# cache’den:
+./scripts/import-bizimhesap-masraflar.sh --from-cache ../../tmp/bizimhesap/masraflar
+# veya:
+cd apps/api && source .venv/bin/activate
+export DATABASE_URL=sqlite:///./baykus.db
+python scripts/import_bizimhesap_masraflar.py --live
+python -m app.scripts.import_bizimhesap_masraflar --from-cache ../../tmp/bizimhesap/masraflar
+```
+
+### Windows PC (`C:\Users\engin\Desktop\baykus`)
+
+```powershell
+cd C:\Users\engin\Desktop\baykus\apps\api
+.\.venv\Scripts\Activate.ps1
+$env:DATABASE_URL = "sqlite:///./baykus.db"
+# canlı scrape (BIZIMHESAP_USER/PASSWORD — box-secrets veya env):
+python scripts\import_bizimhesap_masraflar.py --live
+# cache:
+python scripts\import_bizimhesap_masraflar.py --from-cache ..\..\tmp\bizimhesap\masraflar
+```
+
+Git Bash: `bash scripts/import-bizimhesap-masraflar.sh --live`
+
+### Faydalı bayraklar
+
+| Bayrak | Anlam |
+|--------|--------|
+| `--from-cache DIR` | `expenses.json` + `categories.json` klasörü |
+| `--live` | Panel scrape + cache yaz + import |
+| `--enrich` | `--live` ile her `ngncostentry` detayını çek (kasa/banka eşlemesi; yavaş) |
+| `--scrape-only` | Sadece cache yaz |
+| `--dry-run` | Parse / sayım; DB yazma |
+| `--skip-backup` | SQLite yedeğini atla |
+
+### Ne yapar?
+
+1. `baykus.db` → `apps/api/backups/baykus_pre_bh_masraflar_*.db`
+2. **Tüm** `expenses` + `expense_categories` satırlarını siler (seed demo Kira/Elektrik dahil)
+3. BH masraf kalemlerini `expense_categories` olarak yazar (`group_name` = Ana Grup)
+4. BH masraflarını `expenses` olarak yazar:
+   - `payment_method`: Nakit → `nakit`; Banka / Kredi Kartı → `banka`
+   - `is_posted=True` (panelde Ödenmiş) — **yeni kasa/banka hareketi oluşturulmaz** (Hesaplarım import’u zaten ledger’ı taşır; çift sayım yok)
+   - `note` içinde `BH_IMPORT:BH-COST:{guid}`
+5. `--enrich` ile `ddlCashierNew` → `cash_registers` / `bank_accounts` eşlemesi
+
+### Eşleme
+
+| BH | Baykuş |
+|----|--------|
+| Ana Grup (Araç / İşletme / Mali / Personel) | `expense_categories.group_name` |
+| Alt Hesap (Kira, Banka Masrafları, …) | `expense_categories.name` |
+| Vadesi / Belge tarihi | `due_date` / `expense_date` |
+| Tutar | `amount` |
+| Ödeme Şekli | `payment_method` |
+| Durum Ödenmiş | `is_posted=True` → UI “Ödenmiş” |
+
+### Beklenen smoke (27.09.2026 scrape)
+
+| Metrik | Değer |
+|--------|------:|
+| Masraf kalemi | ~39 |
+| Masraf kaydı | ~597 |
+| Ödeme dağılımı | Kredi Kartı / Banka / Nakit (hepsi Ödenmiş) |
+
+UI: **Finans → Masraflar** (`/finance/expenses`).
+
+API notu: `GET /api/finance/expenses` `date_from` / `date_to` için `datetime.date` import’u gerekir — eksikse OpenAPI 500 / UI “Failed to fetch”.
+
+
+## 7) Güvenlik
 
 - Token, ham JSON dump’ları, ekstre PDF’leri, Hesaplarım xlsx ve `*.db` **commit edilmez** (`tmp/`, `*.db`, `.env` gitignore’da).
-- Commit edilenler: `scripts/import_bizimhesap_*.py`, `app/scripts/…` sarmalayıcıları, `app/integrations/demirbas_classify.py`, `docs/BIZIMHESAP_IMPORT.md`, `scripts/import-bizimhesap-*.sh`.
+- Commit edilenler: `scripts/import_bizimhesap_*.py`, `app/scripts/…` sarmalayıcıları, `app/integrations/demirbas_classify.py`, `docs/BIZIMHESAP_IMPORT.md`, `scripts/import-bizimhesap-*.sh` (masraflar dahil).
 
-## 7) Sorun giderme
+## 8) Sorun giderme
 
 | Belirti | Çözüm |
 |--------|--------|
@@ -412,3 +509,7 @@ UI: **Finans → Demirbaşlar** (`/finance/assets`).
 | Demirbaş demo kaldı | `--keep-existing-assets` kullanmayın; script tüm assets siler |
 | Makineler stokta görünüyor | demirbaş import’u çalıştırın; stock import demirbaş orphan’ları atlar |
 | `--live` login fail | `BIZIMHESAP_USER`/`PASSWORD` (box-secrets); reCAPTCHA nadiren engeller — cache kullanın |
+| Masraflar UI Failed to fetch | `expenses.py` içinde `from datetime import date` olmalı; API’yi yeniden başlatın |
+| Masraf demo kaldı | `--live` / import’u `--keep` olmadan çalıştırın; wipe tüm categories+expenses |
+| Çift kasa/banka gideri | Masraf import ledger yazmaz; Hesaplarım hareketlerini silmeyin |
+| `--live` masraf login fail | `BIZIMHESAP_USER`/`PASSWORD`; cache’den `--from-cache` |
