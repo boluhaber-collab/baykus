@@ -239,7 +239,7 @@ Tam geçmiş (hesap başına ilk–son hareket). Örnek:
 | Borç / Alacak (panel) | Giriş / Çıkış → kasa `tahsilat`/`odeme`/`gider`/`transfer_*` — banka `deposit`/`withdrawal`/`fee`/`transfer_*` |
 | Trx GUID | `notes = BH_IMPORT:BH-TRX:{guid} \| Hareket=… \| Cari=… \| …` |
 
-UI: `/finance/banks/{id}` hareket listesini gösterir (Engin ortak kartı dahil). Kasa sayfasında **Tüm geçmiş** filtresi tüm `cash_movements` satırlarını listeler.
+UI: `/finance/banks/{id}` ve `/finance/cash/{id}` BizimHesap hesap detay düzeni (Bakiye + Güncelle/Para Girişi/Para Çıkışı/Transfer/Dökümanlar + Tarih|İşlem|Kullanıcı|Hesap|Açıklama|Borç|Alacak|Bakiye). Günlük kasa özeti `/finance/cash` ayrı kalır.
 
 ### Linux / box
 

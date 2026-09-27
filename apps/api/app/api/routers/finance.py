@@ -54,6 +54,15 @@ def _dec(v) -> Decimal:
     return Decimal(str(v or 0))
 
 
+def _user_display_name(db: Session, user_id: int | None) -> str | None:
+    if not user_id:
+        return None
+    u = db.get(User, user_id)
+    if not u:
+        return None
+    return (u.full_name or u.email or "").strip() or None
+
+
 def _cash_direction(movement_type: str) -> str:
     if movement_type in CASH_IN_TYPES:
         return "in"
@@ -145,9 +154,14 @@ def _bank_out(db: Session, acc: BankAccount) -> BankAccountOut:
     )
 
 
-def _cash_movement_out(m: CashMovement, running: Decimal | None = None) -> CashMovementOut:
+def _cash_movement_out(
+    m: CashMovement,
+    running: Decimal | None = None,
+    db: Session | None = None,
+) -> CashMovementOut:
     cust_name = m.customer.name if m.customer is not None else None
     bank_name = m.bank_account.name if m.bank_account is not None else None
+    user_name = _user_display_name(db, m.created_by_user_id) if db is not None else None
     return CashMovementOut(
         id=m.id,
         cash_register_id=m.cash_register_id,
@@ -163,15 +177,21 @@ def _cash_movement_out(m: CashMovement, running: Decimal | None = None) -> CashM
         transfer_group_id=m.transfer_group_id,
         cari_movement_id=m.cari_movement_id,
         created_by_user_id=m.created_by_user_id,
+        created_by_user_name=user_name,
         created_at=m.created_at,
         running_balance=running,
         direction=_cash_direction(m.movement_type),
     )
 
 
-def _bank_movement_out(m: BankMovement, running: Decimal | None = None) -> BankMovementOut:
+def _bank_movement_out(
+    m: BankMovement,
+    running: Decimal | None = None,
+    db: Session | None = None,
+) -> BankMovementOut:
     cust_name = m.customer.name if m.customer is not None else None
     acc_name = m.bank_account.name if m.bank_account is not None else None
+    user_name = _user_display_name(db, m.created_by_user_id) if db is not None else None
     return BankMovementOut(
         id=m.id,
         bank_account_id=m.bank_account_id,
@@ -188,6 +208,7 @@ def _bank_movement_out(m: BankMovement, running: Decimal | None = None) -> BankM
         transfer_group_id=m.transfer_group_id,
         cari_movement_id=m.cari_movement_id,
         created_by_user_id=m.created_by_user_id,
+        created_by_user_name=user_name,
         created_at=m.created_at,
         running_balance=running,
         direction=_bank_direction(m.movement_type),
@@ -762,9 +783,9 @@ def list_cash_movements(
                 else:
                     bal -= _dec(m.amount)
                 run_map[m.id] = bal
-            return [_cash_movement_out(m, run_map.get(m.id)) for m in rows]
+            return [_cash_movement_out(m, run_map.get(m.id), db) for m in rows]
 
-    return [_cash_movement_out(m) for m in rows]
+    return [_cash_movement_out(m, db=db) for m in rows]
 
 
 @router.post("/cash/movements", response_model=CashMovementOut, status_code=status.HTTP_201_CREATED)
@@ -799,7 +820,7 @@ def create_cash_movement(
     db.add(m)
     db.commit()
     db.refresh(m)
-    return _cash_movement_out(m)
+    return _cash_movement_out(m, db=db)
 
 
 # ─── Banks ─────────────────────────────────────────────────────────────────
@@ -934,7 +955,7 @@ def list_bank_account_movements(
         else:
             bal -= _dec(m.amount)
         run_map[m.id] = bal
-    return [_bank_movement_out(m, run_map.get(m.id)) for m in rows]
+    return [_bank_movement_out(m, run_map.get(m.id), db) for m in rows]
 
 
 @router.post(
@@ -974,7 +995,7 @@ def create_bank_movement(
     db.add(m)
     db.commit()
     db.refresh(m)
-    return _bank_movement_out(m)
+    return _bank_movement_out(m, db=db)
 
 
 @router.get("/bank-movements", response_model=list[BankMovementOut])
@@ -998,7 +1019,7 @@ def list_all_bank_movements(
     if to_date:
         q = q.filter(BankMovement.movement_date <= to_date)
     rows = q.order_by(BankMovement.movement_date.desc(), BankMovement.id.desc()).offset(skip).limit(limit).all()
-    return [_bank_movement_out(m) for m in rows]
+    return [_bank_movement_out(m, db=db) for m in rows]
 
 
 # ─── Transfers ─────────────────────────────────────────────────────────────
@@ -1078,8 +1099,8 @@ def create_transfer(
         db.commit()
         db.refresh(cm)
         db.refresh(bm)
-        cash_outs.append(_cash_movement_out(cm))
-        bank_outs.append(_bank_movement_out(bm))
+        cash_outs.append(_cash_movement_out(cm, db=db))
+        bank_outs.append(_bank_movement_out(bm, db=db))
 
     # Bank → Cash
     elif from_bank and to_cash:
@@ -1107,8 +1128,8 @@ def create_transfer(
         db.commit()
         db.refresh(cm)
         db.refresh(bm)
-        cash_outs.append(_cash_movement_out(cm))
-        bank_outs.append(_bank_movement_out(bm))
+        cash_outs.append(_cash_movement_out(cm, db=db))
+        bank_outs.append(_bank_movement_out(bm, db=db))
 
     # Bank → Bank
     elif from_bank and to_bank:
@@ -1136,7 +1157,7 @@ def create_transfer(
         db.commit()
         db.refresh(bm_out)
         db.refresh(bm_in)
-        bank_outs.extend([_bank_movement_out(bm_out), _bank_movement_out(bm_in)])
+        bank_outs.extend([_bank_movement_out(bm_out, db=db), _bank_movement_out(bm_in, db=db)])
 
     return TransferOut(
         transfer_group_id=group_id,

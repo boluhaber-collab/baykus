@@ -47,6 +47,7 @@ class CashMovementOut(BaseModel):
     transfer_group_id: str | None = None
     cari_movement_id: int | None = None
     created_by_user_id: int | None = None
+    created_by_user_name: str | None = None
     created_at: datetime
     running_balance: Decimal | None = None
     direction: str  # "in" | "out"
@@ -118,6 +119,7 @@ class BankMovementOut(BaseModel):
     transfer_group_id: str | None = None
     cari_movement_id: int | None = None
     created_by_user_id: int | None = None
+    created_by_user_name: str | None = None
     created_at: datetime
     running_balance: Decimal | None = None
     direction: str  # "in" | "out"

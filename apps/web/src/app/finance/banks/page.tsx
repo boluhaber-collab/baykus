@@ -224,6 +224,28 @@ export default function BanksPage() {
         </div>
       </fieldset>
 
+      {cash.length > 0 && (
+        <div className="rounded border overflow-hidden bg-[#fffde7]">
+          <div className="flex justify-between px-3 py-2 text-white text-sm font-semibold" style={{ background: "#198754" }}>
+            <span>Kasa</span>
+            <span className="tabular-nums">{formatMoney(cashTotal)}</span>
+          </div>
+          <div className="p-2 flex flex-wrap gap-2">
+            {cash.map((r) => (
+              <Link
+                key={r.id}
+                href={`/finance/cash/${r.id}`}
+                className="rounded border bg-white px-3 py-2 shadow-sm hover:ring-1 hover:ring-emerald-300 min-w-[140px]"
+              >
+                <div className="text-xs font-semibold">{r.name}</div>
+                <div className="text-[10px] text-baykus-muted">Kasa hesabı</div>
+                <div className="text-sm font-bold tabular-nums mt-1">{formatMoney(Number(r.balance))}</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-2 gap-3">
         {BANK_ACCOUNT_TYPES.map((t) => {
           const list = byType[t] || [];

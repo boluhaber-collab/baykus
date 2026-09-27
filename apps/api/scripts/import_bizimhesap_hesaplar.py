@@ -246,6 +246,8 @@ def load_moves(xlsx: Path, *, kind: str) -> list[dict[str, Any]]:
     i_cat = col("Ödeme Türü", "Odeme Turu", "Category")
     i_src = col("Kaynak", "Source")
     i_must = col("Müşteri", "Musteri", "Counterparty")
+    i_user = col("Kullanıcı", "Kullanici", "User", "İşlemi Yapan")
+    i_hesap_col = col("Hesap") if kind == "cash" else None  # per-account detail Hesap (cari)
 
     out: list[dict[str, Any]] = []
     for n, r in enumerate(rows[1:], start=1):
@@ -269,6 +271,10 @@ def load_moves(xlsx: Path, *, kind: str) -> list[dict[str, Any]]:
             aid = f"BH-{kind.upper()}-{n:05d}-{slug_key(str(d), islem, acik, str(giris), str(cikis))}"
         hesap = html.unescape(str(cell(i_hesap, "")).strip()) or None if kind == "bank" else None
         muster = html.unescape(str(cell(i_must, "")).strip()) or None if i_must is not None else None
+        # Prefer explicit Müşteri; else per-account "Hesap" column (cari/group)
+        if not muster and i_hesap_col is not None:
+            muster = html.unescape(str(cell(i_hesap_col, "")).strip()) or None
+        kullanici = html.unescape(str(cell(i_user, "")).strip()) or None if i_user is not None else None
         out.append(
             {
                 "date": d,
@@ -281,6 +287,7 @@ def load_moves(xlsx: Path, *, kind: str) -> list[dict[str, Any]]:
                 "category": str(cell(i_cat, "")).strip() or None,
                 "source": str(cell(i_src, "")).strip() or None,
                 "counterparty": muster,
+                "kullanici": kullanici,
             }
         )
     return out
@@ -346,10 +353,13 @@ def movement_note(
     source: str | None = None,
     counterparty: str | None = None,
     islem: str | None = None,
+    kullanici: str | None = None,
 ) -> str:
     parts = [f"{BH_NOTE_PREFIX}{aid}"]
     if islem:
         parts.append(f"Hareket={islem}")
+    if kullanici:
+        parts.append(f"Kullanıcı={kullanici[:120]}")
     if counterparty:
         parts.append(f"Cari={counterparty[:120]}")
     if aciklama:
@@ -546,6 +556,68 @@ def upsert_bank_account(db, acc: dict[str, Any]) -> tuple[Any, str]:
     return row, "created"
 
 
+def enrich_notes_from_per_account(db, hesap_dir: Path) -> int:
+    """Backfill Kullanıcı=/Cari= into movement notes from GetCashTrx JSON dumps."""
+    import json
+    from app.models.finance import BankMovement, CashMovement
+
+    per = hesap_dir / "per_account"
+    if not per.is_dir():
+        return 0
+    by_guid: dict[str, dict[str, str]] = {}
+    for jf in per.glob("*.json"):
+        try:
+            data = json.loads(jf.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for row in data.get("rows") or []:
+            if not isinstance(row, (list, tuple)) or len(row) < 9:
+                continue
+            guid = str(row[8] or "").strip()
+            if not guid:
+                continue
+            by_guid[guid] = {
+                "kullanici": str(row[2] or "").strip(),
+                "hesap": str(row[3] or "").strip(),
+                "aciklama": str(row[4] or "").strip(),
+                "islem": str(row[1] or "").strip(),
+            }
+    if not by_guid:
+        return 0
+
+    updated = 0
+    for model in (CashMovement, BankMovement):
+        for m in db.query(model).all():
+            note = m.note or ""
+            if "BH_IMPORT:BH-TRX-" not in note:
+                continue
+            # extract guid
+            guid = None
+            for part in note.split("|"):
+                part = part.strip()
+                if part.startswith("BH_IMPORT:BH-TRX-"):
+                    guid = part[len("BH_IMPORT:BH-TRX-"):].strip()
+                    break
+            if not guid or guid not in by_guid:
+                continue
+            info = by_guid[guid]
+            # rebuild note preserving aktarım id
+            aid = f"BH-TRX-{guid}"
+            new_note = movement_note(
+                aid,
+                info["aciklama"] or "",
+                source="BizimHesap GetCashTrx",
+                counterparty=info["hesap"] or None,
+                islem=info["islem"] or None,
+                kullanici=info["kullanici"] or None,
+            )
+            if new_note != note:
+                m.note = new_note
+                updated += 1
+    return updated
+
+
+
 def run_import(hesap_dir: Path, *, clear_demo: bool, dry_run: bool) -> dict[str, Any]:
     accounts_xlsx = hesap_dir / "banka_hesaplari.xlsx"
     bank_xlsx = hesap_dir / "banka_hareketleri.xlsx"
@@ -624,7 +696,7 @@ def run_import(hesap_dir: Path, *, clear_demo: bool, dry_run: bool) -> dict[str,
                     amount=amount,
                     movement_date=m["date"],
                     category=m.get("category"),
-                    note=movement_note(m["aktarim_id"], m["aciklama"], m.get("source"), m.get("counterparty"), m.get("islem")),
+                    note=movement_note(m["aktarim_id"], m["aciklama"], m.get("source"), m.get("counterparty"), m.get("islem"), m.get("kullanici")),
                 )
             )
             stats["cash_movements_written"] += 1
@@ -653,12 +725,21 @@ def run_import(hesap_dir: Path, *, clear_demo: bool, dry_run: bool) -> dict[str,
                     amount=amount,
                     movement_date=m["date"],
                     category=m.get("category"),
-                    note=movement_note(m["aktarim_id"], m["aciklama"], m.get("source"), m.get("counterparty"), m.get("islem")),
+                    note=movement_note(m["aktarim_id"], m["aciklama"], m.get("source"), m.get("counterparty"), m.get("islem"), m.get("kullanici")),
                 )
             )
             stats["bank_movements_written"] += 1
 
         db.commit()
+
+        # Enrich Kullanıcı/Cari from per_account GetCashTrx JSON (xlsx often omits them)
+        try:
+            n_enrich = enrich_notes_from_per_account(db, hesap_dir)
+            if n_enrich:
+                db.commit()
+            stats["notes_enriched_from_json"] = n_enrich
+        except Exception as exc:  # noqa: BLE001
+            stats["notes_enrich_error"] = str(exc)
 
         # Smoke counts + balances
         from sqlalchemy import case, func

@@ -621,6 +621,8 @@ export type CashMovement = {
   transfer_group_id?: string | null;
   running_balance?: number | null;
   direction: "in" | "out" | string;
+  created_by_user_id?: number | null;
+  created_by_user_name?: string | null;
   created_at: string;
 };
 
@@ -640,6 +642,8 @@ export type BankMovement = {
   transfer_group_id?: string | null;
   running_balance?: number | null;
   direction: "in" | "out" | string;
+  created_by_user_id?: number | null;
+  created_by_user_name?: string | null;
   created_at: string;
 };
 

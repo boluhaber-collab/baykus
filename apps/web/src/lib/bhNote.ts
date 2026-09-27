@@ -1,8 +1,8 @@
 /**
- * Parse BizimHesap-imported cari/supplier movement notes.
+ * Parse BizimHesap-imported cari/supplier/account movement notes.
  *
- * Format from import_bizimhesap_cari.py:
- *   BH_IMPORT:{guid}:{idx} | Hareket=… | Belge=… | Odeme=… | [açıklama] | Kalem=…; … | BH_Bakiye=…
+ * Format from import_bizimhesap_cari.py / import_bizimhesap_hesaplar.py:
+ *   BH_IMPORT:{guid}:{idx} | Hareket=… | Belge=… | Odeme=… | Cari=… | Kullanıcı=… | [açıklama] | Kalem=…; … | BH_Bakiye=… | Kaynak=…
  */
 
 import type { ExpandDetailPayload, ExpandLineItem } from "@/components/ExpandableMovementTable";
@@ -14,11 +14,34 @@ export type BhNoteParts = {
   hareket?: string;
   belge?: string;
   odeme?: string;
+  /** Counterparty / Hesap column from BH GetCashTrx (Cari=…). */
+  cari?: string;
+  /** Operator name from BH (Kullanıcı=…). */
+  kullanici?: string;
   aciklama?: string;
   kalemRaw?: string;
   bhBakiye?: string;
+  kaynak?: string;
   /** Human-facing description (açıklama + belge), without metadata keys. */
   displayNote: string | null;
+};
+
+/** BH-style işlem labels for bank movement_type when Hareket= absent. */
+export const BANK_HAREKET_LABELS: Record<string, string> = {
+  deposit: "Para Girişi",
+  withdrawal: "Ödeme",
+  transfer_in: "Para Girişi",
+  transfer_out: "Para Çıkışı",
+  fee: "Masraf",
+};
+
+/** BH-style işlem labels for cash movement_type when Hareket= absent. */
+export const CASH_HAREKET_LABELS: Record<string, string> = {
+  tahsilat: "Tahsilat",
+  odeme: "Ödeme",
+  gider: "Ödeme",
+  transfer_in: "Para Girişi",
+  transfer_out: "Para Çıkışı",
 };
 
 /** Parse amounts from Kalem= entries (English decimal from import) or TR money. */
@@ -72,8 +95,11 @@ export function parseBhNote(note: string | null | undefined): BhNoteParts {
   let hareket: string | undefined;
   let belge: string | undefined;
   let odeme: string | undefined;
+  let cari: string | undefined;
+  let kullanici: string | undefined;
   let kalemRaw: string | undefined;
   let bhBakiye: string | undefined;
+  let kaynak: string | undefined;
   const free: string[] = [];
 
   for (const p of parts) {
@@ -95,6 +121,14 @@ export function parseBhNote(note: string | null | undefined): BhNoteParts {
         odeme = val;
         continue;
       }
+      if (k === "cari" || k === "hesap") {
+        cari = val;
+        continue;
+      }
+      if (k === "kullanici" || k === "kullanıcı" || k === "user") {
+        kullanici = val;
+        continue;
+      }
       if (k === "kalem") {
         kalemRaw = val;
         continue;
@@ -103,11 +137,22 @@ export function parseBhNote(note: string | null | undefined): BhNoteParts {
         bhBakiye = val;
         continue;
       }
+      if (k === "kaynak" || k === "source") {
+        kaynak = val;
+        continue;
+      }
+      // Unknown key=value metadata — skip from free text
+      continue;
     }
     free.push(p);
   }
 
-  const aciklama = free.join(" · ").trim() || undefined;
+  // Drop free fragments that duplicate Cari/Hesap
+  const freeClean = cari
+    ? free.filter((f) => f !== cari && f.toLowerCase() !== cari.toLowerCase())
+    : free;
+
+  const aciklama = freeClean.join(" · ").trim() || undefined;
   const displayBits: string[] = [];
   if (belge) displayBits.push(`Belge ${belge}`);
   if (odeme) displayBits.push(odeme);
@@ -119,9 +164,12 @@ export function parseBhNote(note: string | null | undefined): BhNoteParts {
     hareket,
     belge,
     odeme,
+    cari,
+    kullanici,
     aciklama,
     kalemRaw,
     bhBakiye,
+    kaynak,
     displayNote: displayBits.length ? displayBits.join(" · ") : null,
   };
 }
@@ -177,4 +225,39 @@ export function hareketLabel(
 
 export function belgeFromNote(note: string | null | undefined): string | null {
   return parseBhNote(note).belge || null;
+}
+
+/** Clean Açıklama for account ledger (no BH_IMPORT / Hareket= / Kaynak=). */
+export function accountAciklama(note: string | null | undefined): string {
+  const parsed = parseBhNote(note);
+  if (parsed.aciklama) return parsed.aciklama;
+  if (!parsed.isBh && parsed.displayNote) return parsed.displayNote;
+  return "";
+}
+
+/** Hesap column: Cari= from note, else optional fallback (e.g. customer_name). */
+export function accountHesap(
+  note: string | null | undefined,
+  fallback?: string | null,
+): string {
+  const parsed = parseBhNote(note);
+  return (parsed.cari || fallback || "").trim();
+}
+
+/** Kullanıcı column: Kullanıcı= from note, else created-by name. */
+export function accountKullanici(
+  note: string | null | undefined,
+  createdByName?: string | null,
+): string {
+  const parsed = parseBhNote(note);
+  return (parsed.kullanici || createdByName || "").trim();
+}
+
+/** ISO date → DD.MM.YYYY (BizimHesap style). */
+export function formatTrDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const s = String(iso).slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return s;
+  return `${m[3]}.${m[2]}.${m[1]}`;
 }

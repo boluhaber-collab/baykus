@@ -7,39 +7,34 @@ import AccountDetailLedger from "@/components/AccountDetailLedger";
 import StatusFooter from "@/components/StatusFooter";
 import {
   BankAccount,
-  BankMovement,
+  CashMovement,
+  CashRegister,
   apiFetch,
 } from "@/lib/api";
-import { BANK_HAREKET_LABELS } from "@/lib/bhNote";
+import { CASH_HAREKET_LABELS } from "@/lib/bhNote";
 
 type Panel = "none" | "update" | "in" | "out" | "transfer";
 
-export default function BankDetailPage() {
+export default function CashDetailPage() {
   const params = useParams();
   const id = Number(params.id);
-  const [account, setAccount] = useState<BankAccount | null>(null);
-  const [movements, setMovements] = useState<BankMovement[]>([]);
+  const [register, setRegister] = useState<CashRegister | null>(null);
+  const [movements, setMovements] = useState<CashMovement[]>([]);
   const [allBanks, setAllBanks] = useState<BankAccount[]>([]);
   const [error, setError] = useState("");
   const [okMsg, setOkMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<Panel>("none");
 
-  // Update form
   const [editName, setEditName] = useState("");
-  const [editInstitution, setEditInstitution] = useState("");
-  const [editIban, setEditIban] = useState("");
   const [editOpening, setEditOpening] = useState("0");
-  const [editNotes, setEditNotes] = useState("");
 
-  // Para giriş/çıkış
   const [formAmount, setFormAmount] = useState("");
   const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [formNote, setFormNote] = useState("");
+  const [formTypeOut, setFormTypeOut] = useState<"odeme" | "gider">("odeme");
 
-  // Transfer
   const [transferAmount, setTransferAmount] = useState("");
-  const [transferToCash, setTransferToCash] = useState(true);
   const [transferToBankId, setTransferToBankId] = useState("");
   const [transferNote, setTransferNote] = useState("");
 
@@ -47,20 +42,20 @@ export default function BankDetailPage() {
     if (!Number.isFinite(id)) return;
     setError("");
     try {
-      const [acc, movs, banks] = await Promise.all([
-        apiFetch<BankAccount>(`/api/finance/banks/${id}`),
-        apiFetch<BankMovement[]>(`/api/finance/banks/${id}/movements?limit=2000`),
+      const [regs, movs, banks] = await Promise.all([
+        apiFetch<CashRegister[]>("/api/finance/cash"),
+        apiFetch<CashMovement[]>(`/api/finance/cash/movements?cash_register_id=${id}&limit=2000`),
         apiFetch<BankAccount[]>("/api/finance/banks?active=true"),
       ]);
-      setAccount(acc);
+      const reg = regs.find((r) => r.id === id) || null;
+      setRegister(reg);
       setMovements(movs);
-      setAllBanks(banks.filter((b) => b.id !== id));
-      setEditName(acc.name || "");
-      setEditInstitution(acc.institution || "");
-      setEditIban(acc.iban || "");
-      setEditOpening(String(acc.opening_balance ?? 0));
-      // Keep BH tags; show raw notes for edit (user can adjust free text carefully)
-      setEditNotes(acc.notes || "");
+      setAllBanks(banks);
+      if (reg) {
+        setEditName(reg.name || "");
+        setEditOpening(String(reg.opening_balance ?? 0));
+      }
+      setTransferToBankId((prev) => prev || (banks[0] ? String(banks[0].id) : ""));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
@@ -82,17 +77,14 @@ export default function BankDetailPage() {
     setError("");
     setOkMsg("");
     try {
-      await apiFetch(`/api/finance/banks/${id}`, {
-        method: "PUT",
+      await apiFetch(`/api/finance/cash/${id}`, {
+        method: "PATCH",
         body: JSON.stringify({
           name: editName.trim(),
-          institution: editInstitution.trim() || null,
-          iban: editIban.trim() || null,
           opening_balance: Number(editOpening || 0),
-          notes: editNotes.trim() || null,
         }),
       });
-      setOkMsg("Hesap güncellendi");
+      setOkMsg("Kasa güncellendi");
       setPanel("none");
       await load();
     } catch (err) {
@@ -108,13 +100,16 @@ export default function BankDetailPage() {
     setError("");
     setOkMsg("");
     try {
-      await apiFetch(`/api/finance/banks/${id}/movements`, {
+      const movement_type =
+        direction === "in" ? "tahsilat" : formTypeOut === "gider" ? "gider" : "odeme";
+      await apiFetch("/api/finance/cash/movements", {
         method: "POST",
         body: JSON.stringify({
-          movement_type: direction === "in" ? "deposit" : "withdrawal",
+          movement_type,
           amount: Number(formAmount),
           movement_date: formDate || null,
           note: formNote.trim() || (direction === "in" ? "Para Girişi" : "Para Çıkışı"),
+          cash_register_id: id,
         }),
       });
       setFormAmount("");
@@ -131,6 +126,10 @@ export default function BankDetailPage() {
 
   async function onTransfer(e: FormEvent) {
     e.preventDefault();
+    if (!transferToBankId) {
+      setError("Hedef banka seçin");
+      return;
+    }
     setBusy(true);
     setError("");
     setOkMsg("");
@@ -139,10 +138,10 @@ export default function BankDetailPage() {
         method: "POST",
         body: JSON.stringify({
           amount: Number(transferAmount),
-          from_cash: false,
-          from_bank_account_id: id,
-          to_cash: transferToCash,
-          to_bank_account_id: transferToCash ? null : Number(transferToBankId),
+          from_cash: true,
+          to_cash: false,
+          to_bank_account_id: Number(transferToBankId),
+          cash_register_id: id,
           note: transferNote.trim() || "Transfer",
         }),
       });
@@ -159,7 +158,7 @@ export default function BankDetailPage() {
   }
 
   if (!Number.isFinite(id)) {
-    return <p className="text-red-600">Geçersiz hesap</p>;
+    return <p className="text-red-600">Geçersiz kasa</p>;
   }
 
   const chip = (active: boolean, variant: string) =>
@@ -167,19 +166,11 @@ export default function BankDetailPage() {
 
   const panelNode =
     panel === "update" ? (
-      <form onSubmit={onUpdate} className="rounded border bg-white p-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-        <div className="sm:col-span-2 lg:col-span-3 font-semibold text-slate-800">Hesap Güncelle</div>
+      <form onSubmit={onUpdate} className="rounded border bg-white p-3 grid gap-2 sm:grid-cols-3 text-sm">
+        <div className="sm:col-span-3 font-semibold">Kasa Güncelle</div>
         <label className="text-xs">
-          <span className="text-baykus-muted block mb-0.5">Hesap Adı</span>
+          <span className="text-baykus-muted block mb-0.5">Ad</span>
           <input required className="bk-input" value={editName} onChange={(e) => setEditName(e.target.value)} />
-        </label>
-        <label className="text-xs">
-          <span className="text-baykus-muted block mb-0.5">Kurum</span>
-          <input className="bk-input" value={editInstitution} onChange={(e) => setEditInstitution(e.target.value)} />
-        </label>
-        <label className="text-xs">
-          <span className="text-baykus-muted block mb-0.5">IBAN</span>
-          <input className="bk-input font-mono" value={editIban} onChange={(e) => setEditIban(e.target.value)} />
         </label>
         <label className="text-xs">
           <span className="text-baykus-muted block mb-0.5">Devir Bakiye</span>
@@ -190,10 +181,6 @@ export default function BankDetailPage() {
             value={editOpening}
             onChange={(e) => setEditOpening(e.target.value)}
           />
-        </label>
-        <label className="text-xs sm:col-span-2">
-          <span className="text-baykus-muted block mb-0.5">Not</span>
-          <input className="bk-input" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
         </label>
         <div className="flex items-end gap-2">
           <button type="submit" disabled={busy} className="bk-btn bk-btn-primary text-xs">
@@ -212,8 +199,21 @@ export default function BankDetailPage() {
         }`}
       >
         <div className="sm:col-span-2 lg:col-span-4 font-semibold">
-          {panel === "in" ? "Para Girişi" : "Para Çıkışı"}
+          {panel === "in" ? "Para Girişi / Tahsilat" : "Para Çıkışı / Ödeme"}
         </div>
+        {panel === "out" ? (
+          <label className="text-xs">
+            <span className="block mb-0.5 opacity-80">Tip</span>
+            <select
+              className="bk-input"
+              value={formTypeOut}
+              onChange={(e) => setFormTypeOut(e.target.value as "odeme" | "gider")}
+            >
+              <option value="odeme">Ödeme</option>
+              <option value="gider">Gider</option>
+            </select>
+          </label>
+        ) : null}
         <label className="text-xs">
           <span className="block mb-0.5 opacity-80">Tutar *</span>
           <input
@@ -230,7 +230,7 @@ export default function BankDetailPage() {
           <span className="block mb-0.5 opacity-80">Tarih</span>
           <input type="date" className="bk-input" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
         </label>
-        <label className="text-xs sm:col-span-2">
+        <label className="text-xs">
           <span className="block mb-0.5 opacity-80">Açıklama</span>
           <input className="bk-input" value={formNote} onChange={(e) => setFormNote(e.target.value)} />
         </label>
@@ -248,7 +248,7 @@ export default function BankDetailPage() {
         onSubmit={onTransfer}
         className="rounded border border-amber-200 bg-amber-50 p-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm"
       >
-        <div className="sm:col-span-2 lg:col-span-4 font-semibold text-amber-900">Bu hesaptan transfer</div>
+        <div className="sm:col-span-2 lg:col-span-4 font-semibold text-amber-900">Kasadan bankaya transfer</div>
         <label className="text-xs">
           <span className="block mb-0.5 text-amber-800">Tutar *</span>
           <input
@@ -262,21 +262,12 @@ export default function BankDetailPage() {
           />
         </label>
         <label className="text-xs">
-          <span className="block mb-0.5 text-amber-800">Hedef</span>
+          <span className="block mb-0.5 text-amber-800">Hedef banka</span>
           <select
             className="bk-input"
-            value={transferToCash ? "cash" : transferToBankId}
-            onChange={(e) => {
-              if (e.target.value === "cash") {
-                setTransferToCash(true);
-                setTransferToBankId("");
-              } else {
-                setTransferToCash(false);
-                setTransferToBankId(e.target.value);
-              }
-            }}
+            value={transferToBankId}
+            onChange={(e) => setTransferToBankId(e.target.value)}
           >
-            <option value="cash">TL Kasa</option>
             {allBanks.map((b) => (
               <option key={b.id} value={String(b.id)}>
                 {b.name}
@@ -304,11 +295,11 @@ export default function BankDetailPage() {
       <AccountDetailLedger
         breadcrumbHref="/finance/banks"
         breadcrumbLabel="Hesaplarım"
-        title={account?.name || "…"}
-        subtitle={account?.iban || account?.institution || null}
-        accountType={account?.account_type || null}
-        balance={Number(account?.balance ?? 0)}
-        error={error}
+        title={register?.name || "…"}
+        subtitle="Kasa"
+        accountType="Kasa"
+        balance={Number(register?.balance ?? 0)}
+        error={error || (!register && !error ? "" : !register ? "Kasa bulunamadı" : "")}
         okMsg={okMsg}
         actions={
           <>
@@ -334,7 +325,7 @@ export default function BankDetailPage() {
         }
         panel={panelNode}
         movements={movements}
-        hareketFallback={BANK_HAREKET_LABELS}
+        hareketFallback={CASH_HAREKET_LABELS}
       />
       <StatusFooter onRefresh={load} />
     </>

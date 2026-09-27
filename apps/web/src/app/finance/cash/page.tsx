@@ -146,11 +146,19 @@ export default function CashPage() {
           Tüm geçmiş
         </button>
         {main && (
-          <div className="ml-auto rounded border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs">
-            <span className="text-emerald-800">{main.name} · Açılış </span>
-            <strong className="tabular-nums">{formatMoney(Number(main.opening_balance))}</strong>
-            <span className="text-emerald-800"> · Bakiye </span>
-            <strong className="tabular-nums text-emerald-900">{formatMoney(Number(main.balance))}</strong>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Link
+              href={`/finance/cash/${main.id}`}
+              className="bk-btn bk-btn-ghost text-xs"
+            >
+              Kasa ekstresi
+            </Link>
+            <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs">
+              <span className="text-emerald-800">{main.name} · Açılış </span>
+              <strong className="tabular-nums">{formatMoney(Number(main.opening_balance))}</strong>
+              <span className="text-emerald-800"> · Bakiye </span>
+              <strong className="tabular-nums text-emerald-900">{formatMoney(Number(main.balance))}</strong>
+            </div>
           </div>
         )}
       </div>
