@@ -61,6 +61,7 @@ export default function ExpensesPage() {
       if (from) params.set("date_from", from);
       if (statusFilter !== "Tümü") params.set("status_filter", statusFilter);
       if (q.trim()) params.set("q", q.trim());
+      params.set("limit", "2000");
       const [e, c] = await Promise.all([
         apiFetch<Expense[]>(`/api/finance/expenses?${params}`),
         apiFetch<ExpenseCategory[]>("/api/finance/expenses/categories"),

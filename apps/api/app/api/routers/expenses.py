@@ -190,7 +190,7 @@ def list_expenses(
     status_filter: str | None = None,
     q: str | None = None,
     skip: int = 0,
-    limit: int = 200,
+    limit: int = 2000,
 ) -> list[ExpenseOut]:
     query = db.query(Expense).options(joinedload(Expense.category))
     if category_id:
