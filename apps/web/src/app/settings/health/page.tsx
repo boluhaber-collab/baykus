@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { getApiBase } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Check = { name: string; status: string; detail?: string };
 type Issue = {
@@ -80,10 +81,10 @@ export default function HealthPage() {
   const countEntries = Object.entries(data?.counts || {});
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Sistem / Veri Sağlık Merkezi</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Sistem / Veri Sağlık Merkezi</h2>
           <p className="text-xs text-baykus-muted">
             API: {base || "—"} · masaüstü veri_saglik + sistem_saglik · salt okunur
           </p>
@@ -296,6 +297,7 @@ export default function HealthPage() {
           {JSON.stringify(data, null, 2)}
         </pre>
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

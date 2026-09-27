@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Candidate = {
   id: number;
@@ -169,10 +170,10 @@ export default function WhatsAppTrackPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">WhatsApp Takip Merkezi</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">WhatsApp Takip Merkezi</h2>
           <p className="text-xs text-baykus-muted">Aday listesi · şablon · wa.me (Selenium yok)</p>
         </div>
         <div className="flex gap-2">
@@ -307,6 +308,7 @@ export default function WhatsAppTrackPage() {
           </div>
         </div>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CriticalStockItem, apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function CriticalStockPage() {
   const [items, setItems] = useState<CriticalStockItem[]>([]);
@@ -44,14 +45,16 @@ export default function CriticalStockPage() {
   const zeroCount = filtered.filter((r) => r.stock_qty <= 0).length;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/stock" className="text-sm text-baykus-600 hover:underline">
-            ← Stok
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-1">Kritik Stok</h1>
-          <p className="text-slate-500 text-sm">Ürün & Stok Merkezi › Kritik Stok · eşik altı ürün / varyant</p>
+          <div className="text-[11px] text-baykus-muted mb-0.5">
+            <Link href="/stock" className="hover:underline text-baykus-primary">Stok</Link>
+            <span className="mx-1">/</span>
+            <span>Kritik Stok</span>
+          </div>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Kritik Stok</h1>
+          <p className="text-baykus-muted text-[11px]">Eşik altı ürün / varyant</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/products" className="bk-btn bk-btn-ghost text-xs" style={{ background: "#06b6d4", color: "#fff" }}>
@@ -71,18 +74,27 @@ export default function CriticalStockPage() {
 
       {error && <div className="mb-2 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
 
-      <div className="grid sm:grid-cols-3 gap-2">
-        <div className="rounded border bg-red-50 border-red-200 px-3 py-2">
-          <div className="text-[11px] text-red-800">Kritik kayıt</div>
-          <div className="text-xl font-bold text-red-900">{filtered.length}</div>
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+          <span className="bk-kpi-icon">⚠</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Kritik kayıt</div>
+            <div className="bk-kpi-value">{filtered.length}</div>
+          </div>
         </div>
-        <div className="rounded border bg-amber-50 border-amber-200 px-3 py-2">
-          <div className="text-[11px] text-amber-800">Sıfır / eksi stok</div>
-          <div className="text-xl font-bold text-amber-900">{zeroCount}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+          <span className="bk-kpi-icon">0</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Sıfır / eksi</div>
+            <div className="bk-kpi-value">{zeroCount}</div>
+          </div>
         </div>
-        <div className="rounded border bg-slate-50 border-slate-200 px-3 py-2">
-          <div className="text-[11px] text-slate-600">Toplam (filtre öncesi)</div>
-          <div className="text-xl font-bold text-slate-900">{items.length}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">☰</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam ham</div>
+            <div className="bk-kpi-value">{items.length}</div>
+          </div>
         </div>
       </div>
 
@@ -102,27 +114,27 @@ export default function CriticalStockPage() {
         </select>
       </div>
 
-      <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+      <div className="bk-table-wrap">
+        <table className="bk-table">
+          <thead>
             <tr>
-              <th className="px-4 py-3">Ürün</th>
-              <th className="px-4 py-3">Varyant</th>
-              <th className="px-4 py-3">Tedarikçi</th>
-              <th className="px-4 py-3">Kategori</th>
-              <th className="px-4 py-3 text-right">Stok</th>
-              <th className="px-4 py-3 text-right">Eşik</th>
-              <th className="px-4 py-3 text-right">Alış</th>
-              <th className="px-4 py-3">Depo</th>
+              <th>Ürün</th>
+              <th>Varyant</th>
+              <th>Tedarikçi</th>
+              <th>Kategori</th>
+              <th className="text-right">Stok</th>
+              <th className="text-right">Eşik</th>
+              <th className="text-right">Alış</th>
+              <th>Depo</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((row) => (
               <tr
                 key={`${row.product_id}-${row.variant_id ?? "p"}`}
-                className="border-t border-slate-100 bg-red-50/30"
+                className="bg-red-50/30"
               >
-                <td className="px-4 py-3">
+                <td className="">
                   <Link
                     href={`/products/${row.product_id}`}
                     className="font-medium text-baykus-700 hover:underline"
@@ -131,25 +143,25 @@ export default function CriticalStockPage() {
                   </Link>
                   <div className="font-mono text-xs text-slate-400">{row.product_sku}</div>
                 </td>
-                <td className="px-4 py-3">
+                <td className="">
                   {row.variant_name || "—"}
                   {row.variant_sku && (
                     <div className="font-mono text-xs text-slate-400">{row.variant_sku}</div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-xs">{row.supplier_name || "—"}</td>
-                <td className="px-4 py-3">{row.category || "—"}</td>
-                <td className="px-4 py-3 text-right font-semibold text-red-700 tabular-nums">{row.stock_qty}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{row.critical_stock_threshold}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-xs">
+                <td className="text-xs">{row.supplier_name || "—"}</td>
+                <td className="">{row.category || "—"}</td>
+                <td className="text-right font-semibold text-red-700 tabular-nums">{row.stock_qty}</td>
+                <td className="text-right tabular-nums">{row.critical_stock_threshold}</td>
+                <td className="text-right tabular-nums text-xs">
                   {formatMoney(Number(row.purchase_price || 0))}
                 </td>
-                <td className="px-4 py-3">{row.warehouse || "—"}</td>
+                <td className="">{row.warehouse || "—"}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={8} className="text-center text-baykus-muted py-6">
                   Kritik stok kaydı yok
                 </td>
               </tr>
@@ -157,6 +169,7 @@ export default function CriticalStockPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

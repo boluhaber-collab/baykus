@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { OrderListItem, apiFetch, downloadAuthFile, downloadPdf } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Doc = {
   id: number;
@@ -107,10 +108,10 @@ export default function ArchiveCenterPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Belge Arşiv Merkezi</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Belge Arşiv Merkezi</h2>
           <p className="text-xs text-baykus-muted">
             Yüklenen PDF + sipariş iş emri PDF ·{" "}
             <Link href="/documents" className="text-baykus-primary hover:underline">
@@ -165,21 +166,30 @@ export default function ArchiveCenterPage() {
             </button>
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-2">
-            <div className="bk-card px-3 py-2">
-              <div className="text-[11px] text-baykus-muted">Belge</div>
-              <div className="text-xl font-bold">{docs.length}</div>
-            </div>
-            <div className="bk-card px-3 py-2">
-              <div className="text-[11px] text-baykus-muted">PDF</div>
-              <div className="text-xl font-bold">
-                {items.filter((d) => (d.original_filename || "").toLowerCase().endsWith(".pdf")).length}
+          <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+            <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+              <span className="bk-kpi-icon">📄</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Belge</div>
+                <div className="bk-kpi-value">{docs.length}</div>
               </div>
             </div>
-            <div className="bk-card px-3 py-2">
-              <div className="text-[11px] text-baykus-muted">Toplam boyut</div>
-              <div className="text-xl font-bold">
-                {(docs.reduce((s, d) => s + (d.size_bytes || 0), 0) / 1024).toFixed(0)} KB
+            <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+              <span className="bk-kpi-icon">PDF</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">PDF</div>
+                <div className="bk-kpi-value">
+                  {items.filter((d) => (d.original_filename || "").toLowerCase().endsWith(".pdf")).length}
+                </div>
+              </div>
+            </div>
+            <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+              <span className="bk-kpi-icon">💾</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Toplam boyut</div>
+                <div className="bk-kpi-value">
+                  {(docs.reduce((s, d) => s + (d.size_bytes || 0), 0) / 1024).toFixed(0)} KB
+                </div>
               </div>
             </div>
           </div>
@@ -288,6 +298,7 @@ export default function ArchiveCenterPage() {
           </div>
         </>
       )}
+      <StatusFooter onRefresh={() => { void loadDocs(); void loadOrders(); }} />
     </div>
   );
 }

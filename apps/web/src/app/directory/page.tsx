@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Entry = {
   kind: string;
@@ -128,10 +129,10 @@ export default function DirectoryPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Fihrist</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Fihrist</h2>
           <p className="text-xs text-baykus-muted">Müşteri / Tedarikçi sekmeleri · canlı senkron · arama / düzenle</p>
         </div>
         <button type="button" className="bk-btn bk-btn-primary text-xs" disabled={syncing} onClick={syncRefresh}>
@@ -268,6 +269,7 @@ export default function DirectoryPage() {
           Müşteri / tedarikçi kartları kendi merkezlerinden düzenlenir — Düzenle ilgili kayda gider. Fihrist canlı senkron okur.
         </p>
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

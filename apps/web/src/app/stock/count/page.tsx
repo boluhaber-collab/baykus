@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Warehouse = {
   id: number;
@@ -132,7 +133,7 @@ function StockCountPageInner() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-xs text-baykus-muted mb-1">
             <Link href="/products" className="text-baykus-primary hover:underline">
@@ -145,10 +146,10 @@ function StockCountPageInner() {
             <span className="mx-1">/</span>
             <span className="font-medium text-baykus-text">Stok Sayımı</span>
           </div>
-          <h1 className="text-xl font-bold text-baykus-text">
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">
             {selected ? `${selected.name} Stok Sayımı` : "Stok Sayımı"}
           </h1>
-          <p className="text-sm text-baykus-muted">
+          <p className="text-[11px] text-baykus-muted">
             Depo seçin · sistem miktarını kontrol edin · sayılanı girin · Kaydet
           </p>
         </div>
@@ -263,6 +264,7 @@ function StockCountPageInner() {
           </table>
         </div>
       </div>
+      <StatusFooter onRefresh={() => { if (warehouseId !== "") void loadLines(Number(warehouseId)); }} />
     </div>
   );
 }
@@ -270,7 +272,7 @@ function StockCountPageInner() {
 
 export default function StockCountPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-baykus-muted">Yükleniyor…</p>}>
+    <Suspense fallback={<p className="text-[11px] text-baykus-muted">Yükleniyor…</p>}>
       <StockCountPageInner />
     </Suspense>
   );

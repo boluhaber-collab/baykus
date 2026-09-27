@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { BackupInfo, apiFetch, downloadAuthFile } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Checklist = {
   ok: boolean;
@@ -107,13 +108,17 @@ function BackupsPageInner() {
   }
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Yedekleme Yönetimi</h1>
-          <p className="text-sm text-slate-500">
-            SQLite/DB + uploads → zip · indirme · Yedek Test Et · güvenli geri yükleme kontrol listesi
-            (otomatik restore / DPAPI yok)
+          <div className="text-[11px] text-baykus-muted mb-0.5">
+            <a href="/settings" className="hover:underline text-baykus-primary">Ayarlar</a>
+            <span className="mx-1">/</span>
+            <span>Yedekleme</span>
+          </div>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Yedekleme Yönetimi</h1>
+          <p className="text-baykus-muted text-[11px]">
+            SQLite/DB + uploads → zip · indirme · kontrol listesi (otomatik restore / DPAPI yok)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -263,6 +268,7 @@ function BackupsPageInner() {
           )}
         </div>
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Warehouse = {
   id: number;
@@ -171,10 +172,10 @@ export default function WarehousesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Depolar</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Depolar</h2>
           <p className="text-xs text-baykus-muted">
             Depo Tanımı · stok görünümü · Depolar Arası Transfer
           </p>
@@ -293,7 +294,7 @@ export default function WarehousesPage() {
       </div>
 
       {selected && (
-        <div className="space-y-3">
+        <div className="space-y-2 pb-2">
           <h3 className="text-sm font-semibold">{selected.name} — stok</h3>
           <div className="bk-table-wrap">
             <table className="bk-table">
@@ -418,6 +419,7 @@ export default function WarehousesPage() {
           </form>
         </div>
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

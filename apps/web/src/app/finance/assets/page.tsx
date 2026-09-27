@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Asset, apiFetch, formatMoney, getApiBase, getToken } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const STATUSES = ["Aktif", "Bakımda", "Arızalı", "Satıldı", "Hurda"] as const;
 
@@ -144,10 +145,10 @@ export default function AssetsPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Demirbaşlar</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Demirbaşlar</h2>
           <p className="text-xs text-baykus-muted">Finans › Demirbaşlar · CRUD + rapor</p>
         </div>
         <button type="button" className="bk-btn text-xs text-white" style={{ background: "#d39e00" }} onClick={downloadPdf}>
@@ -156,10 +157,28 @@ export default function AssetsPage() {
       </div>
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="flex flex-wrap gap-4 text-sm">
-        <span className="font-semibold">Toplam Demirbaş: {summary.count}</span>
-        <span className="font-semibold text-teal-800">Güncel Değer: {formatMoney(summary.value)}</span>
-        <span className="font-semibold text-red-700">Yaklaşan Bakım: {summary.soon}</span>
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">▣</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam demirbaş</div>
+            <div className="bk-kpi-value">{summary.count}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Güncel değer</div>
+            <div className="bk-kpi-value truncate">{formatMoney(summary.value)}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+          <span className="bk-kpi-icon">🔧</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Yaklaşan bakım</div>
+            <div className="bk-kpi-value">{summary.soon}</div>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={submit} className="bk-card p-3 grid md:grid-cols-4 gap-2 text-sm">
@@ -291,6 +310,7 @@ export default function AssetsPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

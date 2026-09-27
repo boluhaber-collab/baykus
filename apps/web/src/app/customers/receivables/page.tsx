@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OpenBalanceOrder, ReceivableItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type OpenBalances = {
   open_orders?: OpenBalanceOrder[];
@@ -56,10 +57,10 @@ export default function CustomerReceivablesPage() {
   }, [parties, q]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Açık Alacaklar</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Açık Alacaklar</h2>
           <p className="text-xs text-baykus-muted">Müşteri Merkezi › Açık Alacaklar · sipariş kalan + cari bakiye</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -80,26 +81,29 @@ export default function CustomerReceivablesPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="grid sm:grid-cols-3 gap-2">
-        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2">
-          <div className="text-[11px] text-amber-800">Sipariş açık bakiye</div>
-          <div className="text-xl font-bold text-amber-900 tabular-nums">{formatMoney(ordersTotal)}</div>
-          <div className="text-[11px] text-amber-700">{orders.length} sipariş</div>
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+          <span className="bk-kpi-icon">🧾</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Sipariş açık ({orders.length})</div>
+            <div className="bk-kpi-value truncate">{formatMoney(ordersTotal)}</div>
+          </div>
         </div>
-        <div className="rounded border border-orange-200 bg-orange-50 px-3 py-2">
-          <div className="text-[11px] text-orange-800">Cari alacak toplam</div>
-          <div className="text-xl font-bold text-orange-900 tabular-nums">{formatMoney(partyTotal)}</div>
-          <div className="text-[11px] text-orange-700">{parties.length} müşteri</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Cari alacak ({parties.length})</div>
+            <div className="bk-kpi-value truncate">{formatMoney(partyTotal)}</div>
+          </div>
         </div>
-        <div className="rounded border bg-white px-3 py-2">
-          <div className="text-[11px] text-baykus-muted">Hızlı işlem</div>
-          <div className="flex flex-wrap gap-1 mt-1">
-            <Link href="/sales/create" className="bk-btn text-[11px]" style={{ background: "#198754", color: "#fff" }}>
-              + Satış
-            </Link>
-            <Link href="/finance/cash" className="bk-btn text-[11px]" style={{ background: "#0f766e", color: "#fff" }}>
-              Kasa tahsilat
-            </Link>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+          <span className="bk-kpi-icon">⚡</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Hızlı işlem</div>
+            <div className="flex justify-end gap-1 mt-1">
+              <Link href="/sales/create" className="bk-btn text-[10px] bg-white/20 text-white border-white/30">+ Satış</Link>
+              <Link href="/finance/cash" className="bk-btn text-[10px] bg-white/20 text-white border-white/30">Kasa</Link>
+            </div>
           </div>
         </div>
       </div>
@@ -232,6 +236,7 @@ export default function CustomerReceivablesPage() {
           </table>
         </div>
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

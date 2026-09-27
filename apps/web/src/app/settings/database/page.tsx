@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type DbSettings = {
   postgres_host?: string;
@@ -65,10 +66,10 @@ export default function DatabaseSettingsPage() {
   ];
 
   return (
-    <div className="space-y-4 max-w-xl">
-      <div className="flex flex-wrap justify-between gap-2">
+    <div className="space-y-2 pb-2 max-w-xl">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Merkezi DB / VPS</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Merkezi DB / VPS</h2>
           <p className="text-xs text-baykus-muted">
             Host alanları · şifre yok · SQLite yerel bootstrap korunur
           </p>
@@ -149,6 +150,7 @@ export default function DatabaseSettingsPage() {
           Kaydet
         </button>
       </form>
+      <StatusFooter />
     </div>
   );
 }

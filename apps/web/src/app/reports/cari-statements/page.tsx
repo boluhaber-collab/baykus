@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, downloadReportCsv, formatMoney, getApiBase, getToken } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
+import { ReportHeader } from "@/components/reports/ReportChrome";
 
 type CustomerOpt = { id: number; name: string; company: string | null; balance: number };
 type Move = { id: number; date: string | null; type: string; debit: number; credit: number; balance: number; note: string | null };
@@ -110,11 +112,11 @@ export default function CariStatementsPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <div>
-        <h2 className="text-base font-bold">Cari Dökümler</h2>
-        <p className="text-xs text-baykus-muted">Raporlar › Cari Döküm · CSV + basit PDF + yazdırılabilir HTML (masaüstü ReportLab twin değil)</p>
-      </div>
+    <div className="space-y-2 pb-2">
+      <ReportHeader
+        title="Cari Dökümler"
+        subtitle="CSV + PDF + yazdırılabilir HTML (masaüstü ReportLab twin değil)"
+      />
       <div className="bk-filter-bar">
         <input
           className="bk-input max-w-[160px]"
@@ -201,6 +203,7 @@ export default function CariStatementsPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

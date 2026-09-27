@@ -1,6 +1,6 @@
 """ReportLab PDF builders for quotes, work orders, cari, price lists, vouchers.
 
-Closer to desktop layout (headers / logo / totals) — still not a ReportLab twin.
+Batch 22 polish: double header rule, boxed totals, signature rows, navy accents — still not a ReportLab twin.
 """
 
 from __future__ import annotations
@@ -154,8 +154,9 @@ def _company_header(settings: dict[str, str], accent: str = "#0f172a") -> list:
     else:
         bits = list(left_bits)
 
-    bits.append(Spacer(1, 4))
-    bits.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor(accent), spaceAfter=8))
+    bits.append(Spacer(1, 3))
+    bits.append(HRFlowable(width="100%", thickness=2.0, color=colors.HexColor(accent), spaceAfter=1, spaceBefore=0))
+    bits.append(HRFlowable(width="100%", thickness=0.4, color=colors.HexColor("#94a3b8"), spaceAfter=8, spaceBefore=1))
     return bits
 
 
@@ -199,25 +200,60 @@ def _data_table(rows: list[list[Any]], col_widths: list, header_bg: str) -> Tabl
 
 
 def _totals_box(rows: list[list[str]], accent: str = "#0f172a") -> Table:
-    t = Table(rows, colWidths=[120 * mm, 50 * mm])
+    """Right-aligned totals block with navy/accent last row (desktop ReportLab-inspired)."""
+    t = Table(rows, colWidths=[115 * mm, 55 * mm])
     t.setStyle(
         TableStyle(
             [
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
                 ("ALIGN", (1, 0), (1, -1), "RIGHT"),
                 ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#64748b")),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("TEXTCOLOR", (1, 0), (1, -1), colors.HexColor("#0f172a")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor(accent)),
+                ("BACKGROUND", (0, 0), (-1, -2), colors.HexColor("#f8fafc")),
                 ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
                 ("FONTSIZE", (0, -1), (-1, -1), 11),
-                ("TEXTCOLOR", (0, -1), (-1, -1), colors.HexColor(accent)),
-                ("LINEABOVE", (0, -1), (-1, -1), 1, colors.HexColor(accent)),
-                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f1f5f9")),
+                ("TEXTCOLOR", (0, -1), (-1, -1), colors.white),
+                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor(accent)),
+                ("LINEABOVE", (0, -1), (-1, -1), 1.2, colors.HexColor(accent)),
             ]
         )
     )
     return t
 
+
+def _signature_row(labels: list[str], accent: str = "#1e3a5f") -> list:
+    """Signature / approval line row — navy accent underlines (not a desktop twin)."""
+    cols = max(len(labels), 1)
+    width = 180 * mm / cols
+    cells = []
+    for lab in labels:
+        cells.append(
+            [
+                Paragraph(f'<font color="#475569" size="8">{lab}</font>', _styles()["small"]),
+                Spacer(1, 14),
+                HRFlowable(width="90%", thickness=0.8, color=colors.HexColor(accent), spaceBefore=0, spaceAfter=2),
+                Paragraph('<font color="#94a3b8" size="7">İmza / Tarih</font>', _styles()["small"]),
+            ]
+        )
+    t = Table([cells], colWidths=[width] * cols)
+    t.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOX", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+            ]
+        )
+    )
+    return [Spacer(1, 14), t]
 
 def build_quote_pdf(quote: Any, settings: dict[str, str]) -> bytes:
     buf = BytesIO()
@@ -275,8 +311,9 @@ def build_quote_pdf(quote: Any, settings: dict[str, str]) -> bytes:
     if quote.notes:
         body.append(Spacer(1, 10))
         body.append(Paragraph(f"<b>Not:</b> {quote.notes}", st["body"]))
-    body.append(Spacer(1, 8))
-    body.append(Paragraph("Baykuş Baskı — teklif belgesi", st["small"]))
+    body.extend(_signature_row(["Hazırlayan", "Müşteri onay"], accent="#0f172a"))
+    body.append(Spacer(1, 6))
+    body.append(Paragraph("Baykuş Baskı — teklif belgesi (web PDF · ReportLab twin değil)", st["small"]))
     doc.build(body)
     return buf.getvalue()
 
@@ -348,15 +385,9 @@ def build_work_order_pdf(order: Any, settings: dict[str, str]) -> bytes:
     if order.notes:
         body.append(Spacer(1, 8))
         body.append(Paragraph(f"<b>Not:</b> {order.notes}", st["body"]))
-    body.append(Spacer(1, 20))
-    sig = Table(
-        [["Üretim: ____________________", "Kontrol: ____________________", "Teslim: ____________________"]],
-        colWidths=[60 * mm, 60 * mm, 56 * mm],
-    )
-    sig.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8), ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#475569"))]))
-    body.append(sig)
+    body.extend(_signature_row(["Üretim", "Kontrol", "Teslim"], accent="#1e3a5f"))
     body.append(Spacer(1, 8))
-    body.append(Paragraph("Baykuş Baskı — iş emri (web PDF)", st["small"]))
+    body.append(Paragraph("Baykuş Baskı — iş emri (web PDF · ReportLab twin değil)", st["small"]))
     doc.build(body)
     return buf.getvalue()
 
@@ -368,8 +399,8 @@ def build_assets_report_pdf(rows: list[dict[str, Any]], settings: dict[str, str]
     )
     st = _styles()
     body: list = []
-    body.extend(_company_header(settings or {}, "#0f766e"))
-    body.append(Paragraph("Demirbaş Raporu", st["doc_title"]))
+    body.extend(_company_header(settings or {}, "#1e3a5f"))
+    body.append(Paragraph("DEMİRBAŞ RAPORU", st["doc_title"]))
     total = sum(Decimal(str(r.get("current_value") or 0)) for r in rows)
     body.append(Paragraph(f"Toplam kayıt: {len(rows)} · Güncel değer: <b>{_money(total)}</b>", st["body"]))
     body.append(Spacer(1, 8))
@@ -384,11 +415,14 @@ def build_assets_report_pdf(rows: list[dict[str, Any]], settings: dict[str, str]
                 str(r.get("maintenance_date") or "")[:12],
             ]
         )
-    t = _data_table(table_rows, [55 * mm, 30 * mm, 25 * mm, 30 * mm, 28 * mm], "#0f766e")
+    t = _data_table(table_rows, [55 * mm, 30 * mm, 25 * mm, 30 * mm, 28 * mm], "#1e3a5f")
     t.setStyle(TableStyle([("ALIGN", (3, 1), (3, -1), "RIGHT")]))
     body.append(t)
     body.append(Spacer(1, 8))
-    body.append(_totals_box([["Kayıt", str(len(rows))], ["Toplam değer", _money(total)]], accent="#0f766e"))
+    body.append(_totals_box([["Kayıt", str(len(rows))], ["Toplam değer", _money(total)]], accent="#1e3a5f"))
+    body.extend(_signature_row(["Hazırlayan", "Kontrol / Onay"], accent="#1e3a5f"))
+    body.append(Spacer(1, 6))
+    body.append(Paragraph("Baykuş Baskı — demirbaş raporu (web PDF · ReportLab twin değil)", st["small"]))
     doc.build(body)
     return buf.getvalue()
 
@@ -443,13 +477,7 @@ def build_cari_statement_pdf(
             accent="#1e3a5f",
         )
     )
-    body.append(Spacer(1, 14))
-    sig = Table(
-        [["Müşteri imza: ____________________", "Firma imza: ____________________"]],
-        colWidths=[90 * mm, 90 * mm],
-    )
-    sig.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8)]))
-    body.append(sig)
+    body.extend(_signature_row(["Müşteri imza", "Firma imza"], accent="#1e3a5f"))
     body.append(Spacer(1, 8))
     body.append(
         Paragraph(
@@ -468,8 +496,8 @@ def build_price_list_pdf(list_name: str, rows: list[dict[str, Any]], settings: d
     )
     st = _styles()
     body: list = []
-    body.extend(_company_header(settings or {}, "#0f766e"))
-    body.append(Paragraph(f"Fiyat Listesi — {list_name}", st["doc_title"]))
+    body.extend(_company_header(settings or {}, "#1e3a5f"))
+    body.append(Paragraph(f"FİYAT LİSTESİ — {list_name}", st["doc_title"]))
     body.append(Paragraph(f"Kalem: <b>{len(rows)}</b>", st["body"]))
     body.append(Spacer(1, 8))
     table_rows = [["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı"]]
@@ -484,13 +512,14 @@ def build_price_list_pdf(list_name: str, rows: list[dict[str, Any]], settings: d
                 _money(r.get("embroidered_price")),
             ]
         )
-    t = _data_table(table_rows, [48 * mm, 30 * mm, 26 * mm, 26 * mm, 26 * mm, 26 * mm], "#0f766e")
+    t = _data_table(table_rows, [48 * mm, 30 * mm, 26 * mm, 26 * mm, 26 * mm, 26 * mm], "#1e3a5f")
     t.setStyle(TableStyle([("ALIGN", (2, 1), (-1, -1), "RIGHT")]))
     body.append(t)
     body.append(Spacer(1, 8))
-    body.append(_totals_box([["Kalem sayısı", str(len(rows))], ["Liste", str(list_name)[:40]]], accent="#0f766e"))
+    body.append(_totals_box([["Kalem sayısı", str(len(rows))], ["Liste", str(list_name)[:40]]], accent="#1e3a5f"))
+    body.extend(_signature_row(["Hazırlayan", "Onay"], accent="#1e3a5f"))
     body.append(Spacer(1, 6))
-    body.append(Paragraph("Baykuş Baskı — fiyat listesi (web PDF)", st["small"]))
+    body.append(Paragraph("Baykuş Baskı — fiyat listesi (web PDF · ReportLab twin değil)", st["small"]))
     doc.build(body)
     return buf.getvalue()
 
@@ -551,14 +580,8 @@ def build_supplier_voucher_pdf(
             st["body"],
         )
     )
-    body.append(Spacer(1, 20))
-    sig = Table(
-        [["Hazırlayan: ____________________", "Onay: ____________________"]],
-        colWidths=[90 * mm, 90 * mm],
-    )
-    sig.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 8)]))
-    body.append(sig)
+    body.extend(_signature_row(["Hazırlayan", "Onay"], accent="#0f766e"))
     body.append(Spacer(1, 6))
-    body.append(Paragraph("Baykuş Baskı — tedarikçi fişi (web PDF)", st["small"]))
+    body.append(Paragraph("Baykuş Baskı — tedarikçi fişi (web PDF · ReportLab twin değil)", st["small"]))
     doc.build(body)
     return buf.getvalue()

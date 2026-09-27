@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const CARDS = [
   {
@@ -80,11 +81,11 @@ export default function CommunicationHubPage() {
   }, [load]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold">Müşteri İletişim</h2>
-          <p className="text-sm text-baykus-muted">
+          <p className="text-[11px] text-baykus-muted">
             Müşteri iletişimi, kampanyalar, mesaj taslakları ve rehber — Selenium yok, wa.me + taslak.
           </p>
         </div>
@@ -156,13 +157,14 @@ export default function CommunicationHubPage() {
         {CARDS.map((c) => (
           <div key={c.href + c.title} className="bk-card p-4 flex flex-col gap-3">
             <div className="font-semibold text-baykus-text">{c.title}</div>
-            <p className="text-sm text-baykus-muted flex-1">{c.desc}</p>
+            <p className="text-[11px] text-baykus-muted flex-1">{c.desc}</p>
             <Link href={c.href} className="bk-btn text-sm text-white self-start" style={{ background: c.color }}>
               Aç →
             </Link>
           </div>
         ))}
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

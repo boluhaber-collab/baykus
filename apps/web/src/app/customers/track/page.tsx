@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Customer, apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Event = {
   type: string;
@@ -75,10 +76,10 @@ export default function CustomerTrackPage() {
   const focus = data?.focus;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Müşteri Takibi</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Müşteri Takibi</h2>
           <p className="text-xs text-baykus-muted">Timeline · açık alacaklar · notlar</p>
         </div>
         <div className="flex gap-2">
@@ -109,19 +110,26 @@ export default function CustomerTrackPage() {
       </div>
 
       {data?.summary && (
-        <div className="grid sm:grid-cols-3 gap-2">
-          <div className="bk-card px-3 py-2">
-            <div className="text-[11px] text-baykus-muted">Hareket</div>
-            <div className="text-xl font-bold">{data.summary.event_count}</div>
+        <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          <div className="bk-kpi-card" style={{ backgroundColor: "#2563eb" }}>
+            <span className="bk-kpi-icon">☰</span>
+            <div className="min-w-0 flex-1 text-right">
+              <div className="bk-kpi-label">Hareket</div>
+              <div className="bk-kpi-value">{data.summary.event_count}</div>
+            </div>
           </div>
-          <div className="bk-card px-3 py-2">
-            <div className="text-[11px] text-baykus-muted">Açık alacaklı</div>
-            <div className="text-xl font-bold text-amber-700">{data.summary.receivable_count}</div>
+          <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+            <span className="bk-kpi-icon">👤</span>
+            <div className="min-w-0 flex-1 text-right">
+              <div className="bk-kpi-label">Açık alacaklı</div>
+              <div className="bk-kpi-value">{data.summary.receivable_count}</div>
+            </div>
           </div>
-          <div className="bk-card px-3 py-2">
-            <div className="text-[11px] text-baykus-muted">Alacak toplam</div>
-            <div className="text-xl font-bold tabular-nums text-red-700">
-              {formatMoney(data.summary.receivable_total)}
+          <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+            <span className="bk-kpi-icon">₺</span>
+            <div className="min-w-0 flex-1 text-right">
+              <div className="bk-kpi-label">Alacak toplam</div>
+              <div className="bk-kpi-value truncate">{formatMoney(data.summary.receivable_total)}</div>
             </div>
           </div>
         </div>
@@ -206,7 +214,7 @@ export default function CustomerTrackPage() {
               </div>
             </li>
           ))}
-          {items.length === 0 && <li className="ml-4 text-sm text-baykus-muted">Henüz hareket yok</li>}
+          {items.length === 0 && <li className="ml-4 text-[11px] text-baykus-muted">Henüz hareket yok</li>}
         </ol>
       )}
 
@@ -265,7 +273,7 @@ export default function CustomerTrackPage() {
               </div>
             ))}
           {receivables.filter((r) => r.notes || r.special_day_note).length === 0 && (
-            <p className="text-sm text-baykus-muted">
+            <p className="text-[11px] text-baykus-muted">
               {customerId
                 ? "Bu müşteride not yok (cari kartından ekleyebilirsiniz)."
                 : "Notlu müşteri yok — müşteri seçin veya cari kartına not ekleyin."}
@@ -273,6 +281,7 @@ export default function CustomerTrackPage() {
           )}
         </div>
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Loan, apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function LoansPage() {
   const [items, setItems] = useState<Loan[]>([]);
@@ -74,10 +75,10 @@ export default function LoansPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Krediler</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Krediler</h2>
           <p className="text-xs text-baykus-muted">Finans › Krediler · ödeme planı + kasa/banka</p>
         </div>
         <label className="text-xs flex items-center gap-2">
@@ -88,19 +89,28 @@ export default function LoansPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="flex flex-wrap gap-2 justify-end">
-        <div className="rounded border bg-white px-4 py-2 text-center min-w-[160px]">
-          <div className="text-[10px] text-emerald-700 font-semibold">KALAN ÖDEMELER</div>
-          <div className="text-lg font-bold text-emerald-600 tabular-nums">{formatMoney(totals.remaining)}</div>
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: `repeat(${totals.overdue > 0 ? 3 : 2}, minmax(0, 1fr))` }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Kalan ödemeler</div>
+            <div className="bk-kpi-value truncate">{formatMoney(totals.remaining)}</div>
+          </div>
         </div>
-        <div className="rounded border bg-white px-4 py-2 text-center min-w-[160px]">
-          <div className="text-[10px] text-red-700 font-semibold">BU AYKİ ÖDEMELER</div>
-          <div className="text-lg font-bold text-red-600 tabular-nums">{formatMoney(totals.thisMonth)}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+          <span className="bk-kpi-icon">📅</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Bu ayki ödemeler</div>
+            <div className="bk-kpi-value truncate">{formatMoney(totals.thisMonth)}</div>
+          </div>
         </div>
         {totals.overdue > 0 && (
-          <div className="rounded border border-amber-300 bg-amber-50 px-4 py-2 text-center min-w-[120px]">
-            <div className="text-[10px] text-amber-800 font-semibold">GECİKEN TAKSİT</div>
-            <div className="text-lg font-bold text-amber-900">{totals.overdue}</div>
+          <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+            <span className="bk-kpi-icon">⚠</span>
+            <div className="min-w-0 flex-1 text-right">
+              <div className="bk-kpi-label">Geciken taksit</div>
+              <div className="bk-kpi-value">{totals.overdue}</div>
+            </div>
           </div>
         )}
       </div>
@@ -164,11 +174,12 @@ export default function LoansPage() {
           );
         })}
         {visible.length === 0 && (
-          <div className="rounded border bg-white py-10 text-center text-sm text-baykus-muted">
+          <div className="rounded border bg-white py-10 text-center text-[11px] text-baykus-muted">
             Kayıtlı aktif kredi bulunmuyor.
           </div>
         )}
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch, downloadAuthFile } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Doc = {
   id: number;
@@ -84,9 +85,9 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2 pb-2">
       <div>
-        <h2 className="text-base font-bold">Evrak Dolabı</h2>
+        <h2 className="text-lg font-bold text-baykus-text leading-tight">Evrak Dolabı</h2>
         <p className="text-xs text-baykus-muted">
           Genel belgeler · sipariş tasarımları sipariş kartında ·{" "}
           <Link href="/settings/backups" className="text-baykus-primary hover:underline">
@@ -184,6 +185,7 @@ export default function DocumentsPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -460,8 +460,32 @@ Batch 20 sonrası kalan StatusFooter / densite boşlukları (hub listeleri).
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password / ReportLab twin stiller.
 
+### Kalan (dürüst) → Batch 22’de kapatılanlar: ince alt sayfa densite + PDF polish.
+
+---
+
+## Batch 22 — İnce alt sayfa densite + StatusFooter + PDF polish (2026-09-27)
+
+Batch 21 hub’larından sonra kalan ince alt sayfalar + web PDF görünüm iyileştirmesi (ReportLab twin iddia edilmez).
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Stok alt | `/stock/critical` · `/stock/warehouses` · `/stock/count` — sticky · KPI · `bk-table` · StatusFooter (transfer ayrı route yok; warehouses modal) | done |
+| Rapor alt | `/reports/archive` · `/reports/cari-statements` — ReportHeader/KPI densite · StatusFooter | done |
+| Müşteri alt | `/customers/track` · `/customers/receivables` · `/customers/new` — sticky · KPI · StatusFooter | done |
+| Finans alt | `/finance/open-balances` · `/finance/loans` · `/finance/assets` — `bk-kpi-strip` · StatusFooter | done |
+| İletişim / rehber / evrak / WA | `/communication` · `/directory` · `/documents` · `/whatsapp` · `/whatsapp/track` — densite + StatusFooter | done |
+| Ayarlar list-like | `/settings/health` · `/settings/backups` · `/settings/database` (+ audit zaten batch 19) | done |
+| PDF polish | `pdf.py` — çift header rule · boxed totals · `_signature_row` · navy accents (cari / demirbaş / fiyat / iş emri / teklif / fiş) | done |
+| Report TS fix | batch 21 StatusFooter import kırığı (`reports/finance|sales|stock`) onarıldı | done |
+| Smoke | `/health` · login · `/api/auth/me` · `/api/dashboard/summary` · Direkt Satışlar `channels=perakende,mağaza,…` 200 | done |
+| Zip | `/workspace/baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
+
+Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI / live postgres password / VPS kullanıcı senkron, masaüstü ReportLab birebir twin PDF.
+
 ### Kalan (dürüst)
 
-- Masaüstü ReportLab twin PDF stilleri — web polish’li basit PDF
+- Masaüstü ReportLab **birebir twin** PDF (web polish’li; imza/totals/header iyileşti, twin değil)
 - Merkezi DB canlı şifre / VPS kullanıcı senkron
-- İnce alt sayfa densite (stok/critical, warehouses, archive vb.) isteğe bağlı devam
+- BizimHesap live · Selenium WhatsApp Desktop
+- `/stock/transfer` ayrı sayfa yok (depolar sayfasında transfer modalı yeterli)

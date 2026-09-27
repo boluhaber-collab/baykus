@@ -10,8 +10,8 @@ import {
   SummaryCards,
   inputCls,
 } from "@/components/reports/ReportChrome";
-import {
 import StatusFooter from "@/components/StatusFooter";
+import {
   BANK_TYPE_LABELS,
   CASH_TYPE_LABELS,
   ReportResponse,

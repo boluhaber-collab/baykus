@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { WhatsAppLog, WhatsAppTemplate, apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const CATEGORIES = [
   "hazır sipariş",
@@ -112,13 +113,18 @@ export default function WhatsAppPage() {
   const input = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-1">WhatsApp Şablonları</h1>
-      <p className="text-slate-500 text-sm mb-6">
-        Şablon CRUD · placeholder · wa.me önizleme · yerel gönderim günlüğü
-      </p>
-      {error && <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
-      {msg && <div className="mb-4 rounded-lg bg-emerald-50 text-emerald-800 px-4 py-2 text-sm">{msg}</div>}
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">WhatsApp Şablonları</h1>
+          <p className="text-baykus-muted text-[11px]">
+            Şablon CRUD · placeholder · wa.me önizleme · yerel gönderim günlüğü
+          </p>
+        </div>
+        <a href="/whatsapp/track" className="bk-btn bk-btn-ghost text-xs">Takip</a>
+      </div>
+      {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+      {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
       <div className="grid lg:grid-cols-2 gap-6 mb-8">
         <div className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
@@ -160,7 +166,7 @@ export default function WhatsAppPage() {
 
         <div className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
           <h2 className="font-semibold">Yeni şablon</h2>
-          <form onSubmit={createTemplate} className="space-y-3">
+          <form onSubmit={createTemplate} className="space-y-2 pb-2">
             <input
               className={input}
               placeholder="Ad"
@@ -271,6 +277,7 @@ export default function WhatsAppPage() {
           </table>
         )}
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

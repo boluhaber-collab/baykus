@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OpenBalanceOrder, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Party = {
   kind: string;
@@ -66,10 +67,10 @@ export default function OpenBalancesPage() {
   const filteredTotal = filtered.reduce((s, r) => s + r.open_balance, 0);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Açık Bakiyeler</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Açık Bakiyeler</h2>
           <p className="text-xs text-baykus-muted">Finans › Açık Bakiyeler · sipariş bazlı kalan + cari özet</p>
         </div>
         <div className="flex gap-2 text-xs">
@@ -87,22 +88,34 @@ export default function OpenBalancesPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="rounded border border-orange-200 bg-[#fff7ed] px-4 py-3">
-        <div className="text-sm font-bold text-[#9a3412]">Açık Bakiyeler</div>
-        <div className="text-xs text-slate-700 mt-1 space-x-3">
-          <span>
-            Sipariş açık: <strong className="tabular-nums">{formatMoney(data?.open_orders_total || 0)}</strong> (
-            {data?.open_orders_count || 0} belge)
-          </span>
-          <span>
-            Cari alacak: <strong className="tabular-nums text-emerald-700">{formatMoney(data?.receivables_total || 0)}</strong>
-          </span>
-          <span>
-            Tedarikçi borç: <strong className="tabular-nums text-rose-700">{formatMoney(data?.payables_total || 0)}</strong>
-          </span>
-          <span>
-            Net cari: <strong className="tabular-nums">{formatMoney(data?.net || 0)}</strong>
-          </span>
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+          <span className="bk-kpi-icon">🧾</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Sipariş açık ({data?.open_orders_count || 0})</div>
+            <div className="bk-kpi-value truncate">{formatMoney(data?.open_orders_total || 0)}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">↑</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Cari alacak</div>
+            <div className="bk-kpi-value truncate">{formatMoney(data?.receivables_total || 0)}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+          <span className="bk-kpi-icon">↓</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Tedarikçi borç</div>
+            <div className="bk-kpi-value truncate">{formatMoney(data?.payables_total || 0)}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#1e3a5f" }}>
+          <span className="bk-kpi-icon">Σ</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Net cari</div>
+            <div className="bk-kpi-value truncate">{formatMoney(data?.net || 0)}</div>
+          </div>
         </div>
       </div>
 
@@ -275,6 +288,7 @@ export default function OpenBalancesPage() {
           </div>
         </div>
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }
