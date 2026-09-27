@@ -11,6 +11,7 @@ KNOWN_DEMIRBAS_BH_IDS = {
     "76FEDAD91B61426EA9F59B7F0494383D",  # ŞAPKA BASKI ÜNİTESİ
     "B2C81DB8C897424A9DBB78CD79861CFB",  # ÇİFT KUPA BARDAK BASKI MAKİNASI
     "76249931B8954570A8E748A15180DAE2",  # EPSON A3 FOTO YAZICI
+    "57B8D50FC3834A5D914FF8EAFD583BB6",  # HOBİ PRES BASKI MALZ (user: demirbaş)
 }
 
 _MACHINE_RE = re.compile(
@@ -89,7 +90,8 @@ def is_demirbas_title(title: str | None, bh_id: str | None = None) -> bool:
         return False
     folded = fold(name)
     if _KEEP_STOCK_RE.search(folded):
-        if re.search(r"makina|makine|yazici|unite", folded):
+        # Explicit equipment still demirbaş even if name contains MALZ
+        if re.search(r"makina|makine|yazici|unite|hobi\s+pres", folded):
             return True
         return False
     return bool(_MACHINE_RE.search(folded))
