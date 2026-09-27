@@ -1,6 +1,6 @@
 # BizimHesap → Baykuş içe aktarma
 
-Bu rehber **ürün / depo / stok** one-shot API importunu ve sonraki **cari (müşteri–tedarikçi) Excel** aşamasını açıklar.
+Bu rehber **ürün / depo / stok** API importunu ve **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)** aşamasını açıklar.
 
 ## 1) Token alma
 
@@ -84,69 +84,123 @@ Repo kökünden: `bash scripts/import-bizimhesap-stock.sh` (Git Bash) aynı işi
 - `price` → `base_price` (satış), `buyingPrice` → `purchase_price` + `cost`.
 - Birim / KDV ürün modelinde yok → `description` içine `Birim=… | KDV=%… | BH_ID=…` yazılır.
 
-## 3) Excel cari aşaması (faz 2 — hazırlık)
+## 3) Cari aşaması (müşteri / tedarikçi + Detaylı Ekstre PDF)
 
-API’de ürün stok sync’i vardır; **müşteri / tedarikçi cari bakiyeleri** için Excel (veya ileride API) kullanılır. Bu görevde Excel dosyası beklenmez — aşağıdakileri BizimHesap’tan indirip saklayın.
+BizimHesap B2B API’sinde cari ekstre yok; **UI’dan** müşteri/tedarikçi listesi + parti başı **Detaylı Ekstre PDF** alınır.
 
-### BizimHesap’tan indirilecekler (checklist)
+### Kaynak dosyalar
 
-- [ ] **Müşteri listesi** (cari kartlar) — Excel/CSV
-- [ ] **Tedarikçi listesi** — Excel/CSV
-- [ ] **Cari ekstre / hareket** (varsa: müşteri + tedarikçi bakiyeleri, açılış, borç/alacak)
-- [ ] İsteğe bağlı: fiyat listeleri, cari yaşlandırma
+`tmp/bizimhesap/ekstre/` (gitignore’da — **PDF’leri commit etmeyin**):
 
-Dosyaları `tmp/bizimhesap/excel/` altına koyabilirsiniz (gitignore’da `tmp/`).
+| Dosya | İçerik |
+|-------|--------|
+| `customer_list.xlsx` | Sütunlar: `Name`, `Guid`, `Statement file` |
+| `supplier_list.xlsx` | Aynı |
+| `customer_*.pdf` / `supplier_*.pdf` | Detaylı Ekstre (ör. `01.01.2015–27.09.2026`) |
+| `manifest.json` | Export özeti |
 
-### Baykuş’a aktarım (mevcut UI)
+Dosya adındaki 32 hex → BH GUID (`BH:{GUID}` cari kodu / not).
 
-Web: **`/tools/import`** (Müşteri şablonu sekmesi) veya `POST /api/customers/import`.
+### Gereksinimler
 
-#### Müşteri şablon sütunları (`/api/customers/import-template`)
+- Python venv (`apps/api/.venv`) + `openpyxl`
+- **`pdftotext`** (Poppler): Linux `poppler-utils`; Windows’ta Poppler binary PATH’te olmalı
 
-| Sütun | Zorunlu | Not |
-|-------|---------|-----|
-| Ad | Evet | Müşteri ünvanı / ad |
-| Firma | | |
-| Telefon | | Eşleştirme anahtarı (varsa) |
-| E-posta | | |
-| Şehir | | |
-| Adres | | |
-| Vergi No | | VKN / TCKN |
-| Vergi Dairesi | | |
-| Kod | | Cari kod; yoksa telefon/ad ile eşleşir |
-| Not | | |
+### Linux / box
 
-BizimHesap export sütunlarını bu başlıklara yeniden adlandırın veya `/tools/import` alias’larına uyun (`name`, `company`, `phone`, `vkn`, …).
+```bash
+cd /path/to/baykus-web
+./scripts/import-bizimhesap-cari.sh
+# veya:
+cd apps/api
+source .venv/bin/activate
+export DATABASE_URL=sqlite:///./baykus.db
+python scripts/import_bizimhesap_cari.py
+# eşdeğer: python -m app.scripts.import_bizimhesap_cari
+# özel klasör:
+python scripts/import_bizimhesap_cari.py --ekstre-dir ../../tmp/bizimhesap/ekstre
+```
 
-#### Tedarikçi
+### Windows PC (`C:\Users\engin\Desktop\baykus`)
 
-Şu an müşteri kadar olgun bir `/api/suppliers/import` yoksa:
+1. Ekstreleri kopyalayın (git’te yok):
 
-1. Müşteri şablonunu örnek alıp aynı kolon mantığıyla tedarikçi satırlarını hazırlayın.
-2. Veya UI’dan elle / sonraki fazda tedarikçi import endpoint’i eklenince aktarın.
+   `C:\Users\engin\Desktop\baykus\tmp\bizimhesap\ekstre\`  
+   (`customer_list.xlsx`, `supplier_list.xlsx`, PDF’ler, isteğe `manifest.json`)
 
-Önerilen tedarikçi kolonları: **Ad, Firma, Telefon, E-posta, Şehir, Adres, Vergi No, Vergi Dairesi, Kod, Not**.
+2. Poppler / `pdftotext` kurulu olsun (PATH).
 
-#### Cari ekstre → `cari_movements` / `supplier_movements`
+3. Çalıştırın:
 
-Açılış bakiyesi için müşteri kartındaki `opening_balance` veya hareket satırları gerekir. Excel’de beklenen mantık:
+```powershell
+cd C:\Users\engin\Desktop\baykus\apps\api
+.\.venv\Scripts\Activate.ps1
+$env:DATABASE_URL = "sqlite:///./baykus.db"
+python scripts\import_bizimhesap_cari.py
+# veya:
+python -m app.scripts.import_bizimhesap_cari
+# dry-run (DB yazmaz):
+python scripts\import_bizimhesap_cari.py --dry-run
+```
 
-| Tarih | Cari Kod/Ad | Tip (borç/alacak) | Tutar | Açıklama |
-|-------|-------------|-------------------|-------|----------|
-| … | … | Borç / Alacak | … | … |
+Git Bash: `bash scripts/import-bizimhesap-cari.sh`
 
-Bu satırların otomatik import’u **faz 2**’dedir; şimdilik dosyayı arşivleyin.
+### Faydalı bayraklar
+
+| Bayrak | Anlam |
+|--------|--------|
+| `--ekstre-dir DIR` | Master list + PDF klasörü (varsayılan `../../tmp/bizimhesap/ekstre`) |
+| `--dry-run` | Sadece parse / sayım |
+| `--skip-backup` | SQLite yedeğini atla |
+| `--keep-demo` | Seed `M-00x` / `T-00x` demo carileri silme |
+
+### Ne yapar?
+
+1. `baykus.db` → `apps/api/backups/baykus_pre_bh_cari_*.db`
+2. Varsayılan: seed demo carileri temizler (`M-00x` / `T-00x`; bağlı demo `purchases` de silinir; sipariş `customer_id` null’lanır)
+3. Önceki `BH_IMPORT:…` etiketli `cari_movements` / `supplier_movements` satırlarını siler (**idempotent**)
+4. XLSX → `Customer` / `Supplier` **upsert** (`code=BH:{guid}`, eşleşme: kod veya ad)
+5. Her PDF → hareket satırları:
+   - Müşteri: `cari_movements` (`sale` / `payment` / `adjustment`)
+   - Tedarikçi: `supplier_movements` (`purchase` / `payment` / `adjustment`)
+6. `opening_balance = 0`; bakiyeler hareketlerden gelir
+7. Sipariş / alış / ödeme stub’u **oluşturulmaz** (temiz eşleme yok)
+
+### PDF parse mantığı
+
+- `pdftotext -layout`; satır: `Tarih Vade Hareket … Borç Alacak Bakiye`
+- Tutarlar **Bakiye delta** ile türetilir (Açıklama içindeki fiyat/kur rakamlarına dayanıklı)
+- Müşteri: Baykuş borç/alacak ≈ BH Borç/Alacak; bakiye aynı işaret
+- Tedarikçi: Baykuş borç ≈ BH Alacak (borç↑), alacak ≈ BH Borç (ödeme); **Baykuş bakiye ≈ −BH bakiye**
+- Not alanı: `BH_IMPORT:{guid}:{idx} | Hareket=… | Belge=… | … | BH_Bakiye=…`
+
+### Beklenen smoke (örnek kutu koşusu)
+
+| Metrik | Değer |
+|--------|--------|
+| Müşteri | 37 |
+| Tedarikçi | 13 |
+| `cari_movements` | ~159 |
+| `supplier_movements` | ~213 |
+| Örnek | BAY FEROO bakiye `40.00`; SNN tedarikçi bakiye `17155.81` (BH ekstre sonu `-17155.81`) |
+
+### Alternatif: UI Excel müşteri şablonu
+
+Web **`/tools/import`** veya `POST /api/customers/import` hâlâ kullanılabilir (şablon sütunları: Ad, Firma, Telefon, …). Tedarikçi + ekstre için bu CLI tercih edilir.
 
 ## 4) Güvenlik
 
-- Token, ham 1MB+ JSON dump’ları ve `*.db` **commit edilmez** (`tmp/`, `*.db`, `.env` gitignore’da).
-- Import sonrası smoke: ürün sayısı, 3 depo, örnek `warehouse_stocks` satırları.
+- Token, ham JSON dump’ları, ekstre PDF’leri ve `*.db` **commit edilmez** (`tmp/`, `*.db`, `.env` gitignore’da).
+- Commit edilenler: `scripts/import_bizimhesap_*.py`, `app/scripts/…` sarmalayıcıları, `docs/BIZIMHESAP_IMPORT.md`, `scripts/import-bizimhesap-*.sh`.
 
 ## 5) Sorun giderme
 
 | Belirti | Çözüm |
-|---------|--------|
-| HTTP 403 / Cloudflare 1010 | User-Agent eksik — script Chrome UA gönderir; eski curl’ü kullanmayın |
+|--------|--------|
+| HTTP 403 / Cloudflare 1010 | User-Agent eksik — stock script Chrome UA gönderir; eski curl’ü kullanmayın |
 | `resultCode != 1` | Token yanlış veya süresi dolmuş |
 | `BIZIMHESAP_TOKEN not found` | Env / `--token-file` / box-secrets |
 | Postgres’e yazıyor | `DATABASE_URL=sqlite:///./baykus.db` verin (Windows yereli) |
+| `pdftotext not found` | Poppler kurun; Windows PATH’e `pdftotext.exe` ekleyin |
+| Cari bakiyeler kayıp / çift | Yeniden çalıştırın (BH_IMPORT hareketleri silinip yeniden yazılır); `--keep-demo` ile demo karışmasın |
+| PDF’de satır kaçtı | `--dry-run` çıktısındaki `parse_unmatched_total` / `pdfs_continuity_warn`; best-effort — master list yine %100 yazılır |
