@@ -79,13 +79,46 @@ function ActionChip({ action }: { action: PartyAction }) {
 
   const cls = `bk-party-chip bk-party-chip--${action.variant}`;
   const hasMenu = Boolean(action.menu && action.menu.length > 0);
-  const label = (
+  const hasPrimary = Boolean(action.onClick || action.href);
+  const iconLabel = (
     <>
       {action.icon ? <span aria-hidden>{action.icon}</span> : null}
       <span>{action.label}</span>
-      {hasMenu ? <span aria-hidden>▾</span> : null}
     </>
   );
+
+  const menuPanel =
+    open && hasMenu ? (
+      <div className="bk-party-chip-menu" role="menu">
+        {action.menu!.map((item, i) =>
+          item.href ? (
+            <Link
+              key={i}
+              href={item.href}
+              role="menuitem"
+              onClick={() => {
+                item.onClick?.();
+                setOpen(false);
+              }}
+            >
+              {item.label}
+            </Link>
+          ) : (
+            <button
+              key={i}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                item.onClick?.();
+                setOpen(false);
+              }}
+            >
+              {item.label}
+            </button>
+          ),
+        )}
+      </div>
+    ) : null;
 
   if (!hasMenu) {
     if (action.href) {
@@ -99,68 +132,100 @@ function ActionChip({ action }: { action: PartyAction }) {
             rel="noopener noreferrer"
             onClick={action.onClick}
           >
-            {label}
+            {iconLabel}
           </a>
         );
       }
       return (
         <Link href={action.href} className={cls} onClick={action.onClick}>
-          {label}
+          {iconLabel}
         </Link>
       );
     }
     return (
       <button type="button" className={cls} onClick={action.onClick}>
-        {label}
+        {iconLabel}
       </button>
     );
   }
 
+  // Menu only: whole chip toggles dropdown (no silent primary side-effect).
+  if (!hasPrimary) {
+    return (
+      <div className="bk-party-chip-wrap" ref={wrapRef}>
+        <button
+          type="button"
+          className={cls}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {iconLabel}
+          <span aria-hidden>▾</span>
+        </button>
+        {menuPanel}
+      </div>
+    );
+  }
+
+  // Split: primary = onClick/href; caret = menu toggle only (never runs primary).
+  const caret = (
+    <button
+      type="button"
+      className={`${cls} bk-party-chip-caret`}
+      aria-expanded={open}
+      aria-haspopup="menu"
+      aria-label={`${action.label} menü`}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen((v) => !v);
+      }}
+    >
+      <span aria-hidden>▾</span>
+    </button>
+  );
+
+  if (action.href) {
+    const external = /^https?:\/\//i.test(action.href) || action.href.startsWith("sms:");
+    return (
+      <div className="bk-party-chip-wrap bk-party-chip-wrap--split" ref={wrapRef}>
+        {external ? (
+          <a
+            href={action.href}
+            className={`${cls} bk-party-chip-primary`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={action.onClick}
+          >
+            {iconLabel}
+          </a>
+        ) : (
+          <Link
+            href={action.href}
+            className={`${cls} bk-party-chip-primary`}
+            onClick={action.onClick}
+          >
+            {iconLabel}
+          </Link>
+        )}
+        {caret}
+        {menuPanel}
+      </div>
+    );
+  }
+
   return (
-    <div className="bk-party-chip-wrap" ref={wrapRef}>
+    <div className="bk-party-chip-wrap bk-party-chip-wrap--split" ref={wrapRef}>
       <button
         type="button"
-        className={cls}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => {
-          action.onClick?.();
-          setOpen((v) => !v);
-        }}
+        className={`${cls} bk-party-chip-primary`}
+        onClick={action.onClick}
       >
-        {label}
+        {iconLabel}
       </button>
-      {open && (
-        <div className="bk-party-chip-menu" role="menu">
-          {action.menu!.map((item, i) =>
-            item.href ? (
-              <Link
-                key={i}
-                href={item.href}
-                role="menuitem"
-                onClick={() => {
-                  item.onClick?.();
-                  setOpen(false);
-                }}
-              >
-                {item.label}
-              </Link>
-            ) : (
-              <button
-                key={i}
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  item.onClick?.();
-                  setOpen(false);
-                }}
-              >
-                {item.label}
-              </button>
-            ),
-          )}
-        </div>
-      )}
+      {caret}
+      {menuPanel}
     </div>
   );
 }

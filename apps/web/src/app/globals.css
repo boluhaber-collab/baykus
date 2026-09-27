@@ -642,6 +642,7 @@ body {
      failed to paint (Tailwind preflight transparent). */
   .bk-party-actions a.bk-party-chip,
   .bk-party-actions button.bk-party-chip,
+  .bk-party-chip-wrap > a.bk-party-chip,
   .bk-party-chip-wrap > button.bk-party-chip,
   .bk-party-chip {
     display: inline-flex;
@@ -662,6 +663,7 @@ body {
   }
   .bk-party-actions a.bk-party-chip:hover,
   .bk-party-actions button.bk-party-chip:hover,
+  .bk-party-chip-wrap > a.bk-party-chip:hover,
   .bk-party-chip-wrap > button.bk-party-chip:hover,
   .bk-party-chip:hover {
     filter: none;
@@ -707,6 +709,22 @@ body {
   .bk-party-chip-wrap {
     position: relative;
     display: inline-flex;
+  }
+  .bk-party-chip-wrap--split {
+    align-items: stretch;
+  }
+  .bk-party-chip-wrap--split > .bk-party-chip-primary {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    border-right: none !important;
+  }
+  .bk-party-chip-wrap--split > .bk-party-chip-caret {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    padding-left: 0.4rem !important;
+    padding-right: 0.45rem !important;
+    min-width: 1.6rem;
+    justify-content: center;
   }
   .bk-party-chip-menu {
     position: absolute;

@@ -335,6 +335,11 @@ export default function CustomerDetailPage() {
   function openSecondary(nextTab?: TabKey) {
     setShowSecondary(true);
     if (nextTab) setTab(nextTab);
+    setTimeout(() => {
+      document
+        .getElementById("customer-secondary")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }
 
   const salesPanel = (
@@ -514,7 +519,7 @@ export default function CustomerDetailPage() {
             label: "Hesap Ekstresi",
             icon: "📑",
             variant: "white",
-            onClick: () => void downloadCariPdf(),
+            onClick: () => openSecondary("hareketler"),
             menu: [
               {
                 label: "Cari döküm PDF",
@@ -597,7 +602,7 @@ export default function CustomerDetailPage() {
         ]}
       >
         {showSecondary && (
-          <div className="space-y-3 mt-2">
+          <div id="customer-secondary" className="space-y-3 mt-2">
             <div className="flex flex-wrap gap-1 border-b border-slate-200">
               {tabs.map((t) => (
                 <button

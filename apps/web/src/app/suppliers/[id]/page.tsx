@@ -484,10 +484,10 @@ export default function SupplierDetailPage() {
             label: "Hesap Ekstresi",
             icon: "📑",
             variant: "white",
-            onClick: () => void downloadStatementPdf(),
+            onClick: openEkstre,
             menu: [
               {
-                label: "Hesap ekstresi PDF",
+                label: "Cari döküm PDF",
                 onClick: () => void downloadStatementPdf(),
               },
               {
