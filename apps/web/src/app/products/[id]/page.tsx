@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ProductForm, { ProductFormPayload } from "@/components/ProductForm";
 import {
   ProductDetail,
@@ -13,6 +13,7 @@ import {
   ProductPriceListRef,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { parseProductDescription } from "@/lib/productMeta";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -21,12 +22,6 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
-  const [direction, setDirection] = useState<"increase" | "decrease">("increase");
-  const [qty, setQty] = useState("1");
-  const [variantId, setVariantId] = useState("");
-  const [reason, setReason] = useState("");
-  const [note, setNote] = useState("");
-  const [stockBusy, setStockBusy] = useState(false);
   const [priceLists, setPriceLists] = useState<ProductPriceListRef[]>([]);
   const [warehouseStocks, setWarehouseStocks] = useState<
     { warehouse: string; variant_id?: number | null; variant_name?: string | null; variant_sku?: string | null; quantity: number }[]
@@ -50,13 +45,10 @@ export default function ProductDetailPage() {
       } catch {
         setWarehouseStocks([]);
       }
-      if (data.variants?.length && !variantId) {
-        setVariantId(String(data.variants[0].id));
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
-  }, [id, variantId]);
+  }, [id]);
 
   useEffect(() => {
     if (!Number.isFinite(id)) return;
@@ -71,34 +63,6 @@ export default function ProductDetailPage() {
     });
     setProduct(updated);
     setEditing(false);
-  }
-
-  async function adjustStock(e: FormEvent) {
-    e.preventDefault();
-    if (!product) return;
-    setStockBusy(true);
-    setError("");
-    try {
-      await apiFetch(`/api/products/${id}/stock/adjust`, {
-        method: "POST",
-        body: JSON.stringify({
-          direction,
-          quantity: Number(qty),
-          variant_id: product.variants?.length ? Number(variantId) : null,
-          reason: reason.trim() || null,
-          note: note.trim() || null,
-          warehouse: product.warehouse || "Ana Depo",
-        }),
-      });
-      setQty("1");
-      setReason("");
-      setNote("");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Stok hareketi başarısız");
-    } finally {
-      setStockBusy(false);
-    }
   }
 
   async function onDelete() {
@@ -158,7 +122,7 @@ export default function ProductDetailPage() {
             {editing ? "Hızlı formu kapat" : "Hızlı düzenle"}
           </button>
           <Link
-            href="/stock/entry"
+            href={`/stock/entry?product_id=${id}`}
             className="rounded-lg px-4 py-2 text-sm font-medium text-white"
             style={{ background: "#0369a1" }}
           >
@@ -276,11 +240,15 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          {product.description && (
-            <div className="rounded-xl border bg-white p-4 shadow-sm text-sm text-slate-700">
-              {product.description}
-            </div>
-          )}
+          {(() => {
+            const { text: descText } = parseProductDescription(product.description);
+            if (!descText.trim()) return null;
+            return (
+              <div className="rounded-xl border bg-white p-4 shadow-sm text-sm text-slate-700 whitespace-pre-wrap">
+                {descText}
+              </div>
+            );
+          })()}
 
           {/* Varyant stokları — urun_kartlari_varyant_paneli */}
           <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
@@ -384,78 +352,21 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
+
           {product.product_type !== "hizmet" && (
-            <form
-              onSubmit={adjustStock}
-              className="rounded-xl border bg-white p-5 shadow-sm space-y-3"
-            >
-              <h2 className="font-semibold text-slate-800">Stok Hareketi</h2>
-              <div className="grid md:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-xs text-slate-600 mb-1">Yön</label>
-                  <select
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    value={direction}
-                    onChange={(e) => setDirection(e.target.value as "increase" | "decrease")}
-                  >
-                    <option value="increase">Giriş (+)</option>
-                    <option value="decrease">Çıkış (−)</option>
-                  </select>
-                </div>
-                {product.variants?.length > 0 && (
-                  <div>
-                    <label className="block text-xs text-slate-600 mb-1">Varyant</label>
-                    <select
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                      value={variantId}
-                      onChange={(e) => setVariantId(e.target.value)}
-                      required
-                    >
-                      {product.variants.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name} ({v.stock_qty})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div>
-                  <label className="block text-xs text-slate-600 mb-1">Miktar</label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={qty}
-                    onChange={(e) => setQty(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-600 mb-1">Sebep</label>
-                  <input
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Alım, sipariş, sayım…"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-600 mb-1">Not</label>
-                <input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={stockBusy}
-                className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm font-medium disabled:opacity-60"
+            <div className="rounded-xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm text-slate-700 flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Stok girişi tek yol: <strong>Stok Girişi</strong> (miktar · depo · birim maliyet · tarih).
+                Çıkış / düzeltme için <Link href="/stock/count" className="text-baykus-primary hover:underline">Stok Sayımı</Link>.
+              </span>
+              <Link
+                href={`/stock/entry?product_id=${id}`}
+                className="rounded-lg px-3 py-1.5 text-xs font-bold text-white"
+                style={{ background: "#0369a1" }}
               >
-                {stockBusy ? "İşleniyor…" : "Stok Güncelle"}
-              </button>
-            </form>
+                Stok Girişi →
+              </Link>
+            </div>
           )}
 
           {movements.length > 0 && (

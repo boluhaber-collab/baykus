@@ -573,3 +573,14 @@ Kaynak: `docs/parity-shots/product-list-*.png` · `product-definition.png` · `p
 
 Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA, DPAPI, çoklu dosya resim upload API, ilişkisel bağlı-ürün tablosu.
 
+## Batch 27 — Stok adjust + ürün hub tekleştir (2026-09-27)
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Stok adjust kök neden | `POST /api/products/{id}/stock/adjust` — satış rolü 403 (`STOCK_ROLES` only); `variant_id:0` → 404; depo satırlı ürünlerde `warehouse_stocks` güncellenmiyordu | fixed |
+| API | direction alias (giriş/çıkış/in/out) · `variant_id` 0/"" → null · `require_roles(*STOCK_ROLES, "satış")` · WS sync | done |
+| Ürün detay | Inline «Stok Hareketi» kaldırıldı — tek yol `/stock/entry?product_id=` (+ Sayım linki); meta `<!--baykus-product-meta:…-->` `parseProductDescription` ile gizlenir | done |
+| `/stock/entry` | `?product_id=` query ile ürün ön-seçimi | done |
+| `/products` hub | CTA şeridi korundu; «İşlemler» mega-tile kaldırıldı → ikincil linkler (Kritik/Depolar/Sayım/Barkod/Stok/Rapor); Rapor sekmesinden Stok Girişi/Excel tekrarı çıkarıldı | done |
+| Smoke | admin+satış adjust · alias · variant_id=0 · WS sync · product create · `tsc --noEmit` clean | done |
+

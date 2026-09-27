@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class VariantBase(BaseModel):
@@ -134,7 +134,7 @@ class ProductDetail(ProductBase):
 
 
 class StockAdjustIn(BaseModel):
-    direction: str = Field(description="increase | decrease")
+    direction: str = Field(description="increase | decrease (aliases: giriş/çıkış, in/out)")
     quantity: int = Field(gt=0)
     variant_id: int | None = None
     reason: str | None = Field(default=None, max_length=255)
@@ -143,6 +143,36 @@ class StockAdjustIn(BaseModel):
     # Stok girişi formu: isteğe bağlı birim maliyet + hareket tarihi (Alembic yok)
     unit_cost: Decimal | None = None
     movement_date: datetime | None = None
+
+    @field_validator("direction")
+    @classmethod
+    def normalize_direction(cls, v: str) -> str:
+        raw = (v or "").strip()
+        key = raw.casefold()
+        aliases = {
+            "increase": "increase",
+            "decrease": "decrease",
+            "in": "increase",
+            "out": "decrease",
+            "giriş": "increase",
+            "giris": "increase",
+            "çıkış": "decrease",
+            "cikis": "decrease",
+            "çıkis": "decrease",
+            "+": "increase",
+            "-": "decrease",
+        }
+        mapped = aliases.get(key)
+        if not mapped:
+            raise ValueError("direction increase veya decrease olmalı")
+        return mapped
+
+    @field_validator("variant_id", mode="before")
+    @classmethod
+    def normalize_variant_id(cls, v):  # noqa: ANN001
+        if v is None or v == "" or v == 0 or v == "0":
+            return None
+        return v
 
 
 class StockAdjustOut(BaseModel):

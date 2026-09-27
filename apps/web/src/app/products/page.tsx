@@ -230,14 +230,8 @@ function ProductsHubPageInner() {
           Stok Girişi
         </Link>
       </div>
-      <div className="flex flex-wrap gap-3 text-xs mb-2">
-        <Link href="/products/new" className="text-baykus-primary hover:underline font-medium">
-          + Yeni ürün kaydı yap
-        </Link>
-        <span className="text-slate-300">|</span>
-        <Link href="/products?tab=urunler" className="text-baykus-primary hover:underline">
-          Mevcut bir üründen kopyala (listeden Aç → Düzenle)
-        </Link>
+      <div className="flex flex-wrap gap-3 text-xs mb-2 text-baykus-muted">
+        <span>Mevcut üründen kopyala: listeden <strong>Aç → Düzenle</strong> (SKU değiştirerek kaydet).</span>
       </div>
 
       {showBulkImageStub && (
@@ -253,23 +247,27 @@ function ProductsHubPageInner() {
         </div>
       )}
 
-      <HubActionsBar
-        columns={6}
-        actions={[
-          { href: "/products?tab=urunler", label: "Ürün Yönetimi", color: "#0ea5e9" },
-          { href: "/products?tab=variants", label: "Kartlar / Varyantlar", color: "#0284c7" },
-          { href: "/stock", label: "Stok Yönetimi", color: "#0369a1" },
-          { href: "/stock/entry", label: "Stok Girişi", color: "#0f766e" },
-          { href: "/stock/critical", label: "Kritik Stok", color: "#be123c" },
-          { href: "/reports/stock", label: "Stok Raporu", color: "#2563eb" },
-          { href: "/products/new", label: "Hızlı Varyant", color: "#f59e0b" },
-          { href: "/stock/warehouses", label: "Depolar", color: "#14b8a6" },
-          { href: "/stock/count", label: "Stok Sayımı", color: "#22a447" },
-          { href: "/tools/import", label: "Excel İçe Aktar", color: "#e2b44d" },
-          { href: "/tools/import?type=bulk-price", label: "Toplu Fiyat Güncelle", color: "#be123c" },
-          { href: "/products/labels", label: "Barkod / Etiket", color: "#334155" },
-        ]}
-      />
+      {/* Secondary links — CTA bar already covers Yeni/Excel/Toplu/Stok Girişi */}
+      <div className="flex flex-wrap gap-2 mb-2 text-xs">
+        <Link href="/stock/critical" className="rounded-md px-2.5 py-1.5 font-semibold text-white" style={{ background: "#be123c" }}>
+          Kritik Stok
+        </Link>
+        <Link href="/stock/warehouses" className="rounded-md px-2.5 py-1.5 font-semibold text-white" style={{ background: "#14b8a6" }}>
+          Depolar
+        </Link>
+        <Link href="/stock/count" className="rounded-md px-2.5 py-1.5 font-semibold text-white" style={{ background: "#22a447" }}>
+          Stok Sayımı
+        </Link>
+        <Link href="/products/labels" className="rounded-md px-2.5 py-1.5 font-semibold text-white" style={{ background: "#334155" }}>
+          Barkod / Etiket
+        </Link>
+        <Link href="/stock" className="rounded-md px-2.5 py-1.5 font-semibold text-white" style={{ background: "#0369a1" }}>
+          Stok Yönetimi
+        </Link>
+        <Link href="/reports/stock" className="rounded-md px-2.5 py-1.5 font-semibold text-white" style={{ background: "#2563eb" }}>
+          Stok Raporu
+        </Link>
+      </div>
 
       <HubTabs tabs={TABS} active={tab} onChange={(id) => setTab(id as Tab)} />
 
@@ -465,11 +463,10 @@ function ProductsHubPageInner() {
             actions={[
               { href: "/reports/stock", label: "Stok Durumu Raporu", color: "#2563eb" },
               { href: "/stock/critical", label: "Kritik Stok Listesini Göster", color: "#be123c" },
-              { href: "/stock/entry", label: "Stok Girişi", color: "#0f766e" },
-              { href: "/tools/import", label: "Toplu Ürün / Stok Aktarımı", color: "#0ea5e9" },
               { href: "/stock", label: "Stok Yönetimi", color: "#0369a1" },
               { href: "/stock/warehouses", label: "Depolar", color: "#14b8a6" },
               { href: "/stock/count", label: "Stok Sayımı", color: "#22a447" },
+              { href: "/products/labels", label: "Barkod / Etiket", color: "#334155" },
             ]}
           />
         </div>

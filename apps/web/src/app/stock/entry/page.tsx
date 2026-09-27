@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { Product, ProductDetail, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 
@@ -12,10 +13,11 @@ type Warehouse = {
   is_default?: boolean;
 };
 
-export default function StockEntryPage() {
+function StockEntryPageInner() {
   const [products, setProducts] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [productId, setProductId] = useState("");
+  const sp = useSearchParams();
+  const [productId, setProductId] = useState(() => sp.get("product_id") || "");
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [variantId, setVariantId] = useState("");
   const [warehouse, setWarehouse] = useState("Ana Depo");
@@ -338,5 +340,13 @@ export default function StockEntryPage() {
 
       <StatusFooter onRefresh={loadLists} />
     </div>
+  );
+}
+
+export default function StockEntryPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-baykus-muted">Yükleniyor…</p>}>
+      <StockEntryPageInner />
+    </Suspense>
   );
 }

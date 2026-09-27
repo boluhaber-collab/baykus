@@ -989,9 +989,11 @@ def adjust_stock(
     product_id: int,
     payload: StockAdjustIn,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(*STOCK_ROLES)),
+    user: User = Depends(require_roles(*STOCK_ROLES, "satış")),
 ) -> StockAdjustOut:
-    if payload.direction not in ("increase", "decrease"):
+    # direction already normalized by StockAdjustIn (increase|decrease)
+    direction = payload.direction
+    if direction not in ("increase", "decrease"):
         raise HTTPException(status_code=400, detail="direction increase veya decrease olmalı")
 
     product = _get_product(db, product_id)
@@ -1003,35 +1005,67 @@ def adjust_stock(
         variant = db.get(ProductVariant, payload.variant_id)
         if not variant or variant.product_id != product_id:
             raise HTTPException(status_code=404, detail="Varyant bulunamadı")
-        qty_before = variant.stock_qty
     else:
         if product.variants:
             raise HTTPException(
                 status_code=400,
                 detail="Bu ürünün varyantları var; variant_id gerekli",
             )
-        qty_before = product.stock_qty or 0
 
-    if payload.direction == "increase":
-        qty_after = qty_before + payload.quantity
+    wh = (payload.warehouse or product.warehouse or DEFAULT_WAREHOUSE).strip() or DEFAULT_WAREHOUSE
+
+    # Prefer warehouse_stocks when present so Depo Bazlı Stok stays in sync
+    from app.models.warehouse import WarehouseStock
+    from app.api.routers.warehouses import _ensure_balance, _get_balance, _sync_aggregate
+
+    has_ws = (
+        db.query(WarehouseStock)
+        .filter(WarehouseStock.product_id == product.id)
+        .count()
+        > 0
+    )
+
+    if has_ws:
+        bal = _get_balance(db, product.id, variant.id if variant else None, wh)
+        if bal is None:
+            bal = _ensure_balance(db, product, variant, wh, bootstrap_qty=0)
+        qty_before = int(bal.quantity or 0)
+        if direction == "increase":
+            qty_after = qty_before + payload.quantity
+        else:
+            qty_after = qty_before - payload.quantity
+            if qty_after < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Yetersiz stok (mevcut: {qty_before})",
+                )
+        bal.quantity = qty_after
+        _sync_aggregate(db, product, variant)
+        product.warehouse = wh
     else:
-        qty_after = qty_before - payload.quantity
-        if qty_after < 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Yetersiz stok (mevcut: {qty_before})",
-            )
+        if variant is not None:
+            qty_before = int(variant.stock_qty or 0)
+        else:
+            qty_before = int(product.stock_qty or 0)
+        if direction == "increase":
+            qty_after = qty_before + payload.quantity
+        else:
+            qty_after = qty_before - payload.quantity
+            if qty_after < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Yetersiz stok (mevcut: {qty_before})",
+                )
+        if variant is not None:
+            variant.stock_qty = qty_after
+        else:
+            product.stock_qty = qty_after
+        _sync_product_stock(product)
 
-    if variant is not None:
-        variant.stock_qty = qty_after
-    else:
-        product.stock_qty = qty_after
-
-    _sync_product_stock(product)
     product.updated_at = datetime.utcnow()
 
     note = payload.note
-    if payload.unit_cost is not None and payload.direction == "increase":
+    if payload.unit_cost is not None and direction == "increase":
         # Stok girişi: birim maliyeti ürün alış/maliyet alanına yansıt + nota yaz
         try:
             product.purchase_price = payload.unit_cost
@@ -1044,13 +1078,13 @@ def adjust_stock(
     movement = StockMovement(
         product_id=product.id,
         variant_id=variant.id if variant else None,
-        direction=payload.direction,
+        direction=direction,
         quantity=payload.quantity,
         qty_before=qty_before,
         qty_after=qty_after,
-        reason=payload.reason or ("Stok girişi" if payload.direction == "increase" else None),
+        reason=payload.reason or ("Stok girişi" if direction == "increase" else None),
         note=note,
-        warehouse=payload.warehouse or product.warehouse or DEFAULT_WAREHOUSE,
+        warehouse=wh,
         created_by_user_id=user.id,
     )
     if payload.movement_date is not None:
@@ -1062,7 +1096,7 @@ def adjust_stock(
     return StockAdjustOut(
         product_id=product.id,
         variant_id=variant.id if variant else None,
-        direction=payload.direction,
+        direction=direction,
         quantity=payload.quantity,
         qty_before=qty_before,
         qty_after=qty_after,
