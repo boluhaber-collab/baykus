@@ -637,6 +637,12 @@ body {
     gap: 0.4rem;
     align-items: center;
   }
+  /* Party action strip: ALWAYS dark text + visible border.
+     Prior white-on-navy/green/purple ghosted when button backgrounds
+     failed to paint (Tailwind preflight transparent). */
+  .bk-party-actions a.bk-party-chip,
+  .bk-party-actions button.bk-party-chip,
+  .bk-party-chip-wrap > button.bk-party-chip,
   .bk-party-chip {
     display: inline-flex;
     align-items: center;
@@ -645,38 +651,58 @@ body {
     padding: 0.45rem 0.75rem;
     font-size: 0.8125rem;
     font-weight: 700;
-    color: #fff;
-    border: none;
+    color: #0f172a !important; /* slate-900 — never white-on-transparent */
+    background-color: #ffffff !important;
+    border: 1px solid #64748b !important;
     cursor: pointer;
     text-decoration: none;
     box-shadow: 0 1px 2px rgba(0,0,0,0.08);
     white-space: nowrap;
     line-height: 1.2;
   }
-  .bk-party-chip:hover { filter: brightness(1.05); }
-  .bk-party-chip--navy { background: #1e293b; }
-  .bk-party-chip--green { background: #15803d; }
-  .bk-party-chip--white {
-    background: #fff;
-    color: #0f172a;
-    border: 1px solid #64748b;
+  .bk-party-actions a.bk-party-chip:hover,
+  .bk-party-actions button.bk-party-chip:hover,
+  .bk-party-chip-wrap > button.bk-party-chip:hover,
+  .bk-party-chip:hover {
+    filter: none;
+    background-color: #f1f5f9 !important;
+    border-color: #475569 !important;
   }
-  .bk-party-chip--purple { background: #6d28d9; }
-  /* Dark text on light cyan/yellow/orange — white-on-pastel failed WCAG. */
+  /* Tinted fills keep dark text + border (customer + supplier strip). */
+  .bk-party-chip--navy {
+    background-color: #e2e8f0 !important; /* slate-200 */
+    border-color: #475569 !important;
+    color: #0f172a !important;
+  }
+  .bk-party-chip--green {
+    background-color: #dcfce7 !important;
+    border-color: #16a34a !important;
+    color: #0f172a !important;
+  }
+  .bk-party-chip--white {
+    background-color: #ffffff !important;
+    border-color: #64748b !important;
+    color: #0f172a !important;
+  }
+  .bk-party-chip--purple {
+    background-color: #f3e8ff !important;
+    border-color: #7c3aed !important;
+    color: #0f172a !important;
+  }
   .bk-party-chip--cyan {
-    background: #e0f2fe;
-    color: #0c4a6e;
-    border: 1px solid #7dd3fc;
+    background-color: #e0f2fe !important;
+    border-color: #0284c7 !important;
+    color: #0f172a !important;
   }
   .bk-party-chip--yellow {
-    background: #fde68a;
-    color: #78350f;
-    border: 1px solid #fbbf24;
+    background-color: #fef3c7 !important;
+    border-color: #d97706 !important;
+    color: #0f172a !important;
   }
   .bk-party-chip--orange {
-    background: #ffedd5;
-    color: #9a3412;
-    border: 1px solid #fb923c;
+    background-color: #ffedd5 !important;
+    border-color: #ea580c !important;
+    color: #0f172a !important;
   }
   .bk-party-chip-wrap {
     position: relative;
