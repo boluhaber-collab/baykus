@@ -207,7 +207,7 @@ Spec: `docs/DIRECT_SALES_SPEC.md` · ekran görüntüleri: `docs/parity-shots/`
 | Günlük Kasa masaüstü özet | `/finance/cash` — Kasa Özeti kartları + sipariş tablosu + Kasa/Banka hareketleri (Giriş/Çıkış) · `GET /api/finance/cash/daily` | done |
 | Açık Bakiyeler sipariş satırları | `/finance/open-balances` — Ara/Durum filtre · geciken/teslim satır renkleri · cari sekmesi | done |
 | Hesaplarım tür grupları | `/finance/banks` — Banka/POS/Kart/Ortak paneller + kasa devir · `account_type`/`institution` | done |
-| Hesap detay (BH ledger) | `/finance/banks/[id]` + `/finance/cash/[id]` — Bakiye header · action chips · BH ledger cols (Tarih, İşlem, Kullanıcı, Hesap, Açıklama, Borç, Alacak, Bakiye) · `bhNote.ts` | done |
+| Hesap detay (BH ledger) | `/finance/banks/[id]` + `/finance/cash/[id]` — Bakiye header · action chips · BH ledger cols + rightmost **İşlem▾** (Yazdır / Düzenle-disabled / Sil-gated / +Belge Ekle) · Sil only when note lacks `BH_IMPORT:` · API refuses BH delete · `bhNote.ts` | done |
 | Masraflar masaüstü filtre | `/finance/expenses` — dönem · Ödenmiş/Ödenecek/Gecikmiş · belge/vade · kalem CRUD | done |
 | Krediler / Demirbaşlar | mevcut CRUD korunur (özet kartlar önceki batch) | done |
 | Üretim aşama sütunları | `/production` — stage chips + kanban sütunları + ilerlet/PDF | done |

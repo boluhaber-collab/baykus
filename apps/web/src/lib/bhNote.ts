@@ -9,6 +9,13 @@ import type { ExpandDetailPayload, ExpandLineItem } from "@/components/Expandabl
 
 const BH_PREFIX = "BH_IMPORT:";
 
+/** True when note is from BizimHesap import — must not be deletable via UI/API. */
+export function isBhImportNote(note: string | null | undefined): boolean {
+  const raw = (note || "").trim();
+  if (!raw) return false;
+  return raw.startsWith(BH_PREFIX) || raw.includes(BH_PREFIX);
+}
+
 export type BhNoteParts = {
   isBh: boolean;
   hareket?: string;

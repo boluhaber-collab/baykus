@@ -335,6 +335,16 @@ export default function BankDetailPage() {
         panel={panelNode}
         movements={movements}
         hareketFallback={BANK_HAREKET_LABELS}
+        ledgerKind="bank"
+        onRowMutated={load}
+        onRowError={(msg) => {
+          setOkMsg("");
+          setError(msg);
+        }}
+        onRowOk={(msg) => {
+          setError("");
+          setOkMsg(msg);
+        }}
       />
       <StatusFooter onRefresh={load} />
     </>

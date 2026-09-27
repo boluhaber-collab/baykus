@@ -326,6 +326,16 @@ export default function CashDetailPage() {
         panel={panelNode}
         movements={movements}
         hareketFallback={CASH_HAREKET_LABELS}
+        ledgerKind="cash"
+        onRowMutated={load}
+        onRowError={(msg) => {
+          setOkMsg("");
+          setError(msg);
+        }}
+        onRowOk={(msg) => {
+          setError("");
+          setOkMsg(msg);
+        }}
       />
       <StatusFooter onRefresh={load} />
     </>

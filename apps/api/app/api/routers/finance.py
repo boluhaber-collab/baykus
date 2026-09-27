@@ -49,6 +49,24 @@ router = APIRouter(prefix="/finance", tags=["finance"])
 READ_ROLES = ("admin", "muhasebe", "satış")
 WRITE_ROLES = ("admin", "muhasebe")
 
+BH_IMPORT_MARKER = "BH_IMPORT:"
+
+
+def _is_bh_import_note(note: str | None) -> bool:
+    """Imported BizimHesap rows are immutable — never allow API delete."""
+    if not note:
+        return False
+    return BH_IMPORT_MARKER in note
+
+
+def _refuse_bh_import_delete(note: str | None) -> None:
+    if _is_bh_import_note(note):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="BizimHesap aktarım kayıtları silinemez",
+        )
+
+
 
 def _dec(v) -> Decimal:
     return Decimal(str(v or 0))
@@ -823,6 +841,40 @@ def create_cash_movement(
     return _cash_movement_out(m, db=db)
 
 
+@router.delete("/cash/movements/{movement_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cash_movement(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*WRITE_ROLES)),
+) -> None:
+    m = db.get(CashMovement, movement_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Kasa hareketi bulunamadı")
+    _refuse_bh_import_delete(m.note)
+    # If part of a transfer, remove the paired legs too (non-BH only — already gated)
+    group_id = m.transfer_group_id
+    if group_id:
+        peers_cash = (
+            db.query(CashMovement)
+            .filter(CashMovement.transfer_group_id == group_id)
+            .all()
+        )
+        peers_bank = (
+            db.query(BankMovement)
+            .filter(BankMovement.transfer_group_id == group_id)
+            .all()
+        )
+        for peer in peers_cash + peers_bank:
+            _refuse_bh_import_delete(peer.note)
+        for peer in peers_cash:
+            db.delete(peer)
+        for peer in peers_bank:
+            db.delete(peer)
+    else:
+        db.delete(m)
+    db.commit()
+
+
 # ─── Banks ─────────────────────────────────────────────────────────────────
 
 
@@ -1020,6 +1072,39 @@ def list_all_bank_movements(
         q = q.filter(BankMovement.movement_date <= to_date)
     rows = q.order_by(BankMovement.movement_date.desc(), BankMovement.id.desc()).offset(skip).limit(limit).all()
     return [_bank_movement_out(m, db=db) for m in rows]
+
+
+@router.delete("/bank-movements/{movement_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bank_movement(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*WRITE_ROLES)),
+) -> None:
+    m = db.get(BankMovement, movement_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Banka hareketi bulunamadı")
+    _refuse_bh_import_delete(m.note)
+    group_id = m.transfer_group_id
+    if group_id:
+        peers_cash = (
+            db.query(CashMovement)
+            .filter(CashMovement.transfer_group_id == group_id)
+            .all()
+        )
+        peers_bank = (
+            db.query(BankMovement)
+            .filter(BankMovement.transfer_group_id == group_id)
+            .all()
+        )
+        for peer in peers_cash + peers_bank:
+            _refuse_bh_import_delete(peer.note)
+        for peer in peers_cash:
+            db.delete(peer)
+        for peer in peers_bank:
+            db.delete(peer)
+    else:
+        db.delete(m)
+    db.commit()
 
 
 # ─── Transfers ─────────────────────────────────────────────────────────────

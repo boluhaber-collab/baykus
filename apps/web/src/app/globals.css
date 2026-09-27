@@ -696,6 +696,70 @@ body {
   .bk-party-chip-menu button:hover {
     background: #f1f5f9;
   }
+
+  /* —— Account ledger row İşlem menu (BizimHesap style) —— */
+  .bk-row-islem {
+    position: relative;
+    display: inline-flex;
+    justify-content: flex-end;
+  }
+  .bk-row-islem-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 0.3rem;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #334155;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .bk-row-islem-btn:hover { background: #f8fafc; }
+  .bk-row-islem-btn:disabled { opacity: 0.55; cursor: wait; }
+  .bk-row-islem-menu {
+    position: absolute;
+    top: calc(100% + 0.2rem);
+    right: 0;
+    z-index: 40;
+    min-width: 11.5rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.35rem;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+    padding: 0.25rem;
+    text-align: left;
+  }
+  .bk-row-islem-menu button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.8125rem;
+    color: #1e293b;
+    border-radius: 0.25rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  .bk-row-islem-menu button:hover:not(:disabled) { background: #f1f5f9; }
+  .bk-row-islem-danger { color: #be123c !important; font-weight: 600; }
+  .bk-row-islem-disabled {
+    color: #94a3b8 !important;
+    cursor: not-allowed !important;
+  }
+  .bk-row-islem-hint {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: lowercase;
+  }
   .bk-party-grid {
     display: grid;
     gap: 0.625rem;
