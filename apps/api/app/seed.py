@@ -22,8 +22,6 @@ from app.models import (
     DtfScenario,
     Expense,
     ExpenseCategory,
-    Loan,
-    LoanInstallment,
     Order,
     OrderLine,
     OrderStatusHistory,
@@ -1209,77 +1207,9 @@ def seed(db: Session) -> None:
         db.commit()
 
     # ─── Loans / installments (Kredi / taksit) ───────────────────────────────
-    if db.query(Loan).count() == 0:
-        from calendar import monthrange
-
-        def add_months(d, months):
-            y = d.year + (d.month - 1 + months) // 12
-            m = (d.month - 1 + months) % 12 + 1
-            last = monthrange(y, m)[1]
-            return date(y, m, min(d.day, last))
-
-        start = date.today().replace(day=1) - timedelta(days=60)
-        start = start.replace(day=1)
-        loan1 = Loan(
-            title="Baskı makinesi kredisi",
-            lender="Ziraat Bankası",
-            principal_amount=Decimal("120000.00"),
-            interest_rate=Decimal("1.50"),
-            start_date=start,
-            installment_count=12,
-            status="aktif",
-            notes="Demo kredi — DTF makinesi",
-        )
-        loan2 = Loan(
-            title="İşyeri tadilat taksiti",
-            lender="Tedarikçi XYZ",
-            principal_amount=Decimal("24000.00"),
-            interest_rate=None,
-            start_date=start,
-            installment_count=6,
-            status="aktif",
-            notes="Demo taksit",
-        )
-        db.add_all([loan1, loan2])
-        db.flush()
-        # loan1 installments
-        base1 = (loan1.principal_amount / Decimal(12)).quantize(Decimal("0.01"))
-        interest_each = (loan1.principal_amount * Decimal("1.50") / Decimal("100") / Decimal(12)).quantize(
-            Decimal("0.01")
-        )
-        allocated = Decimal("0")
-        for i in range(1, 13):
-            amt = (loan1.principal_amount - allocated + interest_each) if i == 12 else (base1 + interest_each)
-            if i < 12:
-                allocated += base1
-            inst = LoanInstallment(
-                loan_id=loan1.id,
-                sequence=i,
-                due_date=add_months(start, i - 1),
-                amount=amt,
-                is_paid=(i <= 2),
-                paid_at=datetime.utcnow() if i <= 2 else None,
-                payment_method="banka" if i <= 2 else None,
-            )
-            db.add(inst)
-        base2 = (loan2.principal_amount / Decimal(6)).quantize(Decimal("0.01"))
-        allocated = Decimal("0")
-        for i in range(1, 7):
-            amt = (loan2.principal_amount - allocated) if i == 6 else base2
-            if i < 6:
-                allocated += base2
-            db.add(
-                LoanInstallment(
-                    loan_id=loan2.id,
-                    sequence=i,
-                    due_date=add_months(start, i - 1),
-                    amount=amt,
-                    is_paid=(i == 1),
-                    paid_at=datetime.utcnow() if i == 1 else None,
-                    payment_method="nakit" if i == 1 else None,
-                )
-            )
-        db.commit()
+    # Krediler seed intentionally omitted — use BizimHesap import:
+    #   python -m app.scripts.import_bizimhesap_krediler --live
+    # (see docs/BIZIMHESAP_IMPORT.md). Demo Baskı makinesi / tadilat rows removed.
 
 
     # ── Parity batch 3: DTF, special days, campaigns ───────────────────────

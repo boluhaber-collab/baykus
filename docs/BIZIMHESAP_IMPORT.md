@@ -1,6 +1,6 @@
 # BizimHesap → Baykuş içe aktarma
 
-Bu rehber **ürün / depo / stok** API importunu, **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)**, **Hesaplarım (kasa / banka / ortak)**, **Demirbaşlar** ve **Masraflar (gider)** aşamalarını açıklar.
+Bu rehber **ürün / depo / stok** API importunu, **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)**, **Hesaplarım (kasa / banka / ortak)**, **Demirbaşlar**, **Masraflar (gider)** ve **Krediler (taksit)** aşamalarını açıklar.
 
 ## 1) Token alma
 
@@ -486,12 +486,113 @@ UI: **Finans → Masraflar** (`/finance/expenses`).
 API notu: `GET /api/finance/expenses` `date_from` / `date_to` için `datetime.date` import’u gerekir — eksikse OpenAPI 500 / UI “Failed to fetch”.
 
 
-## 7) Güvenlik
+
+## 7) Krediler (kredi / taksit)
+
+BizimHesap B2B API’sinde kredi **yok**. Kaynak: panel **Nakit Yönetimi → Krediler** (Angular SPA + klasik detay sayfası):
+
+| Endpoint | İçerik |
+|----------|--------|
+| `GET /api/AngularControllers/credits/getcredits` | Kredi listesi (ad, toplam, bakiye, taksit sayısı, GUID, banka hesabı) |
+| `GET /api/AngularControllers/credits/getremainingcreditplans/{id}` | Kalan (ödenmemiş) taksit planı |
+| `GET /api/AngularControllers/credits/GetRemainingPayments` | Toplam kalan ödeme (string) |
+| `GET /api/AngularControllers/credits/GetCurrentMonthPayments` | Bu ay ödeme (string) |
+| `GET /web/ngn/acc/ngncredit?rc=1&guid={GUID}` | Tam taksit tablosu (sıra, vade, tutar, ödenen+tarih) |
+
+### Kaynak dosyalar
+
+`tmp/bizimhesap/krediler/` (gitignore):
+
+| Dosya | İçerik |
+|-------|--------|
+| `credits.json` | Ham getcredits listesi |
+| `loans.json` | Normalize kredi + taksit satırları |
+| `manifest.json` | Kaynak / scrape zamanı / sayım / reconcile |
+| `credit_{GUID}.html` | Ham detay paneli (opsiyonel) |
+
+### Linux / box
+
+```bash
+cd /path/to/baykus-web
+./scripts/import-bizimhesap-krediler.sh --live
+# cache’den:
+./scripts/import-bizimhesap-krediler.sh --from-cache ../../tmp/bizimhesap/krediler
+# veya:
+cd apps/api && source .venv/bin/activate
+export DATABASE_URL=sqlite:///./baykus.db
+python scripts/import_bizimhesap_krediler.py --live
+python -m app.scripts.import_bizimhesap_krediler --from-cache ../../tmp/bizimhesap/krediler
+```
+
+### Windows PC (`C:\Users\engin\Desktop\baykus`)
+
+```powershell
+cd C:\Users\engin\Desktop\baykus\apps\api
+.\.venv\Scripts\Activate.ps1
+$env:DATABASE_URL = "sqlite:///./baykus.db"
+# canlı scrape (BIZIMHESAP_USER/PASSWORD — box-secrets veya env):
+python scripts\import_bizimhesap_krediler.py --live
+# cache:
+python scripts\import_bizimhesap_krediler.py --from-cache ..\..\tmp\bizimhesap\krediler
+```
+
+Git Bash: `bash scripts/import-bizimhesap-krediler.sh --live`
+
+### Faydalı bayraklar
+
+| Bayrak | Anlam |
+|--------|--------|
+| `--from-cache DIR` | `loans.json` klasörü |
+| `--live` | Panel scrape + cache yaz + import |
+| `--scrape-only` | Sadece cache yaz |
+| `--dry-run` | Parse / sayım; DB yazma |
+| `--skip-backup` | SQLite yedeğini atla |
+
+### Ne yapar?
+
+1. `baykus.db` → `apps/api/backups/baykus_pre_bh_krediler_*.db`
+2. **Tüm** `loan_installments` + `loans` satırlarını siler (seed demo Baskı makinesi / tadilat dahil)
+3. BH kredilerini `loans` olarak yazar:
+   - `title` = kredi adı (`dsCredit`)
+   - `lender` = kredi hesabı adı (`lblCreditAccountName`; genel “Banka TL Hesabı” ise title)
+   - `principal_amount` = `mtCreditTotal`
+   - `start_date` = `dtFirstInstallment`
+   - `status` = `aktif` (bakiye > 0) / `kapandı` (bakiye ≤ 0)
+   - `notes` içinde `BH_IMPORT:BH-LOAN:{guid}`
+4. Taksitleri `loan_installments` olarak yazar:
+   - Ödenen: `is_paid=True`, `paid_at`, `payment_method=banka`, isteğe `bank_account_id` eşlemesi
+   - **Yeni kasa/banka hareketi oluşturulmaz** (Hesaplarım import’u ledger’ı taşır)
+5. Reconcile: taksit unpaid toplamı ≈ `mtBalance` (±0,01); manifest `all_balances_ok`
+
+### Eşleme
+
+| BH | Baykuş |
+|----|--------|
+| `dsCredit` | `loans.title` |
+| Kredi hesabı / banka | `loans.lender` (+ bank_accounts eşlemesi) |
+| `mtCreditTotal` | `loans.principal_amount` |
+| `dtFirstInstallment` | `loans.start_date` |
+| Taksit # / vade / tutar | `loan_installments.sequence` / `due_date` / `amount` |
+| Ödenen hücre (tutar + tarih) | `is_paid` / `paid_at` |
+| `mtBalance` | unpaid taksit toplamı (reconcile) |
+
+### Beklenen smoke (27.09.2026 scrape)
+
+| Metrik | Değer |
+|--------|------:|
+| Kredi | 3 (QNB, VAKIFBANK 1, VAKIFBANK 2) |
+| Taksit | ~94 (ödendi ~33 / kalan ~61) |
+| Kalan toplam | ~559.053,15 (= GetRemainingPayments) |
+| Bu ay | ~6.344,55 (= GetCurrentMonthPayments) |
+
+UI: **Finans → Krediler** (`/finance/loans`).
+
+## 8) Güvenlik
 
 - Token, ham JSON dump’ları, ekstre PDF’leri, Hesaplarım xlsx ve `*.db` **commit edilmez** (`tmp/`, `*.db`, `.env` gitignore’da).
-- Commit edilenler: `scripts/import_bizimhesap_*.py`, `app/scripts/…` sarmalayıcıları, `app/integrations/demirbas_classify.py`, `docs/BIZIMHESAP_IMPORT.md`, `scripts/import-bizimhesap-*.sh` (masraflar dahil).
+- Commit edilenler: `scripts/import_bizimhesap_*.py`, `app/scripts/…` sarmalayıcıları, `app/integrations/demirbas_classify.py`, `docs/BIZIMHESAP_IMPORT.md`, `scripts/import-bizimhesap-*.sh` (masraflar / krediler dahil).
 
-## 8) Sorun giderme
+## 9) Sorun giderme
 
 | Belirti | Çözüm |
 |--------|--------|
@@ -513,3 +614,7 @@ API notu: `GET /api/finance/expenses` `date_from` / `date_to` için `datetime.da
 | Masraf demo kaldı | `--live` / import’u `--keep` olmadan çalıştırın; wipe tüm categories+expenses |
 | Çift kasa/banka gideri | Masraf import ledger yazmaz; Hesaplarım hareketlerini silmeyin |
 | `--live` masraf login fail | `BIZIMHESAP_USER`/`PASSWORD`; cache’den `--from-cache` |
+| Kredi demo kaldı | `--live` / import’u çalıştırın; wipe tüm loans+installments |
+| Kredi bakiye ≠ unpaid | manifest `balance_ok` / `all_balances_ok`; detay HTML’i yeniden scrape |
+| Çift kredi ödemesi ledger | Kredi import ledger yazmaz; Hesaplarım hareketlerini silmeyin |
+| `--live` kredi login / 401 | `BIZIMHESAP_USER`/`PASSWORD`; API host `uygulama.bizimhesap.com` (bizimhesap.com 401) |

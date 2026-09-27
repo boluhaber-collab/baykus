@@ -69,7 +69,7 @@ Ana Sayfa · Müşteri · Tedarik · Ürün & Stok · Satış/Sipariş · Üreti
 - **DTF maliyet**: `/tools/dtf` — film/mürekkep/işçilik/fire → birim+toplam; `dtf_scenarios`
 - **CRM**: `/crm/special-days`, `/crm/campaigns` + dashboard “yaklaşan özel günler” (30 gün)
 - **Yedekleme**: `/settings/backups` — zip (DB+uploads) → `apps/api/backups/`; geri yükleme manuel
-- **BizimHesap**: `/settings/integrations` stub + CLI ürün/depo/stok, cari, hesaplarım, demirbaş import (`scripts/import-bizimhesap-*.sh`, `docs/BIZIMHESAP_IMPORT.md`)
+- **BizimHesap**: `/settings/integrations` stub + CLI ürün/depo/stok, cari, hesaplarım, demirbaş, masraflar, krediler import (`scripts/import-bizimhesap-*.sh`, `docs/BIZIMHESAP_IMPORT.md`)
 - Postgres: `alembic upgrade head` (rev **009**) · SQLite: `python -m app.bootstrap_sqlite`
 
 
