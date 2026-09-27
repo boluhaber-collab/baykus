@@ -392,3 +392,27 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live po
 
 - Masaüstü ReportLab twin PDF stilleri (cari/demirbaş/fiyat listesi) — web polish’li basit PDF (batch 18)
 - Merkezi DB canlı şifre / VPS kullanıcı senkron (masaüstü postgres users)
+
+## Batch 19 — Visual polish vs parity-shots (2026-09-27)
+
+Kaynak ekran görüntüleri: `docs/parity-shots/{sidebar,ana-sayfa,direkt-satislar,perakende}.png`.
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Sidebar navy + branding | `#151b26` · logo · «baykuş / Baskı Takip Sistemi» · `tek` satırlarda sağ `+` · aktif sol bar · footer Engin KARAKÖZ | done |
+| Ana Sayfa KPI / uyarı | `bk-dash-kpi` (tutar üstte) · `bk-alert-bar` · panel başlık `#151b26` · yoğunluk | done |
+| Direkt Satışlar | `bk-kpi-strip` + ikon · 3× `bk-cta-huge` (perakende / yeni / kayıtlı) · masaüstü renkleri `#c2185b` | done |
+| Perakende Satış Gir | başlık+breadcrumb · Kaydet/Geri PERAKENDE içinde · `bk-btn-desktop-red/orange` · LabelFrame densitesi | done |
+| Kanban / Yaşam çizgisi | `bk-kanban-col` navy head + accent · kart densitesi · StatusFooter · Üretim Akış CTA | done |
+| Teklifler | KPI şerit · filtre fieldset · satırdan «Siparişe Dönüştür» (`POST /api/quotes/{id}/convert`) · StatusFooter | done |
+| İşlem Geçmişi | KPI özet · entity preset · metin ara · action badge · densite tablosu | done |
+| Entegrasyonlar | STUB banner (BizimHesap live OOS) · KPI durum · stub senkron UX · StatusFooter | done |
+| Shared CSS | `globals.css` `@layer components`: bk-kpi-*, bk-cta-*, bk-alert-*, bk-dash-kpi, bk-sidebar-*, bk-kanban-*, bk-btn-desktop-* | done |
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password / ReportLab twin stiller.
+
+### Kalan (dürüst) → Batch 20 adayları
+
+- İnce sayfa densite / StatusFooter tutarlılığı (kalan listeler)
+- Üretim / Sipariş Merkezi ince UX
+- ReportLab twin PDF (bilinçli basit)

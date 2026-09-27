@@ -12,6 +12,16 @@ import {
   formatMoney,
   statusBadgeClass,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
+
+const COL_ACCENT: Record<string, string> = {
+  "Sipariş Alındı": "#2563eb",
+  Hazırlanıyor: "#f59e0b",
+  Baskıda: "#7c3aed",
+  Hazır: "#198754",
+  "Teslim Edildi": "#0f766e",
+  "Sipariş İptali": "#dc2626",
+};
 
 export default function OrdersKanbanPage() {
   const [board, setBoard] = useState<KanbanBoard | null>(null);
@@ -68,20 +78,22 @@ export default function OrdersKanbanPage() {
     }));
   }, [board, channel, designStatus]);
 
+  const totalCards = columns.reduce((s, c) => s + c.items.length, 0);
+
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div className="space-y-2 pb-2">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Kanban</h1>
-          <p className="text-slate-500 text-sm">
-            Masaüstü Baykuş durumları — tasarım rozeti · kanal / tasarım filtresi
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Sipariş Yaşam Çizgisi</h1>
+          <p className="text-[11px] text-baykus-muted">
+            Üretim panosu · {totalCards} kart · durum sürükle/seçerek ilerlet
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           <select
             value={channel}
             onChange={(e) => setChannel(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="bk-input w-auto text-xs"
           >
             <option value="">Tüm kanallar</option>
             {ORDER_CHANNELS.map((c) => (
@@ -93,7 +105,7 @@ export default function OrdersKanbanPage() {
           <select
             value={designStatus}
             onChange={(e) => setDesignStatus(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="bk-input w-auto text-xs"
           >
             <option value="">Tüm tasarım</option>
             {DESIGN_STATUSES.map((d) => (
@@ -102,103 +114,107 @@ export default function OrdersKanbanPage() {
               </option>
             ))}
           </select>
-          <button
-            onClick={load}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
-          >
-            Yenile
+          <button type="button" onClick={load} className="bk-btn bk-btn-ghost text-xs">
+            ↻ Yenile
           </button>
-          <Link
-            href="/orders"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
-          >
+          <Link href="/orders" className="bk-btn bk-btn-ghost text-xs">
             Liste
           </Link>
-          <Link
-            href="/orders/new"
-            className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm font-medium"
-          >
+          <Link href="/production" className="bk-btn text-xs font-bold text-white" style={{ backgroundColor: "#f59e0b" }}>
+            Üretim Akış
+          </Link>
+          <Link href="/orders/new" className="bk-btn bk-btn-primary text-xs font-bold">
             + Yeni
           </Link>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
-      )}
+      {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="flex gap-3 overflow-x-auto pb-4 items-start">
-        {columns.map((col) => (
-          <div key={col.key} className="w-64 shrink-0 rounded-xl bg-slate-100 p-3 min-h-[280px]">
-            <div className="font-semibold text-sm mb-3 text-slate-700 flex items-center justify-between gap-2">
-              <span className="leading-tight">{col.label}</span>
-              <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadgeClass(col.key)}`}
-              >
-                {col.items.length}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {col.items.map((item) => (
-                <div key={item.id} className="rounded-lg bg-white p-3 shadow-sm text-sm space-y-2">
-                  <Link
-                    href={`/orders/${item.id}`}
-                    className="font-medium text-baykus-700 hover:underline"
-                  >
-                    {item.order_number}
-                  </Link>
-                  <div className="text-xs text-slate-500">{item.customer_name || "Müşteri yok"}</div>
-                  <div className="flex flex-wrap gap-1">
-                    {item.channel && (
-                      <span className="rounded-full bg-slate-100 text-slate-600 px-2 py-0.5 text-[10px]">
-                        {item.channel}
-                      </span>
-                    )}
-                    {item.design_status && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${designStatusBadgeClass(item.design_status)}`}
+      <div className="flex gap-2 overflow-x-auto pb-2 items-stretch">
+        {columns.map((col) => {
+          const accent = COL_ACCENT[col.key] || "#334155";
+          return (
+            <div key={col.key} className="bk-kanban-col">
+              <div className="bk-kanban-col-head" style={{ borderBottom: `3px solid ${accent}` }}>
+                <span className="leading-tight truncate">{col.label}</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusBadgeClass(col.key)}`}
+                >
+                  {col.items.length}
+                </span>
+              </div>
+              <div className="p-1.5 space-y-1.5 max-h-[70vh] overflow-y-auto">
+                {col.items.map((item) => (
+                  <div key={item.id} className="bk-kanban-card space-y-1.5">
+                    <div className="flex items-start justify-between gap-1">
+                      <Link
+                        href={`/orders/${item.id}`}
+                        className="font-bold text-baykus-primary hover:underline text-[12px]"
                       >
-                        {item.design_status}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-slate-600">
-                    {formatMoney(item.total_amount)}
-                    {item.remaining_amount > 0 && (
-                      <span className="text-amber-700">
-                        {" "}
-                        · kalan {formatMoney(item.remaining_amount)}
-                      </span>
-                    )}
-                  </div>
-                  {item.due_date && (
-                    <div className="text-[10px] text-slate-400">
-                      Teslim: {String(item.due_date).slice(0, 10)}
+                        {item.order_number}
+                      </Link>
+                      {item.remaining_amount > 0 && (
+                        <span className="text-[9px] font-bold text-amber-700 whitespace-nowrap">borç</span>
+                      )}
                     </div>
-                  )}
-                  <select
-                    disabled={busyId === item.id}
-                    value={item.status}
-                    onChange={(e) => moveCard(item.id, e.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs bg-slate-50"
-                  >
-                    {ORDER_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-              {col.items.length === 0 && (
-                <div className="text-xs text-slate-400 px-1 py-4 text-center border border-dashed border-slate-200 rounded-lg">
-                  Boş
-                </div>
-              )}
+                    <div className="text-[11px] text-baykus-text truncate">
+                      {item.customer_name || "Müşteri yok"}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {item.channel && (
+                        <span className="rounded bg-slate-100 text-slate-600 px-1.5 py-0.5 text-[9px] font-medium">
+                          {item.channel}
+                        </span>
+                      )}
+                      {item.design_status && (
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${designStatusBadgeClass(item.design_status)}`}
+                        >
+                          {item.design_status}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] font-semibold tabular-nums">
+                      {formatMoney(item.total_amount)}
+                      {item.remaining_amount > 0 && (
+                        <span className="text-amber-700 font-medium">
+                          {" "}
+                          · kalan {formatMoney(item.remaining_amount)}
+                        </span>
+                      )}
+                    </div>
+                    {item.due_date && (
+                      <div className="text-[10px] text-baykus-muted">
+                        Teslim: {String(item.due_date).slice(0, 10)}
+                      </div>
+                    )}
+                    <select
+                      disabled={busyId === item.id}
+                      value={item.status}
+                      onChange={(e) => moveCard(item.id, e.target.value)}
+                      className="w-full rounded border border-baykus-line px-1.5 py-1 text-[11px] bg-slate-50"
+                    >
+                      {ORDER_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          → {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+                {col.items.length === 0 && (
+                  <div className="text-[11px] text-baykus-muted px-1 py-6 text-center border border-dashed border-baykus-line rounded">
+                    Boş kolon
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

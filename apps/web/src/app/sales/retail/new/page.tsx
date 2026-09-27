@@ -289,35 +289,38 @@ export default function PerakendeSatisGirPage() {
   }
 
   return (
-    <div className="space-y-3 pb-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          data-baykus-save
-          disabled={busy}
-          onClick={() => void saveSale()}
-          className="bk-btn text-sm font-bold text-white px-4 py-2"
-          style={{ backgroundColor: "#be123c" }}
-        >
-          + Satış Kaydet
-        </button>
-        <Link
-          href="/sales"
-          className="bk-btn text-sm font-bold text-white px-4 py-2"
-          style={{ backgroundColor: "#f59e0b" }}
-        >
-          — Geri Dön
-        </Link>
+    <div className="space-y-2 pb-2">
+      <div>
+        <h2 className="text-lg font-bold text-baykus-text leading-tight">Perakende Satış Gir</h2>
+        <p className="text-[11px] text-baykus-muted mt-0.5">Satışlar &gt; Direkt Satışlar &gt; Perakende Satış</p>
       </div>
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="grid gap-3 lg:grid-cols-[1fr_2fr]">
-        {/* SOL — PERAKENDE */}
-        <fieldset className="rounded-md border border-baykus-line bg-white px-4 py-3 space-y-3">
+      <div className="grid gap-2 lg:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)]">
+        {/* SOL — PERAKENDE LabelFrame */}
+        <fieldset className="rounded border border-baykus-line bg-white px-3 py-2.5 space-y-2.5">
           <legend className="px-1 text-xs font-bold tracking-wide">PERAKENDE</legend>
 
-          <div className="grid grid-cols-[7rem_1fr] items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 pb-1">
+            <button
+              type="button"
+              data-baykus-save
+              disabled={busy}
+              onClick={() => void saveSale()}
+              className="bk-btn bk-btn-desktop-red text-sm font-bold px-4 py-2"
+            >
+              + Satış Kaydet
+            </button>
+            <Link
+              href="/sales"
+              className="bk-btn bk-btn-desktop-orange text-sm font-bold px-4 py-2"
+            >
+              − Geri Dön
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
             <label className="text-xs font-medium">Tarih</label>
             <div className="flex gap-2">
               <input
@@ -335,12 +338,12 @@ export default function PerakendeSatisGirPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-[7rem_1fr] items-center gap-2">
+          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
             <label className="text-xs font-medium">Toplam Tutar</label>
             <div className="text-base font-bold tabular-nums">{formatMoney(toplam)}</div>
           </div>
 
-          <div className="grid grid-cols-[7rem_1fr] items-center gap-2">
+          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
             <label className="text-xs font-medium">Tahsilat Türü</label>
             <select
               className="bk-input"
@@ -355,7 +358,7 @@ export default function PerakendeSatisGirPage() {
             </select>
           </div>
 
-          <div className="grid grid-cols-[7rem_1fr] items-center gap-2">
+          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
             <label className="text-xs font-medium">Kasa / Hesap</label>
             <select
               className="bk-input"
@@ -370,7 +373,7 @@ export default function PerakendeSatisGirPage() {
             </select>
           </div>
 
-          <div className="grid grid-cols-[7rem_1fr] items-center gap-2">
+          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
             <label className="text-xs font-medium">Tahsilat</label>
             <input
               className="bk-input tabular-nums"
@@ -382,7 +385,7 @@ export default function PerakendeSatisGirPage() {
             />
           </div>
 
-          <div className="grid grid-cols-[7rem_1fr] items-center gap-2">
+          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
             <label className="text-xs font-medium">Toplam Tahsil Edilen</label>
             <div className="text-base font-bold tabular-nums">{formatMoney(tahsilatNum)}</div>
           </div>
@@ -407,7 +410,7 @@ export default function PerakendeSatisGirPage() {
         </fieldset>
 
         {/* SAĞ — ÜRÜN / HİZMETLER */}
-        <fieldset className="rounded-md border border-baykus-line bg-white px-4 py-3 space-y-2">
+        <fieldset className="rounded border border-baykus-line bg-white px-3 py-2.5 space-y-2">
           <legend className="px-1 text-xs font-bold tracking-wide">ÜRÜN / HİZMETLER</legend>
 
           <input
@@ -546,8 +549,7 @@ export default function PerakendeSatisGirPage() {
             <button
               type="button"
               onClick={removeSelected}
-              className="bk-btn text-xs font-bold text-white"
-              style={{ backgroundColor: "#dc2626" }}
+              className="bk-btn bk-btn-desktop-red text-xs font-bold"
             >
               Seçili Satırı Sil
             </button>

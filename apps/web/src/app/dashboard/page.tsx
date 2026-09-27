@@ -206,7 +206,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-3 pb-2">
+    <div className="space-y-2 pb-2">
       {/* Top metrics strip — sağ üst kutucuklar */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="text-xl font-bold text-slate-700 tracking-tight capitalize">{todayLabel}</div>
@@ -235,7 +235,7 @@ export default function DashboardPage() {
           ).map((box) => (
             <div
               key={box.label}
-              className="rounded border border-baykus-line bg-white px-3 py-1.5 shadow-sm min-w-[9.5rem]"
+              className="rounded border border-baykus-line bg-white px-2.5 py-1 shadow-sm min-w-[8.5rem]"
             >
               <div className="text-[9px] font-bold uppercase tracking-wide text-baykus-muted">
                 {box.label}
@@ -270,7 +270,7 @@ export default function DashboardPage() {
           <Link
             key={a.id}
             href={a.href}
-            className="rounded px-3 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95"
+            className="rounded px-2.5 py-1.5 text-[11px] font-bold text-white shadow-sm hover:opacity-95"
             style={{ backgroundColor: a.hex }}
           >
             {a.label}
@@ -278,48 +278,24 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* KPI cards */}
+      {/* KPI cards — masaüstü: tutar / etiket */}
       {data && (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Link
-            href="/reports/sales"
-            className="rounded-lg px-4 py-4 text-white shadow-sm text-center"
-            style={{ backgroundColor: "#2563eb" }}
-          >
-            <div className="text-[11px] font-semibold opacity-90">{monthName} Cirosu</div>
-            <div className="text-2xl font-bold tabular-nums mt-1">
-              {formatMoney(Number(data.orders_month_revenue))}
-            </div>
+        <div className="bk-kpi-strip">
+          <Link href="/reports/sales" className="bk-dash-kpi" style={{ backgroundColor: "#2563eb" }}>
+            <div className="amt">{formatMoney(Number(data.orders_month_revenue))}</div>
+            <div className="lbl">{monthName} Cirosu</div>
           </Link>
-          <Link
-            href="/reports/profit"
-            className="rounded-lg px-4 py-4 text-white shadow-sm text-center"
-            style={{ backgroundColor: "#15803d" }}
-          >
-            <div className="text-[11px] font-semibold opacity-90">{monthName} Net Kar</div>
-            <div className="text-2xl font-bold tabular-nums mt-1">
-              {formatMoney(Number(data.month_net_profit ?? 0))}
-            </div>
+          <Link href="/reports/profit" className="bk-dash-kpi" style={{ backgroundColor: "#15803d" }}>
+            <div className="amt">{formatMoney(Number(data.month_net_profit ?? 0))}</div>
+            <div className="lbl">{monthName} Net Kâr</div>
           </Link>
-          <Link
-            href="/finance/cash"
-            className="rounded-lg px-4 py-4 text-white shadow-sm text-center"
-            style={{ backgroundColor: "#f59e0b" }}
-          >
-            <div className="text-[11px] font-semibold opacity-90">Güncel Kasa</div>
-            <div className="text-2xl font-bold tabular-nums mt-1">
-              {formatMoney(Number(data.cash_balance))}
-            </div>
+          <Link href="/finance/cash" className="bk-dash-kpi" style={{ backgroundColor: "#f59e0b" }}>
+            <div className="amt">{formatMoney(Number(data.cash_balance))}</div>
+            <div className="lbl">Güncel Kasa</div>
           </Link>
-          <Link
-            href="/finance/banks"
-            className="rounded-lg px-4 py-4 text-white shadow-sm text-center"
-            style={{ backgroundColor: "#be123c" }}
-          >
-            <div className="text-[11px] font-semibold opacity-90">Banka Bakiyesi</div>
-            <div className="text-2xl font-bold tabular-nums mt-1">
-              {formatMoney(Number(data.bank_balance))}
-            </div>
+          <Link href="/finance/banks" className="bk-dash-kpi" style={{ backgroundColor: "#be123c" }}>
+            <div className="amt">{formatMoney(Number(data.bank_balance))}</div>
+            <div className="lbl">Banka Bakiyesi</div>
           </Link>
         </div>
       )}
@@ -330,7 +306,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {/* ÜRETİM / ATÖLYE */}
             <div className="bk-card overflow-hidden">
-              <div className="bg-[#1b2230] text-white px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="bg-[#151b26] text-white px-3 py-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-bold tracking-wide">
                   ÜRETİM / ATÖLYE{" "}
                   <span className="font-normal opacity-80 ml-2">
@@ -373,7 +349,7 @@ export default function DashboardPage() {
 
             {/* VARLIKLAR */}
             <div className="bk-card overflow-hidden">
-              <div className="bg-[#1b2230] text-white text-xs font-bold px-3 py-2 tracking-wide">
+              <div className="bg-[#151b26] text-white text-xs font-bold px-3 py-2 tracking-wide">
                 VARLIKLAR
               </div>
               <div className="p-3 space-y-3">
@@ -412,7 +388,7 @@ export default function DashboardPage() {
 
             {/* BORÇLAR / ALACAKLAR */}
             <div className="bk-card overflow-hidden">
-              <div className="bg-[#1b2230] text-white text-xs font-bold px-3 py-2 tracking-wide">
+              <div className="bg-[#151b26] text-white text-xs font-bold px-3 py-2 tracking-wide">
                 BORÇLAR / ALACAKLAR
               </div>
               <div className="p-3 space-y-3">
@@ -453,7 +429,7 @@ export default function DashboardPage() {
 
             {/* PERFORMANS */}
             <div className="bk-card overflow-hidden">
-              <div className="bg-[#1b2230] text-white text-xs font-bold px-3 py-2 tracking-wide">
+              <div className="bg-[#151b26] text-white text-xs font-bold px-3 py-2 tracking-wide">
                 PERFORMANS
               </div>
               <div className="p-3 text-xs space-y-2">
@@ -474,36 +450,34 @@ export default function DashboardPage() {
           <div className="space-y-2">
             <Link
               href="/orders?open=1"
-              className="flex items-center justify-between gap-3 rounded-lg px-4 py-3 text-white shadow-sm"
+              className="bk-alert-bar"
               style={{ backgroundColor: "#f59e0b" }}
             >
               <div>
-                <div className="text-sm font-bold tracking-wide">BEKLEYEN SİPARİŞ</div>
-                <div className="text-xs opacity-90 mt-0.5">Açık siparişleri görmek için tıklayın.</div>
+                <div className="bk-alert-title">BEKLEYEN SİPARİŞ</div>
+                <div className="bk-alert-sub">Açık siparişleri görmek için tıklayın.</div>
               </div>
-              <div className="text-4xl font-black tabular-nums leading-none">{data.open_orders}</div>
+              <div className="bk-alert-count">{data.open_orders}</div>
             </Link>
 
             <Link
               href="/stock/critical"
-              className="flex items-center justify-between gap-3 rounded-lg px-4 py-3 text-white shadow-sm"
+              className="bk-alert-bar"
               style={{ backgroundColor: "#dc2626" }}
             >
               <div>
-                <div className="text-sm font-bold tracking-wide">KRİTİK STOK</div>
-                <div className="text-xs opacity-90 mt-0.5">Azalan stokları görmek için tıklayın.</div>
+                <div className="bk-alert-title">KRİTİK STOK</div>
+                <div className="bk-alert-sub">Azalan stokları görmek için tıklayın.</div>
               </div>
-              <div className="text-4xl font-black tabular-nums leading-none">
-                {data.critical_stock_count}
-              </div>
+              <div className="bk-alert-count">{data.critical_stock_count}</div>
             </Link>
 
             <Link
               href="/orders?due=today"
-              className="block rounded-lg px-4 py-3 text-white shadow-sm"
+              className="bk-alert-bar block"
               style={{ backgroundColor: "#16a34a" }}
             >
-              <div className="text-sm font-bold tracking-wide">BUGÜN TESLİM / YAKLAŞAN İŞLER</div>
+              <div className="bk-alert-title">BUGÜN TESLİM / YAKLAŞAN İŞLER</div>
               <div className="text-xs opacity-90 mt-0.5">
                 {(data.due_today_count ?? 0) + (data.due_soon_count ?? 0) === 0
                   ? "Bugün teslim edilecek açık iş bulunmuyor."
@@ -513,10 +487,10 @@ export default function DashboardPage() {
 
             <Link
               href="/orders/overdue"
-              className="block rounded-lg px-4 py-3 text-white shadow-sm"
+              className="bk-alert-bar block"
               style={{ backgroundColor: "#ef4444" }}
             >
-              <div className="text-sm font-bold tracking-wide">GECİKEN TESLİMLER</div>
+              <div className="bk-alert-title">GECİKEN TESLİMLER</div>
               <div className="text-xs opacity-90 mt-0.5">
                 {(data.overdue_deliveries_count ?? 0) === 0
                   ? "Geciken teslim bulunmuyor."
@@ -525,11 +499,11 @@ export default function DashboardPage() {
             </Link>
 
             <div
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3 text-white shadow-sm"
+              className="bk-alert-bar flex-wrap"
               style={{ backgroundColor: "#4338ca" }}
             >
               <div className="min-w-0">
-                <div className="text-sm font-bold tracking-wide">KREDİ ÖDEMESİ SON GÜN</div>
+                <div className="bk-alert-title">KREDİ ÖDEMESİ SON GÜN</div>
                 <div className="text-xs opacity-90 mt-0.5">
                   {(data.loan_due_count ?? 0) === 0
                     ? "Yaklaşan kredi ödemesi bulunmamaktadır."
@@ -635,7 +609,7 @@ export default function DashboardPage() {
       {/* Stokta Var + Notlar */}
       <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
         <div className="bk-card overflow-hidden">
-          <div className="bg-[#1b2230] text-white text-xs font-bold px-3 py-2 tracking-wide">
+          <div className="bg-[#151b26] text-white text-xs font-bold px-3 py-2 tracking-wide">
             STOKTA VAR OLAN ÜRÜNLER
           </div>
           <div className="p-2 flex flex-wrap gap-2 items-center border-b border-baykus-line">
@@ -723,7 +697,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="bk-card overflow-hidden flex flex-col">
-          <div className="bg-[#1b2230] text-white px-3 py-2 flex items-center justify-between">
+          <div className="bg-[#151b26] text-white px-3 py-2 flex items-center justify-between">
             <span className="text-xs font-bold tracking-wide">NOTLAR</span>
             <button
               type="button"

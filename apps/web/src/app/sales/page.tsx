@@ -174,72 +174,54 @@ export default function DirektSatislarPage() {
   }
 
   return (
-    <div className="space-y-3 pb-2">
+    <div className="space-y-2 pb-2">
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <h2 className="text-lg font-bold text-baykus-text leading-tight">Direkt Satışlar</h2>
-          <p className="text-xs text-baykus-muted mt-0.5">
-            Perakende ve müşteri satışlarını tek ekrandan yönetin
-          </p>
+          <p className="text-[11px] text-baykus-muted mt-0.5">Satışlar &gt; Direkt Satışlar</p>
         </div>
       </div>
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      {/* Özet kartları */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Özet kartları — masaüstü renk + ikon sol */}
+      <div className="bk-kpi-strip">
         {(
           [
             { label: "Listelenen Satış", value: String(summary.count), color: "#198754", icon: "▣" },
-            { label: "Satış Toplamı", value: formatMoney(summary.total), color: "#be123c", icon: "₺" },
+            { label: "Satış Toplamı", value: formatMoney(summary.total), color: "#c2185b", icon: "₺" },
             { label: "Tahsil Edilen", value: formatMoney(summary.collected), color: "#0f766e", icon: "✓" },
-            { label: "İptal Edilen", value: String(summary.cancelled), color: "#f59e0b", icon: "×" },
+            { label: "İptal Edilen", value: String(summary.cancelled), color: "#f59e0b", icon: "✕" },
           ] as const
         ).map((c) => (
-          <div
-            key={c.label}
-            className="flex items-center gap-3 rounded-md px-3 py-3 text-white shadow-sm min-h-[64px]"
-            style={{ backgroundColor: c.color }}
-          >
-            <span className="text-2xl font-bold opacity-90">{c.icon}</span>
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold opacity-95">{c.label}</div>
-              <div className="text-lg font-bold tabular-nums leading-tight truncate">{c.value}</div>
+          <div key={c.label} className="bk-kpi-card" style={{ backgroundColor: c.color }}>
+            <span className="bk-kpi-icon">{c.icon}</span>
+            <div className="min-w-0 flex-1 text-right">
+              <div className="bk-kpi-label">{c.label}</div>
+              <div className="bk-kpi-value truncate">{c.value}</div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Satış İşlemleri */}
-      <fieldset className="rounded-md border border-baykus-line bg-white px-3 py-3">
+      {/* Satış İşlemleri — 3 huge CTAs */}
+      <fieldset className="rounded border border-baykus-line bg-white px-3 py-2.5">
         <legend className="px-1 text-xs font-bold text-baykus-text">Satış İşlemleri</legend>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <Link
-            href="/sales/retail/new"
-            className="flex items-center justify-center gap-2 rounded-md px-3 py-4 text-sm font-bold text-white shadow-sm hover:opacity-95"
-            style={{ backgroundColor: "#198754" }}
-          >
+        <div className="bk-cta-row">
+          <Link href="/sales/retail/new" className="bk-cta-huge" style={{ backgroundColor: "#198754" }}>
             🛒 PERAKENDE SATIŞ GİR
           </Link>
-          <Link
-            href="/sales/create?type=yeni"
-            className="flex items-center justify-center gap-2 rounded-md px-3 py-4 text-sm font-bold text-white shadow-sm hover:opacity-95"
-            style={{ backgroundColor: "#0f766e" }}
-          >
+          <Link href="/sales/create?type=yeni" className="bk-cta-huge" style={{ backgroundColor: "#0f766e" }}>
             👤 YENİ MÜŞTERİYE SATIŞ
           </Link>
-          <Link
-            href="/sales/create?type=kayitli"
-            className="flex items-center justify-center gap-2 rounded-md px-3 py-4 text-sm font-bold text-white shadow-sm hover:opacity-95"
-            style={{ backgroundColor: "#be123c" }}
-          >
+          <Link href="/sales/create?type=kayitli" className="bk-cta-huge" style={{ backgroundColor: "#c2185b" }}>
             👥 KAYITLI MÜŞTERİYE SATIŞ
           </Link>
         </div>
       </fieldset>
 
       {/* Filtreler */}
-      <fieldset className="rounded-md border border-baykus-line bg-white px-3 py-2.5">
+      <fieldset className="rounded border border-baykus-line bg-white px-3 py-2">
         <legend className="px-1 text-xs font-bold text-baykus-text">Filtreler ve Arama</legend>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-[11px] font-bold text-baykus-text">Belge Tipi</label>
@@ -297,7 +279,7 @@ export default function DirektSatislarPage() {
       </fieldset>
 
       {/* Seçili Satış İşlemleri */}
-      <fieldset className="rounded-md border border-baykus-line bg-white px-3 py-2.5">
+      <fieldset className="rounded border border-baykus-line bg-white px-3 py-2">
         <legend className="px-1 text-xs font-bold text-baykus-text">Seçili Satış İşlemleri</legend>
         <div className="flex flex-wrap gap-2">
           <button
