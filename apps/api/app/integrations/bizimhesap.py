@@ -1,7 +1,11 @@
-"""BizimHesap API skeleton — never calls network without real keys.
+"""BizimHesap settings-UI stub (test/sync buttons).
+
+Real B2B HTTP (products/warehouses/inventory) lives in
+`app.integrations.bizimhesap_b2b` and is used by
+`scripts/import_bizimhesap_stock.py` — see docs/BIZIMHESAP_IMPORT.md.
 
 When api_key/api_secret are empty: returns clear "not configured" / mock OK.
-With keys present: still stubbed (no real HTTP) so fake keys cannot hang.
+With keys present: still stubbed here (no real HTTP) so fake keys cannot hang.
 """
 
 from __future__ import annotations

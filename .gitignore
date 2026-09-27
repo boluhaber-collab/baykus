@@ -30,3 +30,7 @@ apps/api/uploads/documents/*
 
 apps/api/backups/*
 !apps/api/backups/.gitkeep
+
+# BizimHesap probe / import caches (may contain large dumps)
+tmp/bizimhesap/
+tmp/

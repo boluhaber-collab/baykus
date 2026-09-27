@@ -69,7 +69,7 @@ Ana Sayfa · Müşteri · Tedarik · Ürün & Stok · Satış/Sipariş · Üreti
 - **DTF maliyet**: `/tools/dtf` — film/mürekkep/işçilik/fire → birim+toplam; `dtf_scenarios`
 - **CRM**: `/crm/special-days`, `/crm/campaigns` + dashboard “yaklaşan özel günler” (30 gün)
 - **Yedekleme**: `/settings/backups` — zip (DB+uploads) → `apps/api/backups/`; geri yükleme manuel
-- **BizimHesap iskeleti**: `/settings/integrations` — ayar JSON; test/senkron stub (anahtarsız ağ yok)
+- **BizimHesap**: `/settings/integrations` stub + CLI ürün/depo/stok import (`scripts/import-bizimhesap-stock.sh`, `docs/BIZIMHESAP_IMPORT.md`)
 - Postgres: `alembic upgrade head` (rev **009**) · SQLite: `python -m app.bootstrap_sqlite`
 
 
@@ -99,7 +99,7 @@ Web’de tamamlanan masaüstü boşlukları:
 
 - DPAPI şifreli yedek geri yükleme (Windows-only)
 - Selenium tabanlı harici scraper
-- Canlı BizimHesap HTTP senkron (anahtarlı ağ; stub `/settings/integrations`)
+- Canlı BizimHesap cari/fatura senkron (UI stub); ürün-depo-stok one-shot CLI hazır — `docs/BIZIMHESAP_IMPORT.md`
 
 Postgres: `alembic upgrade head` (rev **010**) · SQLite: `python -m app.bootstrap_sqlite`
 
