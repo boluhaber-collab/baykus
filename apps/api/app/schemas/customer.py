@@ -1,7 +1,9 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
+
+from app.schemas.payment_split import PaymentLineIn
 
 
 class CustomerBase(BaseModel):
@@ -130,16 +132,30 @@ class CustomerDetailOut(CustomerOut):
 class CustomerTahsilatIn(BaseModel):
     """Desktop tahsilat_penceresi — tutar + ödeme türü + kasa/banka + açık siparişlere işle."""
 
-    amount: Decimal = Field(gt=0)
+    amount: Decimal | None = Field(default=None, gt=0)
     payment_type: str = Field(default="Nakit")  # Nakit | EFT | Kredi Kartı | Diğer
     bank_account_id: int | None = None
+    cash_register_id: int | None = None
     note: str | None = None
     movement_date: date | None = None
     apply_to_open_orders: bool = True
-    # Optional second payment line (desktop ikinci ödeme)
+    # Optional second payment line (desktop ikinci ödeme) — kept for backward compat
     amount2: Decimal | None = Field(default=None, gt=0)
     payment_type2: str | None = None
     bank_account_id2: int | None = None
+    cash_register_id2: int | None = None
+    # Preferred multi-row split (BizimHesap-style)
+    payments: list[PaymentLineIn] | None = None
+
+    @model_validator(mode="after")
+    def require_amount_or_payments(self) -> "CustomerTahsilatIn":
+        if self.payments:
+            total = sum((p.amount for p in self.payments), Decimal("0"))
+            if self.amount is None:
+                object.__setattr__(self, "amount", total)
+        elif self.amount is None:
+            raise ValueError("amount veya payments gerekli")
+        return self
 
 
 class CustomerTahsilatOut(BaseModel):

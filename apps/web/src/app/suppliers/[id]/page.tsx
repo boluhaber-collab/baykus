@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BankAccount,
   SUPPLIER_MOVEMENT_LABELS,
   SupplierDetail,
   SupplierStatement,
@@ -16,6 +15,11 @@ import ExpandableMovementTable, {
   linesFromPurchase,
 } from "@/components/ExpandableMovementTable";
 import PartyCardLayout, { partySmsHref } from "@/components/PartyCardLayout";
+import SplitPaymentRows, {
+  SplitPaymentRow,
+  rowsSum,
+  rowsToPayload,
+} from "@/components/SplitPaymentRows";
 import type {
   PurchaseDetail,
   SupplierMovement,
@@ -28,7 +32,6 @@ export default function SupplierDetailPage() {
   const id = Number(params.id);
   const [supplier, setSupplier] = useState<SupplierDetail | null>(null);
   const [statement, setStatement] = useState<SupplierStatement | null>(null);
-  const [banks, setBanks] = useState<BankAccount[]>([]);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [showSecondary, setShowSecondary] = useState(false);
@@ -39,9 +42,9 @@ export default function SupplierDetailPage() {
   const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [payNote, setPayNote] = useState("");
   const [paySide, setPaySide] = useState<"debit" | "credit">("credit");
-  const [postFinance, setPostFinance] = useState(false);
-  const [financeMethod, setFinanceMethod] = useState<"cash" | "bank">("cash");
-  const [bankId, setBankId] = useState("");
+  const [postFinance, setPostFinance] = useState(true);
+  const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
+  const [payResetKey, setPayResetKey] = useState(0);
 
   const [editForm, setEditForm] = useState({
     code: "",
@@ -60,14 +63,12 @@ export default function SupplierDetailPage() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [detail, stmt, bankList] = await Promise.all([
+      const [detail, stmt] = await Promise.all([
         apiFetch<SupplierDetail>(`/api/suppliers/${id}`),
         apiFetch<SupplierStatement>(`/api/suppliers/${id}/statement`),
-        apiFetch<BankAccount[]>("/api/finance/banks").catch(() => [] as BankAccount[]),
       ]);
       setSupplier(detail);
       setStatement(stmt);
-      setBanks(bankList.filter((b) => b.is_active !== false));
       setEditForm({
         code: detail.code || "",
         name: detail.name || "",
@@ -126,17 +127,24 @@ export default function SupplierDetailPage() {
     setBusy(true);
     setError("");
     try {
+      let amount = Number(payAmount);
       const body: Record<string, unknown> = {
         movement_type: payType,
-        amount: Number(payAmount),
         movement_date: payDate || null,
         note: payNote.trim() || null,
       };
       if (payType === "adjustment") body.side = paySide;
       if (payType === "payment" && postFinance) {
+        const payments = rowsToPayload(payRows);
+        amount = rowsSum(payRows);
+        if (!(amount > 0) || !payments.length) {
+          throw new Error("En az bir kasa/hesap ödeme satırı girin.");
+        }
+        body.amount = amount;
         body.post_to_finance = true;
-        body.finance_method = financeMethod;
-        if (financeMethod === "bank") body.bank_account_id = Number(bankId);
+        body.payments = payments;
+      } else {
+        body.amount = amount;
       }
       await apiFetch(`/api/suppliers/${id}/movements`, {
         method: "POST",
@@ -144,6 +152,8 @@ export default function SupplierDetailPage() {
       });
       setPayAmount("");
       setPayNote("");
+      setPayRows([]);
+      setPayResetKey((k) => k + 1);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hareket kaydı başarısız");
@@ -523,18 +533,20 @@ export default function SupplierDetailPage() {
                       <option value="purchase">Satın alma (manuel)</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Tutar</label>
-                    <input
-                      required
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      className={input}
-                      value={payAmount}
-                      onChange={(e) => setPayAmount(e.target.value)}
-                    />
-                  </div>
+                  {!(payType === "payment" && postFinance) && (
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Tutar</label>
+                      <input
+                        required
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        className={input}
+                        value={payAmount}
+                        onChange={(e) => setPayAmount(e.target.value)}
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Tarih</label>
                     <input
@@ -574,34 +586,17 @@ export default function SupplierDetailPage() {
                         checked={postFinance}
                         onChange={(e) => setPostFinance(e.target.checked)}
                       />
-                      Kasaya / bankaya da kaydet
+                      Kasaya / bankaya da kaydet (çoklu satır)
                     </label>
                     {postFinance && (
-                      <div className="grid sm:grid-cols-2 gap-2">
-                        <select
-                          className={input}
-                          value={financeMethod}
-                          onChange={(e) => setFinanceMethod(e.target.value as "cash" | "bank")}
-                        >
-                          <option value="cash">Kasa</option>
-                          <option value="bank">Banka</option>
-                        </select>
-                        {financeMethod === "bank" && (
-                          <select
-                            className={input}
-                            required
-                            value={bankId}
-                            onChange={(e) => setBankId(e.target.value)}
-                          >
-                            <option value="">Hesap seçin</option>
-                            {banks.map((b) => (
-                              <option key={b.id} value={b.id}>
-                                {b.name}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
+                      <SplitPaymentRows
+                        key={payResetKey}
+                        expectedTotal={Number(payAmount) || Number(supplier.balance) || 0}
+                        mode="odeme"
+                        autoFill={false}
+                        dense
+                        onChange={setPayRows}
+                      />
                     )}
                   </div>
                 )}

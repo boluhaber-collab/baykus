@@ -584,3 +584,26 @@ Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA, DPAPI, çok
 | `/products` hub | CTA şeridi korundu; «İşlemler» mega-tile kaldırıldı → ikincil linkler (Kritik/Depolar/Sayım/Barkod/Stok/Rapor); Rapor sekmesinden Stok Girişi/Excel tekrarı çıkarıldı | done |
 | Smoke | admin+satış adjust · alias · variant_id=0 · WS sync · product create · `tsc --noEmit` clean | done |
 
+## Batch 28 — Çoklu kasa/hesap ödeme (BizimHesap split) (2026-09-27)
+
+Kaynak: `docs/parity-shots/split-payment-*.png` (BizimHesap perakende UX; canlı sync yok).
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| SplitPaymentRows | `apps/web/src/components/SplitPaymentRows.tsx` — yeşil `+` / kırmızı `−` · Kasa/Banka/POS/Ortaklar optgroup · bakiye · «Toplam tahsil/ödenen» · mismatch uyarısı | done |
+| Perakende | `/sales/retail/new` — birincil; `payments[]` → `POST /api/orders/{id}/payments` | done |
+| Direkt satış / kapora | `/sales/create` — Veresiye veya split kapora; `OrderCreate.payments` | done |
+| Sipariş tahsilat | `/orders/[id]` — kalan bakiyeye split tahsilat | done |
+| Müşteri tahsilat | `CustomerTahsilatModal` — `payments[]` on `POST /api/customers/{id}/tahsilat` | done |
+| Tedarikçi ödeme | `/suppliers/[id]` ödeme formu — `payments[]` + kasa/banka çıkış | done |
+| API | `PaymentLineIn` · `PaymentCreate.payments` · `cash_register_id` · OrderCreate/CustomerTahsilat/SupplierMovement payments — çoklu cash/bank_movements; Alembic yok | done |
+| Validation | Satır toplamı = belge tutarı/kalan (UI uyarı + API sum check); tek satır geriye uyumlu | done |
+| Parity shots | `docs/parity-shots/split-payment-*.png` | done |
+| Smoke | perakende-style 300 kasa + 300 banka · `tsc --noEmit` clean | done |
+| Zip | `baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
+
+Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync; alış create formunda ödeme yok (ödeme tedarikçi/payables üzerinden); çek/senet satırı.
+
+### Kalan (dürüst) — tek hesap kalan ekranlar
+- `SupplierFisPanel` borç-alacak fişi (kasa/banka oluşturmaz — bilinçli)
+- Masraf / kredi taksit / kasa transfer formları (split satış/alış kapsamında değil)

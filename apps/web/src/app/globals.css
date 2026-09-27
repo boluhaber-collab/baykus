@@ -853,3 +853,25 @@ body {
     background: #f0f9ff;
   }
 }
+
+  /* BizimHesap-style split payment +/- */
+  .bk-split-pay-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.65rem;
+    height: 1.65rem;
+    border-radius: 0.25rem;
+    border: none;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+  .bk-split-pay-plus { background: #22c55e; }
+  .bk-split-pay-plus:hover { filter: brightness(1.08); }
+  .bk-split-pay-minus { background: #ef4444; }
+  .bk-split-pay-minus:hover { filter: brightness(1.08); }
+

@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.schemas.payment_split import PaymentLineIn
+
 
 class SupplierBase(BaseModel):
     code: str | None = Field(default=None, max_length=50)
@@ -55,6 +57,9 @@ class SupplierMovementCreate(BaseModel):
     post_to_finance: bool = False
     finance_method: str | None = Field(default=None, pattern="^(cash|bank)$")
     bank_account_id: int | None = None
+    cash_register_id: int | None = None
+    # Split ödeme — multiple kasa/banka movements; amount should equal sum
+    payments: list[PaymentLineIn] | None = None
 
 
 class SupplierMovementOut(BaseModel):

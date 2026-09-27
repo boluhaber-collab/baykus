@@ -1,7 +1,9 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.schemas.payment_split import PaymentLineIn
 
 from app.models.order import (
     DEFAULT_DESIGN_STATUS,
@@ -74,6 +76,8 @@ class OrderCreate(BaseModel):
     deposit_amount: Decimal = Field(default=Decimal("0"), ge=0)
     discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
     lines: list[OrderLineCreate] = Field(default_factory=list, min_length=1)
+    # Optional split deposit (BizimHesap-style); sum used as deposit when deposit_amount is 0
+    payments: list[PaymentLineIn] | None = None
 
     @field_validator("status")
     @classmethod
@@ -192,7 +196,7 @@ class KanbanBoard(BaseModel):
 
 
 class PaymentCreate(BaseModel):
-    amount: Decimal = Field(gt=0)
+    amount: Decimal | None = Field(default=None, gt=0)
     method: str = Field(default="nakit", max_length=50)
     notes: str | None = None
     paid_at: datetime | None = None
@@ -200,6 +204,23 @@ class PaymentCreate(BaseModel):
     post_to_finance: bool = False
     finance_method: str | None = Field(default=None, pattern="^(cash|bank)$")
     bank_account_id: int | None = None
+    cash_register_id: int | None = None
+    # Multi-account split — when set, one Payment + finance movement per line
+    payments: list[PaymentLineIn] | None = None
+
+    @model_validator(mode="after")
+    def require_amount_or_payments(self) -> "PaymentCreate":
+        if self.payments:
+            total = sum((p.amount for p in self.payments), Decimal("0"))
+            if total <= 0:
+                raise ValueError("Ödeme satırları toplamı sıfırdan büyük olmalı")
+            if self.amount is None:
+                object.__setattr__(self, "amount", total)
+            elif abs(self.amount - total) > Decimal("0.02"):
+                raise ValueError("Tutar, ödeme satırları toplamı ile eşleşmeli")
+        elif self.amount is None:
+            raise ValueError("amount veya payments gerekli")
+        return self
 
 
 class BulkStatusChange(BaseModel):

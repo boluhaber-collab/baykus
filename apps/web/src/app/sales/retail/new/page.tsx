@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  BankAccount,
-  CashRegister,
   Product,
   ProductDetail,
   ProductVariant,
@@ -13,6 +11,11 @@ import {
   formatMoney,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import SplitPaymentRows, {
+  SplitPaymentRow,
+  rowsSum,
+  rowsToPayload,
+} from "@/components/SplitPaymentRows";
 
 type CartLine = {
   key: string;
@@ -27,8 +30,6 @@ type CartLine = {
   indirim: number;
   toplam: number;
 };
-
-const PAY_TYPES = ["Nakit", "EFT", "Kart"] as const;
 
 function todayDateInput(): string {
   const d = new Date();
@@ -46,16 +47,11 @@ export default function PerakendeSatisGirPage() {
   const router = useRouter();
   const [tarih, setTarih] = useState(todayDateInput());
   const [saat, setSaat] = useState(nowTime());
-  const [payType, setPayType] = useState<(typeof PAY_TYPES)[number]>("Nakit");
-  const [account, setAccount] = useState("Kasa");
-  const [tahsilat, setTahsilat] = useState("0");
-  const [tahsilatManual, setTahsilatManual] = useState(false);
+  const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [delivered, setDelivered] = useState(true);
   const [aciklama, setAciklama] = useState("");
   const [search, setSearch] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
-  const [cashRegs, setCashRegs] = useState<CashRegister[]>([]);
-  const [banks, setBanks] = useState<BankAccount[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -68,14 +64,8 @@ export default function PerakendeSatisGirPage() {
 
   const loadMeta = useCallback(async () => {
     try {
-      const [prods, cash, bank] = await Promise.all([
-        apiFetch<Product[]>("/api/products?limit=500&active_only=true"),
-        apiFetch<CashRegister[]>("/api/finance/cash"),
-        apiFetch<BankAccount[]>("/api/finance/banks?active_only=true"),
-      ]);
+      const prods = await apiFetch<Product[]>("/api/products?limit=500&active_only=true");
       setProducts(prods);
-      setCashRegs(cash);
-      setBanks(bank);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
@@ -84,23 +74,6 @@ export default function PerakendeSatisGirPage() {
   useEffect(() => {
     void loadMeta();
   }, [loadMeta]);
-
-  const accountOptions = useMemo(() => {
-    if (payType === "Nakit") {
-      return cashRegs.length
-        ? cashRegs.map((r) => ({ id: `cash:${r.id}`, label: r.name }))
-        : [{ id: "cash:0", label: "Kasa" }];
-    }
-    return banks.length
-      ? banks.map((b) => ({ id: `bank:${b.id}`, label: b.name }))
-      : [{ id: "bank:0", label: "Banka" }];
-  }, [payType, cashRegs, banks]);
-
-  useEffect(() => {
-    if (accountOptions.length && !accountOptions.some((a) => a.label === account || a.id === account)) {
-      setAccount(accountOptions[0]!.label);
-    }
-  }, [accountOptions, account]);
 
   const filteredProducts = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase("tr");
@@ -122,16 +95,7 @@ export default function PerakendeSatisGirPage() {
     [cart],
   );
 
-  useEffect(() => {
-    if (!tahsilatManual) {
-      setTahsilat(toplam.toFixed(2).replace(".", ","));
-    }
-  }, [toplam, tahsilatManual]);
-
-  const tahsilatNum = useMemo(() => {
-    const n = Number(String(tahsilat).replace(",", ".").replace(/\s/g, ""));
-    return Number.isFinite(n) ? n : 0;
-  }, [tahsilat]);
+  const tahsilatNum = useMemo(() => rowsSum(payRows), [payRows]);
 
   function pushCartLine(
     p: Product,
@@ -225,8 +189,17 @@ export default function PerakendeSatisGirPage() {
       setError("Satış toplamı sıfırdan büyük olmalıdır.");
       return;
     }
+    const payments = rowsToPayload(payRows);
+    if (payments.length === 0 && toplam > 0) {
+      setError("En az bir kasa/hesap tahsilat satırı girilmelidir.");
+      return;
+    }
     if (tahsilatNum < 0 || tahsilatNum > toplam + 0.01) {
       setError("Tahsilat, sıfır ile satış toplamı arasında olmalıdır.");
+      return;
+    }
+    if (payments.length > 0 && Math.abs(rowsSum(payRows) - tahsilatNum) > 0.02) {
+      setError("Ödeme satırları toplamı tutarsız.");
       return;
     }
     setBusy(true);
@@ -235,8 +208,7 @@ export default function PerakendeSatisGirPage() {
       const noteParts = [
         aciklama.trim(),
         `Tarih ${tarih} ${saat}`,
-        `Ödeme: ${payType}`,
-        `Hesap: ${account}`,
+        payments.length > 1 ? `Çoklu tahsilat (${payments.length} satır)` : "Tahsilat",
       ].filter(Boolean);
       const created = await apiFetch<{ id: number; order_number: string }>("/api/orders", {
         method: "POST",
@@ -265,17 +237,16 @@ export default function PerakendeSatisGirPage() {
         }),
       });
 
-      if (tahsilatNum > 0) {
-        const financeMethod = payType === "Nakit" ? "cash" : "bank";
+      if (payments.length > 0 && tahsilatNum > 0) {
         await apiFetch(`/api/orders/${created.id}/payments`, {
           method: "POST",
           body: JSON.stringify({
             amount: tahsilatNum,
-            method: payType === "Nakit" ? "nakit" : payType === "EFT" ? "eft" : "kart",
+            method: payments.length > 1 ? "çoklu" : payments[0]!.method || "nakit",
             notes: aciklama || `Perakende direkt satış tahsilatı ${created.order_number}`,
             post_to_cari: false,
             post_to_finance: true,
-            finance_method: financeMethod,
+            payments,
           }),
         });
       }
@@ -343,51 +314,14 @@ export default function PerakendeSatisGirPage() {
             <div className="text-base font-bold tabular-nums">{formatMoney(toplam)}</div>
           </div>
 
-          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
-            <label className="text-xs font-medium">Tahsilat Türü</label>
-            <select
-              className="bk-input"
-              value={payType}
-              onChange={(e) => setPayType(e.target.value as (typeof PAY_TYPES)[number])}
-            >
-              {PAY_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
-            <label className="text-xs font-medium">Kasa / Hesap</label>
-            <select
-              className="bk-input"
-              value={account}
-              onChange={(e) => setAccount(e.target.value)}
-            >
-              {accountOptions.map((a) => (
-                <option key={a.id} value={a.label}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
-            <label className="text-xs font-medium">Tahsilat</label>
-            <input
-              className="bk-input tabular-nums"
-              value={tahsilat}
-              onChange={(e) => {
-                setTahsilatManual(true);
-                setTahsilat(e.target.value);
-              }}
+          <div>
+            <div className="text-xs font-medium mb-1.5">Kasa / Hesap · Tahsilat</div>
+            <SplitPaymentRows
+              expectedTotal={toplam}
+              mode="tahsilat"
+              autoFill
+              onChange={setPayRows}
             />
-          </div>
-
-          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
-            <label className="text-xs font-medium">Toplam Tahsil Edilen</label>
-            <div className="text-base font-bold tabular-nums">{formatMoney(tahsilatNum)}</div>
           </div>
 
           <label className="inline-flex items-center gap-2 text-xs font-medium">

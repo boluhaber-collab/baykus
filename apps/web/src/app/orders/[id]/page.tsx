@@ -16,9 +16,13 @@ import {
   formatMoney,
   statusBadgeClass,
   designStatusBadgeClass,
-  BankAccount,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import SplitPaymentRows, {
+  SplitPaymentRow,
+  rowsSum,
+  rowsToPayload,
+} from "@/components/SplitPaymentRows";
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -43,15 +47,12 @@ export default function OrderDetailPage() {
   const [statusBusy, setStatusBusy] = useState(false);
   const [designFiles, setDesignFiles] = useState<OrderDesignFile[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] = useState("nakit");
+  const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [payNotes, setPayNotes] = useState("");
   const [postCari, setPostCari] = useState(true);
   const [postFinance, setPostFinance] = useState(true);
-  const [financeMethod, setFinanceMethod] = useState<"cash" | "bank">("cash");
-  const [bankId, setBankId] = useState("");
-  const [banks, setBanks] = useState<BankAccount[]>([]);
   const [payBusy, setPayBusy] = useState(false);
+  const [payResetKey, setPayResetKey] = useState(0);
 
   // Design approval block
   const [designStatus, setDesignStatus] = useState("Bekliyor");
@@ -66,7 +67,7 @@ export default function OrderDetailPage() {
     try {
       const data = await apiFetch<OrderDetail>(`/api/orders/${id}`);
       setOrder(data);
-      setPayAmount(data.remaining_amount ? String(data.remaining_amount) : "");
+      setPayResetKey((k) => k + 1);
       setDesignStatus(data.design_status || "Bekliyor");
       setDesignNotes(data.design_notes || "");
       setDesignApprovedDate(
@@ -86,9 +87,6 @@ export default function OrderDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    apiFetch<BankAccount[]>("/api/finance/banks?active=true")
-      .then(setBanks)
-      .catch(() => setBanks([]));
     apiFetch<WhatsAppTemplate[]>("/api/whatsapp/templates")
       .then(setTemplates)
       .catch(() => setTemplates([]));
@@ -269,27 +267,26 @@ export default function OrderDetailPage() {
     setPayBusy(true);
     setError("");
     try {
-      const method = payMethod;
-      const useFinance = postFinance && method !== "veresiye";
-      const finMethod: "cash" | "bank" =
-        method === "nakit" ? "cash" : method === "havale" || method === "eft" || method === "kredi_karti" || method === "kart"
-          ? "bank"
-          : financeMethod;
+      const payments = rowsToPayload(payRows);
+      const amount = rowsSum(payRows);
+      if (!(amount > 0) || !payments.length) {
+        throw new Error("En az bir kasa/hesap tahsilat satırı girin.");
+      }
       const updated = await apiFetch<OrderDetail>(`/api/orders/${id}/payments`, {
         method: "POST",
         body: JSON.stringify({
-          amount: Number(payAmount),
-          method,
+          amount,
+          method: payments.length > 1 ? "çoklu" : payments[0]!.method || "nakit",
           notes: payNotes.trim() || null,
           post_to_cari: postCari,
-          post_to_finance: useFinance,
-          finance_method: useFinance ? finMethod : null,
-          bank_account_id: useFinance && finMethod === "bank" && bankId ? Number(bankId) : null,
+          post_to_finance: postFinance,
+          payments,
         }),
       });
       setOrder(updated);
-      setPayAmount(updated.remaining_amount ? String(updated.remaining_amount) : "");
       setPayNotes("");
+      setPayRows([]);
+      setPayResetKey((k) => k + 1);
       setOkMsg("Tahsilat kaydedildi");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Tahsilat kaydı başarısız");
@@ -597,41 +594,17 @@ export default function OrderDetailPage() {
                   Kalan {formatMoney(Number(order.remaining_amount))}
                 </span>
               </div>
-              <div className="grid md:grid-cols-4 gap-3">
-                <div>
-                  <label className="block text-[11px] text-baykus-muted mb-1">Tutar (₺)</label>
-                  <input
-                    type="number"
-                    min={0.01}
-                    step="0.01"
-                    required
-                    className="bk-input"
-                    value={payAmount}
-                    onChange={(e) => setPayAmount(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-baykus-muted mb-1">Yöntem</label>
-                  <select
-                    className="bk-input"
-                    value={payMethod}
-                    onChange={(e) => {
-                      setPayMethod(e.target.value);
-                      if (e.target.value === "nakit") setFinanceMethod("cash");
-                      if (e.target.value === "havale" || e.target.value === "kredi_karti") setFinanceMethod("bank");
-                    }}
-                  >
-                    <option value="nakit">Nakit</option>
-                    <option value="havale">Havale / EFT</option>
-                    <option value="kredi_karti">Kredi kartı</option>
-                    <option value="cek">Çek</option>
-                    <option value="diger">Diğer</option>
-                  </select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-[11px] text-baykus-muted mb-1">Not</label>
-                  <input className="bk-input" value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
-                </div>
+              <SplitPaymentRows
+                key={payResetKey}
+                expectedTotal={Number(order.remaining_amount) || 0}
+                mode="tahsilat"
+                autoFill
+                dense
+                onChange={setPayRows}
+              />
+              <div>
+                <label className="block text-[11px] text-baykus-muted mb-1">Not</label>
+                <input className="bk-input" value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
               </div>
               <div className="flex flex-wrap items-center gap-4 text-xs text-baykus-text">
                 <label className="inline-flex items-center gap-1.5">
@@ -642,20 +615,6 @@ export default function OrderDetailPage() {
                   <input type="checkbox" checked={postFinance} onChange={(e) => setPostFinance(e.target.checked)} />
                   Kasa / bankaya işle
                 </label>
-                {postFinance && financeMethod === "bank" && (
-                  <select
-                    className="bk-input w-auto py-1 min-w-[160px]"
-                    value={bankId}
-                    onChange={(e) => setBankId(e.target.value)}
-                  >
-                    <option value="">Varsayılan banka</option>
-                    {banks.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
                 <button type="submit" disabled={payBusy} className="bk-btn-primary ml-auto">
                   {payBusy ? "Kaydediliyor…" : "Tahsilat Kaydet"}
                 </button>

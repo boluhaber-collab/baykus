@@ -12,6 +12,11 @@ import {
   formatMoney,
 } from "@/lib/api";
 import PreviousPricesModal from "@/components/PreviousPricesModal";
+import SplitPaymentRows, {
+  SplitPaymentRow,
+  rowsSum,
+  rowsToPayload,
+} from "@/components/SplitPaymentRows";
 
 type SaleType = "perakende" | "yeni" | "kayitli" | "internet" | "teklif";
 
@@ -23,7 +28,6 @@ const SALE_TYPES: { id: SaleType; label: string; title: string }[] = [
   { id: "teklif", label: "Teklif", title: "Teklif Girişi" },
 ];
 
-const PAY_TYPES = ["Nakit", "EFT", "Kart", "Veresiye"] as const;
 const NET_CHANNELS = ["internet", "Trendyol", "Hepsiburada", "N11"] as const;
 const PRINT_TYPES = ["", "DTF", "Sublimasyon", "Serigrafi", "Nakış", "Transfer", "UV"] as const;
 
@@ -90,8 +94,8 @@ function CreateSaleInner() {
   const [channel, setChannel] = useState<string>("internet");
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [payType, setPayType] = useState<(typeof PAY_TYPES)[number]>("Nakit");
-  const [payAmount, setPayAmount] = useState("");
+  const [veresiye, setVeresiye] = useState(false);
+  const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [productQ, setProductQ] = useState("");
   const [warehouses, setWarehouses] = useState<Wh[]>([]);
@@ -285,14 +289,9 @@ function CreateSaleInner() {
     }, 0);
   }, [lines]);
 
-  const remaining = Math.max(0, linesTotal - (Number(payAmount) || 0));
+  const payAmountNum = veresiye ? 0 : rowsSum(payRows);
+  const remaining = Math.max(0, linesTotal - payAmountNum);
 
-  useEffect(() => {
-    if (!payAmount && linesTotal > 0 && payType !== "Veresiye") {
-      setPayAmount(String(linesTotal.toFixed(2)));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linesTotal, payType]);
 
   function updateLine(key: string, patch: Partial<Line>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -352,7 +351,14 @@ function CreateSaleInner() {
     try {
       const payloadLines = buildLinesPayload();
       const cid = await ensureCustomerId();
-      const amount = payType === "Veresiye" ? 0 : Number(payAmount) || 0;
+      const amount = veresiye ? 0 : rowsSum(payRows);
+      const payments = veresiye ? [] : rowsToPayload(payRows);
+      if (!veresiye && amount > 0 && payments.length === 0) {
+        throw new Error("Kapora için kasa/hesap seçin veya tutarı girin.");
+      }
+      if (!veresiye && payments.length > 0 && Math.abs(rowsSum(payRows) - amount) > 0.02) {
+        throw new Error("Ödeme satırları toplamı tutarsız.");
+      }
       const isQuote = saleType === "teklif";
 
       if (isQuote) {
@@ -392,6 +398,7 @@ function CreateSaleInner() {
           deposit_amount: amount > 0 ? amount : 0,
           discount_amount: 0,
           lines: payloadLines,
+          payments: payments.length ? payments : undefined,
         }),
       });
 
@@ -727,60 +734,40 @@ function CreateSaleInner() {
         </fieldset>
 
         {saleType !== "teklif" && (
-          <fieldset className="rounded border bg-white px-3 py-3">
+          <fieldset className="rounded border bg-white px-3 py-3 space-y-3">
             <legend className="px-1 text-xs font-semibold">Ödeme / Kapora</legend>
-            <div className="grid sm:grid-cols-3 gap-3 items-end">
+            <label className="inline-flex items-center gap-2 text-xs font-medium">
+              <input
+                type="checkbox"
+                checked={veresiye}
+                onChange={(e) => setVeresiye(e.target.checked)}
+              />
+              Veresiye (kapora yok · cari borç + stok↓)
+            </label>
+            {!veresiye && (
+              <SplitPaymentRows
+                expectedTotal={linesTotal}
+                mode="tahsilat"
+                autoFill
+                dense
+                onChange={setPayRows}
+              />
+            )}
+            <div className="text-xs space-y-0.5">
               <div>
-                <label className="block text-[11px] text-baykus-muted mb-0.5">Ödeme tipi</label>
-                <select
-                  className="bk-input"
-                  value={payType}
-                  onChange={(e) => {
-                    const v = e.target.value as (typeof PAY_TYPES)[number];
-                    setPayType(v);
-                    if (v === "Veresiye") setPayAmount("0");
-                    else if (!payAmount) setPayAmount(String(linesTotal.toFixed(2)));
-                  }}
-                >
-                  {PAY_TYPES.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
+                Toplam: <strong className="tabular-nums">{formatMoney(linesTotal)}</strong>
+                {" · "}
+                Kapora:{" "}
+                <strong className="tabular-nums text-emerald-700">
+                  {veresiye ? "0,00 ₺" : formatMoney(payAmountNum)}
+                </strong>
+                {" · "}
+                Kalan: <strong className="tabular-nums text-red-700">{formatMoney(remaining)}</strong>
               </div>
-              <div>
-                <label className="block text-[11px] text-baykus-muted mb-0.5">Kapora / ödeme (₺)</label>
-                <input
-                  className="bk-input"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  disabled={payType === "Veresiye"}
-                />
-              </div>
-              <div className="text-xs space-y-0.5 pb-1">
-                <div>
-                  Toplam: <strong className="tabular-nums">{formatMoney(linesTotal)}</strong>
-                </div>
-                <div>
-                  Kapora:{" "}
-                  <strong className="tabular-nums text-emerald-700">
-                    {payType === "Veresiye" ? "0,00 ₺" : formatMoney(Number(payAmount) || 0)}
-                  </strong>
-                </div>
-                <div>
-                  Kalan: <strong className="tabular-nums text-red-700">{formatMoney(remaining)}</strong>
-                </div>
-                <div className="text-[10px] text-baykus-muted">
-                  {payType === "Veresiye"
-                    ? "Veresiye: kapora yok · cari borç + stok↓"
-                    : payType === "Nakit"
-                      ? "Nakit → kasa tahsilat + stok↓"
-                      : "EFT/Kart → kapora kaydı + stok↓"}
-                </div>
+              <div className="text-[10px] text-baykus-muted">
+                {veresiye
+                  ? "Veresiye: kapora yok · cari borç + stok↓"
+                  : "Çoklu kasa/banka kapora · stok↓"}
               </div>
             </div>
           </fieldset>

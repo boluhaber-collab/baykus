@@ -985,21 +985,38 @@ def customer_tahsilat(
     if not customer:
         raise HTTPException(status_code=404, detail="Müşteri bulunamadı")
 
-    lines: list[dict] = [
-        {
-            "amount": payload.amount,
-            "payment_type": payload.payment_type or "Nakit",
-            "bank_account_id": payload.bank_account_id,
-        }
-    ]
-    if payload.amount2 and payload.amount2 > 0:
+    # Prefer payments[] split; fall back to amount + optional amount2
+    lines: list[dict] = []
+    if payload.payments:
+        for p in payload.payments:
+            d = p.model_dump()
+            pt = d.get("payment_type") or ("EFT" if d.get("bank_account_id") else "Nakit")
+            lines.append(
+                {
+                    "amount": d["amount"],
+                    "payment_type": pt,
+                    "bank_account_id": d.get("bank_account_id"),
+                    "cash_register_id": d.get("cash_register_id"),
+                }
+            )
+    else:
         lines.append(
             {
-                "amount": payload.amount2,
-                "payment_type": payload.payment_type2 or "Nakit",
-                "bank_account_id": payload.bank_account_id2,
+                "amount": payload.amount,
+                "payment_type": payload.payment_type or "Nakit",
+                "bank_account_id": payload.bank_account_id,
+                "cash_register_id": payload.cash_register_id,
             }
         )
+        if payload.amount2 and payload.amount2 > 0:
+            lines.append(
+                {
+                    "amount": payload.amount2,
+                    "payment_type": payload.payment_type2 or "Nakit",
+                    "bank_account_id": payload.bank_account_id2,
+                    "cash_register_id": payload.cash_register_id2,
+                }
+            )
 
     mov_date = payload.movement_date or date.today()
     base_note = (payload.note or "").strip() or "Müşteri tahsilatı"
@@ -1007,10 +1024,16 @@ def customer_tahsilat(
     total = Decimal("0")
     finance_ok = False
 
+    from app.services.split_payments import post_finance_lines
+
     for idx, line in enumerate(lines, start=1):
         amt = Decimal(str(line["amount"]))
         total += amt
         finance_method, method_label = _finance_method_from_payment_type(line["payment_type"])
+        if line.get("bank_account_id"):
+            finance_method = "bank"
+        elif line.get("cash_register_id"):
+            finance_method = "cash"
         note = base_note if len(lines) == 1 else f"{base_note} ({idx}/{len(lines)} · {method_label})"
         movement = CariMovement(
             customer_id=customer_id,
@@ -1023,16 +1046,40 @@ def customer_tahsilat(
         db.add(movement)
         db.flush()
         movement_ids.append(movement.id)
-        posted = _post_finance_for_tahsilat(
-            db,
-            customer_id=customer_id,
-            amount=amt,
-            mov_date=mov_date,
-            note=note,
-            finance_method=finance_method,
-            bank_account_id=line.get("bank_account_id"),
-            cari_movement_id=movement.id,
-        )
+        fin_line = [
+            {
+                "amount": amt,
+                "cash_register_id": line.get("cash_register_id") if finance_method == "cash" else None,
+                "bank_account_id": line.get("bank_account_id") if finance_method == "bank" else None,
+            }
+        ]
+        # If neither set, fall back to legacy helper (default kasa/banka)
+        if fin_line[0]["cash_register_id"] is None and fin_line[0]["bank_account_id"] is None:
+            posted = _post_finance_for_tahsilat(
+                db,
+                customer_id=customer_id,
+                amount=amt,
+                mov_date=mov_date,
+                note=note,
+                finance_method=finance_method,
+                bank_account_id=line.get("bank_account_id"),
+                cari_movement_id=movement.id,
+            )
+        else:
+            posted = (
+                post_finance_lines(
+                    db,
+                    fin_line,
+                    direction="in",
+                    mov_date=mov_date,
+                    note=note,
+                    customer_id=customer_id,
+                    cari_movement_id=movement.id,
+                    created_by_user_id=user.id,
+                    require_account=True,
+                )
+                > 0
+            )
         finance_ok = finance_ok or posted
 
     applied = Decimal("0")

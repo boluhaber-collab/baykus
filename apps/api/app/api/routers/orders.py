@@ -524,53 +524,60 @@ def create_order(
 
     _apply_sale_side_effects(db, order, user)
 
-    if order.deposit_amount and order.deposit_amount > 0:
-        db.add(
-            Payment(
-                order_id=order.id,
-                amount=order.deposit_amount,
-                method="kapora",
-                status="tamamlandi",
-                notes="Kapora",
-            )
-        )
-        # Kapora: cari alacak azalt + varsayılan kasa
-        if order.customer_id:
-            from datetime import date as date_cls
-            from app.models.customer import CariMovement
+    # Kapora / split deposit
+    from datetime import date as date_cls
+    from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
 
+    deposit_lines = normalize_payment_lines(payments=getattr(payload, "payments", None))
+    if deposit_lines:
+        dep_total = lines_total(deposit_lines)
+        if order.deposit_amount <= 0:
+            order.deposit_amount = dep_total
+    elif order.deposit_amount and order.deposit_amount > 0:
+        deposit_lines = normalize_payment_lines(
+            amount=order.deposit_amount,
+            finance_method="cash",
+            method="kapora",
+        )
+
+    if deposit_lines and order.deposit_amount and order.deposit_amount > 0:
+        note = f"Kapora {order.order_number}"
+        mov_date = date_cls.today()
+        for idx, line in enumerate(deposit_lines, start=1):
+            line_note = note if len(deposit_lines) == 1 else f"{note} ({idx}/{len(deposit_lines)})"
+            method = line.get("method") or ("eft" if line.get("bank_account_id") else "kapora")
             db.add(
-                CariMovement(
-                    customer_id=order.customer_id,
-                    movement_type="payment",
-                    debit=Decimal("0"),
-                    credit=order.deposit_amount,
-                    movement_date=date_cls.today(),
+                Payment(
                     order_id=order.id,
-                    note=f"Kapora {order.order_number}",
+                    amount=line["amount"],
+                    method=str(method)[:50],
+                    status="tamamlandi",
+                    notes=line_note,
                 )
             )
-        from app.models.finance import CashMovement, CashRegister
+            if order.customer_id:
+                from app.models.customer import CariMovement
 
-        reg = (
-            db.query(CashRegister)
-            .filter(CashRegister.is_active.is_(True))
-            .order_by(CashRegister.id.asc())
-            .first()
+                db.add(
+                    CariMovement(
+                        customer_id=order.customer_id,
+                        movement_type="payment",
+                        debit=Decimal("0"),
+                        credit=line["amount"],
+                        movement_date=mov_date,
+                        order_id=order.id,
+                        note=line_note,
+                    )
+                )
+        post_finance_lines(
+            db,
+            deposit_lines,
+            direction="in",
+            mov_date=mov_date,
+            note=note,
+            customer_id=order.customer_id,
+            require_account=False,
         )
-        if reg:
-            from datetime import date as date_cls
-
-            db.add(
-                CashMovement(
-                    cash_register_id=reg.id,
-                    movement_type="tahsilat",
-                    amount=order.deposit_amount,
-                    movement_date=date_cls.today(),
-                    note=f"Kapora {order.order_number}",
-                    customer_id=order.customer_id,
-                )
-            )
 
     _record_status(db, order, None, order.status, user, note="Sipariş oluşturuldu")
     db.commit()
@@ -831,83 +838,87 @@ def create_payment(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("admin", "satış", "muhasebe")),
 ) -> OrderOut:
+    from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
+
     order = _load_order(db, order_id)
-    amount = _dec(payload.amount)
+    note = payload.notes or f"Sipariş tahsilatı {order.order_number}"
+    mov_date = (payload.paid_at or datetime.utcnow()).date()
+    paid_at = payload.paid_at or datetime.utcnow()
+
+    lines = normalize_payment_lines(
+        payments=payload.payments,
+        amount=payload.amount,
+        finance_method=payload.finance_method,
+        cash_register_id=payload.cash_register_id,
+        bank_account_id=payload.bank_account_id,
+        method=payload.method,
+    )
+    # When finance not requested and no payments[], still create single Payment from amount
+    if not lines and payload.amount:
+        lines = [{"amount": _dec(payload.amount), "cash_register_id": None, "bank_account_id": None, "method": payload.method}]
+
+    amount = lines_total(lines) if lines else _dec(payload.amount)
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Tutar 0 dan büyük olmalı")
 
-    payment = Payment(
-        order_id=order.id,
-        amount=amount,
-        method=payload.method or "nakit",
-        status="tamamlandi",
-        paid_at=payload.paid_at or datetime.utcnow(),
-        notes=payload.notes,
-    )
-    db.add(payment)
-    db.flush()
-
-    if payload.post_to_cari and order.customer_id:
-        from app.models.customer import CariMovement
-
-        db.add(
-            CariMovement(
-                customer_id=order.customer_id,
-                movement_type="payment",
-                debit=Decimal("0"),
-                credit=amount,
-                movement_date=(payload.paid_at or datetime.utcnow()).date(),
-                order_id=order.id,
-                note=payload.notes or f"Sipariş tahsilatı {order.order_number}",
-            )
+    last_payment = None
+    for idx, line in enumerate(lines, start=1):
+        line_note = note if len(lines) == 1 else f"{note} ({idx}/{len(lines)})"
+        raw_method = (line.get("method") or "").strip().lower()
+        if line.get("bank_account_id"):
+            method = "eft" if raw_method in ("", "nakit", "cash", "çoklu", "coklu") else (line.get("method") or "eft")
+        elif line.get("cash_register_id") is not None:
+            method = "nakit" if raw_method in ("", "eft", "bank", "banka", "çoklu", "coklu") else (line.get("method") or "nakit")
+        else:
+            method = line.get("method") or payload.method or "nakit"
+        payment = Payment(
+            order_id=order.id,
+            amount=line["amount"],
+            method=str(method)[:50],
+            status="tamamlandi",
+            paid_at=paid_at,
+            notes=line_note,
         )
+        db.add(payment)
+        db.flush()
+        last_payment = payment
 
-    if payload.post_to_finance and payload.finance_method:
-        from app.models.finance import BankAccount, BankMovement, CashMovement, CashRegister
+        if payload.post_to_cari and order.customer_id:
+            from app.models.customer import CariMovement
 
-        note = payload.notes or f"Sipariş tahsilatı {order.order_number}"
-        mov_date = (payload.paid_at or datetime.utcnow()).date()
-        if payload.finance_method == "cash":
-            reg = (
-                db.query(CashRegister)
-                .filter(CashRegister.is_active.is_(True))
-                .order_by(CashRegister.id.asc())
-                .first()
-            )
-            if reg:
-                db.add(
-                    CashMovement(
-                        cash_register_id=reg.id,
-                        movement_type="tahsilat",
-                        amount=amount,
-                        movement_date=mov_date,
-                        note=note,
-                        customer_id=order.customer_id,
-                    )
-                )
-        elif payload.finance_method == "bank":
-            acc = None
-            if payload.bank_account_id:
-                acc = db.get(BankAccount, payload.bank_account_id)
-            if acc is None:
-                acc = (
-                    db.query(BankAccount)
-                    .filter(BankAccount.is_active.is_(True))
-                    .order_by(BankAccount.id.asc())
-                    .first()
-                )
-            if not acc or not acc.is_active:
-                raise HTTPException(status_code=400, detail="Aktif banka hesabı bulunamadı")
             db.add(
-                BankMovement(
-                    bank_account_id=acc.id,
-                    movement_type="deposit",
-                    amount=amount,
-                    movement_date=mov_date,
-                    note=note,
+                CariMovement(
                     customer_id=order.customer_id,
+                    movement_type="payment",
+                    debit=Decimal("0"),
+                    credit=line["amount"],
+                    movement_date=mov_date,
+                    order_id=order.id,
+                    note=line_note,
                 )
             )
+
+    if payload.post_to_finance and (payload.payments or payload.finance_method):
+        fin_lines = lines
+        if not payload.payments and payload.finance_method:
+            fin_lines = normalize_payment_lines(
+                amount=amount,
+                finance_method=payload.finance_method,
+                cash_register_id=payload.cash_register_id,
+                bank_account_id=payload.bank_account_id,
+                method=payload.method,
+            )
+        # Only post lines that have an account target (or finance_method implies default)
+        post_finance_lines(
+            db,
+            fin_lines,
+            direction="in",
+            mov_date=mov_date,
+            note=note,
+            customer_id=order.customer_id,
+            created_by_user_id=user.id,
+            require_account=True,
+        )
 
     order.updated_at = datetime.utcnow()
     db.commit()
@@ -915,8 +926,8 @@ def create_payment(
         user_id=user.id,
         action="create",
         entity_type="order_payment",
-        entity_id=payment.id,
-        detail={"order_id": order.id, "amount": float(amount), "method": payment.method},
+        entity_id=last_payment.id if last_payment else order.id,
+        detail={"order_id": order.id, "amount": float(amount), "lines": len(lines)},
     )
     return _to_out(_load_order(db, order.id))
 

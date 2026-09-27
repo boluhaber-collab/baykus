@@ -359,53 +359,34 @@ def create_movement(
     db.add(movement)
     db.flush()
 
-    if (
-        payload.post_to_finance
-        and payload.movement_type == "payment"
-        and payload.finance_method
-    ):
-        from app.models.finance import BankAccount, BankMovement, CashMovement, CashRegister
+    if payload.post_to_finance and payload.movement_type == "payment":
+        from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
 
         note = payload.note or f"Tedarikçi ödemesi — #{supplier_id} {supplier.name}"
-        if payload.finance_method == "cash":
-            reg = (
-                db.query(CashRegister)
-                .filter(CashRegister.is_active.is_(True))
-                .order_by(CashRegister.id.asc())
-                .first()
-            )
-            if reg:
-                db.add(
-                    CashMovement(
-                        cash_register_id=reg.id,
-                        movement_type="odeme",
-                        amount=payload.amount,
-                        movement_date=mov_date,
-                        category="Tedarikçi",
-                        note=note,
-                        supplier_id=supplier_id,
-                        supplier_movement_id=movement.id,
-                        created_by_user_id=user.id,
-                    )
+        fin_lines = normalize_payment_lines(
+            payments=payload.payments,
+            amount=payload.amount if (payload.finance_method or payload.payments) else None,
+            finance_method=payload.finance_method,
+            cash_register_id=payload.cash_register_id,
+            bank_account_id=payload.bank_account_id,
+        )
+        if fin_lines:
+            if payload.payments and abs(lines_total(fin_lines) - payload.amount) > Decimal("0.02"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ödeme satırları toplamı hareket tutarı ile eşleşmeli",
                 )
-        elif payload.finance_method == "bank":
-            if not payload.bank_account_id:
-                raise HTTPException(status_code=400, detail="Banka hesabı seçilmedi")
-            acc = db.get(BankAccount, payload.bank_account_id)
-            if not acc or not acc.is_active:
-                raise HTTPException(status_code=400, detail="Banka hesabı bulunamadı")
-            db.add(
-                BankMovement(
-                    bank_account_id=acc.id,
-                    movement_type="withdrawal",
-                    amount=payload.amount,
-                    movement_date=mov_date,
-                    category="Tedarikçi",
-                    note=note,
-                    supplier_id=supplier_id,
-                    supplier_movement_id=movement.id,
-                    created_by_user_id=user.id,
-                )
+            post_finance_lines(
+                db,
+                fin_lines,
+                direction="out",
+                mov_date=mov_date,
+                note=note,
+                supplier_id=supplier_id,
+                supplier_movement_id=movement.id,
+                created_by_user_id=user.id,
+                category="Tedarikçi",
+                require_account=True,
             )
 
     db.commit()
