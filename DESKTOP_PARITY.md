@@ -619,3 +619,18 @@ Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync; alış create formunda �
 | Kasa ekle | `POST /api/finance/cash` | done |
 | BH_IMPORT noise | Account detail ledger already uses `accountAciklama`; KPI/recent-tx hub removed via redirect | done |
 
+## Batch 24 — BizimHesap Raporlar menü (2026-09-27)
+
+BH sidebar **Raporlar** 4 çocuk menü + tile hub’lar Baykuş web’e taşındı.
+
+| BH menü | Web | Durum |
+|---------|-----|-------|
+| Satışlar - Alışlar | `/reports/sales-purchases` tile hub | done |
+| Finansal Raporlar | `/reports/financial` tile hub | done |
+| Stok Raporları | `/reports/stock-reports` tile hub | done |
+| Müşteri Listesi | `/reports/customer-list` kriter formu + Raporu Hazırla | done |
+
+Canlı (gerçek API): Basit Satış, Ürün Alış-Satış, Alışlar, Teklifler, 6 Aylık Satışlar, Kategori Bazlı Satış, Stok-Satış Karşılama, Kasa-Banka Hareketleri, Masraflar, Gelir Gider / Kâr-Zarar, Hesap Bakiyeleri, Krediler, Günlük Kasa, Borç Alacak Fişleri, Cari Mizan, Banka Durum, Tahsilat-Ödeme, Ürünler/Envanter/Stok Durum, Stok Hareketleri, Hareket Görmeyen, Depo, Kritik, Sayım, Müşteri/Tedarikçi listesi.
+
+OOS stub (sahte rakam yok): Satış Kaybı, İadeler, Çalışanlar, KDV, Senetler, BA-BS, Çekler, Kullanıcı Satış-Tahsilat, Personel Maaş.
+

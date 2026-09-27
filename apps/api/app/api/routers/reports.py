@@ -9,7 +9,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -165,6 +165,62 @@ def list_reports(_: User = Depends(require_roles(*READ_ROLES))) -> dict:
                 "path": "/api/documents",
                 "href": "/reports/archive",
                 "description": "Arşiv etiketli evraklar",
+            },
+            {
+                "key": "sales_6m",
+                "title": "6 Aylık Satışlar",
+                "path": "/api/reports/sales-6m",
+                "href": "/reports/sales-6m",
+                "description": "Son 6 ay aylık ciro",
+            },
+            {
+                "key": "sales_by_category",
+                "title": "Kategori Bazlı Satış",
+                "path": "/api/reports/sales-by-category",
+                "href": "/reports/sales-by-category",
+                "description": "Ürün kategorisine göre ciro",
+            },
+            {
+                "key": "product_buy_sell",
+                "title": "Ürün Alış-Satış",
+                "path": "/api/reports/product-buy-sell",
+                "href": "/reports/product-buy-sell",
+                "description": "Ürün bazlı alış ve satış",
+            },
+            {
+                "key": "stock_movements",
+                "title": "Stok Hareketleri",
+                "path": "/api/reports/stock-movements",
+                "href": "/reports/stock-movements",
+                "description": "Stok giriş/çıkış hareketleri",
+            },
+            {
+                "key": "stock_idle",
+                "title": "Hareket Görmeyen Ürünler",
+                "path": "/api/reports/stock-idle",
+                "href": "/reports/stock-idle",
+                "description": "Son X günde hareket yok",
+            },
+            {
+                "key": "stock_sales_coverage",
+                "title": "Stok-Satış Karşılama",
+                "path": "/api/reports/stock-sales-coverage",
+                "href": "/reports/stock-sales-coverage",
+                "description": "Stok vs satış miktarı",
+            },
+            {
+                "key": "account_balances",
+                "title": "Hesap Bakiyeleri",
+                "path": "/api/reports/account-balances",
+                "href": "/reports/account-balances",
+                "description": "Kasa / banka bakiyeleri",
+            },
+            {
+                "key": "quotes",
+                "title": "Teklifler",
+                "path": "/api/reports/quotes",
+                "href": "/reports/quotes",
+                "description": "Teklif özeti",
             },
         ]
     }
@@ -1296,3 +1352,669 @@ def last_purchase_prices(
         },
         "rows": rows,
     }
+
+
+# ── BH extended reports ─────────────────────────────────────────────────────
+
+
+@router.get("/sales-6m")
+def sales_six_months(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    format: str | None = Query(default=None),
+):
+    """Last 6 calendar months revenue by month (cancelled excluded)."""
+    today = date.today()
+    months: list[tuple[int, int]] = []
+    y, m = today.year, today.month
+    for _ in range(6):
+        months.append((y, m))
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    months.reverse()
+
+    rows_out: list[dict] = []
+    total_rev = Decimal("0")
+    total_cnt = 0
+    for yy, mm in months:
+        start, end = _month_bounds(yy, mm)
+        orders = (
+            db.query(Order)
+            .filter(Order.created_at >= _day_start(start), Order.created_at <= _day_end(end))
+            .all()
+        )
+        rev = Decimal("0")
+        cnt = 0
+        cancelled = 0
+        for o in orders:
+            if o.status == "Sipariş İptali":
+                cancelled += 1
+                continue
+            cnt += 1
+            rev += _dec(o.total_amount)
+        total_rev += rev
+        total_cnt += cnt
+        rows_out.append(
+            {
+                "year": yy,
+                "month": mm,
+                "label": f"{yy}-{mm:02d}",
+                "order_count": cnt,
+                "cancelled_count": cancelled,
+                "revenue": _f(rev),
+            }
+        )
+
+    summary = {
+        "month_count": len(rows_out),
+        "order_count": total_cnt,
+        "revenue": _f(total_rev),
+        "assumptions": [
+            "Son 6 takvim ayı (içinde bulunulan ay dahil).",
+            "İptal siparişler ciroya dahil değil.",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "alti_aylik_satislar.csv",
+            ["Ay", "Sipariş", "İptal", "Ciro"],
+            [[r["label"], r["order_count"], r["cancelled_count"], r["revenue"]] for r in rows_out],
+        )
+    return {"summary": summary, "rows": rows_out}
+
+
+@router.get("/sales-by-category")
+def sales_by_category(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    format: str | None = Query(default=None),
+):
+    """Aggregate order line totals by product category."""
+    from app.models.order import OrderLine
+
+    q = (
+        db.query(OrderLine)
+        .join(Order, OrderLine.order_id == Order.id)
+        .options(joinedload(OrderLine.order))
+    )
+    if date_from:
+        q = q.filter(Order.created_at >= _day_start(date_from))
+    if date_to:
+        q = q.filter(Order.created_at <= _day_end(date_to))
+    lines = q.all()
+
+    product_ids = {ln.product_id for ln in lines if ln.product_id}
+    products = {
+        p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
+    } if product_ids else {}
+
+    buckets: dict[str, dict[str, float | int]] = {}
+    for ln in lines:
+        order = ln.order
+        if order and order.status == "Sipariş İptali":
+            continue
+        prod = products.get(ln.product_id) if ln.product_id else None
+        cat = (prod.category if prod and prod.category else None) or "Kategorisiz"
+        b = buckets.setdefault(cat, {"qty": 0, "revenue": 0.0, "line_count": 0})
+        b["qty"] = int(b["qty"]) + int(ln.quantity or 0)
+        b["revenue"] = float(b["revenue"]) + _f(ln.line_total)
+        b["line_count"] = int(b["line_count"]) + 1
+
+    rows_out = [
+        {
+            "category": k,
+            "line_count": int(v["line_count"]),
+            "qty": int(v["qty"]),
+            "revenue": float(v["revenue"]),
+        }
+        for k, v in sorted(buckets.items(), key=lambda x: -float(x[1]["revenue"]))
+    ]
+    summary = {
+        "category_count": len(rows_out),
+        "revenue": sum(r["revenue"] for r in rows_out),
+        "qty": sum(r["qty"] for r in rows_out),
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "assumptions": [
+            "Kategori ürün kartından alınır; ürün yoksa 'Kategorisiz'.",
+            "İptal sipariş satırları hariç.",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "kategori_satis.csv",
+            ["Kategori", "Satır", "Miktar", "Ciro"],
+            [[r["category"], r["line_count"], r["qty"], r["revenue"]] for r in rows_out],
+        )
+    return {"summary": summary, "rows": rows_out}
+
+
+@router.get("/product-buy-sell")
+def product_buy_sell(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    format: str | None = Query(default=None),
+):
+    """Per-product sold qty/revenue vs purchased qty/cost."""
+    from app.models.order import OrderLine
+    from app.models.supplier import PurchaseLine
+
+    sq = (
+        db.query(OrderLine)
+        .join(Order, OrderLine.order_id == Order.id)
+        .options(joinedload(OrderLine.order))
+    )
+    if date_from:
+        sq = sq.filter(Order.created_at >= _day_start(date_from))
+    if date_to:
+        sq = sq.filter(Order.created_at <= _day_end(date_to))
+    sales_map: dict[str, dict] = {}
+    for ln in sq.all():
+        if ln.order and ln.order.status == "Sipariş İptali":
+            continue
+        key = str(ln.product_id or f"d:{ln.description}")
+        b = sales_map.setdefault(
+            key,
+            {
+                "product_id": ln.product_id,
+                "name": ln.description,
+                "sold_qty": 0,
+                "sold_amount": Decimal("0"),
+            },
+        )
+        b["sold_qty"] += int(ln.quantity or 0)
+        b["sold_amount"] += _dec(ln.line_total)
+
+    pq = (
+        db.query(PurchaseLine)
+        .join(Purchase, PurchaseLine.purchase_id == Purchase.id)
+        .options(joinedload(PurchaseLine.purchase))
+    )
+    if date_from:
+        pq = pq.filter(Purchase.purchase_date >= date_from)
+    if date_to:
+        pq = pq.filter(Purchase.purchase_date <= date_to)
+    buy_map: dict[str, dict] = {}
+    for ln in pq.all():
+        key = str(ln.product_id or f"d:{ln.description}")
+        b = buy_map.setdefault(
+            key,
+            {
+                "product_id": ln.product_id,
+                "name": ln.description,
+                "buy_qty": 0,
+                "buy_amount": Decimal("0"),
+            },
+        )
+        b["buy_qty"] += int(float(ln.quantity or 0))
+        b["buy_amount"] += _dec(ln.unit_cost) * _dec(ln.quantity)
+
+    keys = set(sales_map) | set(buy_map)
+    pids = {int(k) for k in keys if k.isdigit()}
+    products = {
+        p.id: p for p in db.query(Product).filter(Product.id.in_(pids)).all()
+    } if pids else {}
+
+    rows_out: list[dict] = []
+    for key in keys:
+        s = sales_map.get(key, {})
+        b = buy_map.get(key, {})
+        pid = s.get("product_id") or b.get("product_id")
+        name = s.get("name") or b.get("name") or ""
+        if pid and pid in products:
+            name = products[pid].name
+        sold_qty = int(s.get("sold_qty") or 0)
+        buy_qty = int(b.get("buy_qty") or 0)
+        sold_amt = _dec(s.get("sold_amount") or 0)
+        buy_amt = _dec(b.get("buy_amount") or 0)
+        rows_out.append(
+            {
+                "product_id": pid,
+                "name": name,
+                "sold_qty": sold_qty,
+                "sold_amount": _f(sold_amt),
+                "buy_qty": buy_qty,
+                "buy_amount": _f(buy_amt),
+                "net_qty": sold_qty - buy_qty,
+                "gross_approx": _f(sold_amt - buy_amt),
+            }
+        )
+    rows_out.sort(key=lambda r: r["sold_amount"], reverse=True)
+
+    summary = {
+        "row_count": len(rows_out),
+        "sold_amount": sum(r["sold_amount"] for r in rows_out),
+        "buy_amount": sum(r["buy_amount"] for r in rows_out),
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "assumptions": [
+            "Satış: sipariş satırları (iptal hariç).",
+            "Alış: satın alma satırları.",
+            "Eşleşme product_id; yoksa açıklama anahtarı.",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "urun_alis_satis.csv",
+            ["Ürün", "Satış adet", "Satış tutar", "Alış adet", "Alış tutar", "Net adet", "Fark"],
+            [
+                [
+                    r["name"],
+                    r["sold_qty"],
+                    r["sold_amount"],
+                    r["buy_qty"],
+                    r["buy_amount"],
+                    r["net_qty"],
+                    r["gross_approx"],
+                ]
+                for r in rows_out
+            ],
+        )
+    return {"summary": summary, "rows": rows_out}
+
+
+@router.get("/stock-movements")
+def stock_movements_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=5000),
+    format: str | None = Query(default=None),
+):
+    from app.models.product import StockMovement
+
+    q = db.query(StockMovement).options(
+        joinedload(StockMovement.product),
+        joinedload(StockMovement.variant),
+    )
+    if date_from:
+        q = q.filter(StockMovement.created_at >= _day_start(date_from))
+    if date_to:
+        q = q.filter(StockMovement.created_at <= _day_end(date_to))
+    moves = q.order_by(StockMovement.created_at.desc(), StockMovement.id.desc()).limit(limit).all()
+
+    rows_out = []
+    in_qty = 0
+    out_qty = 0
+    for m in moves:
+        raw_qty = int(m.quantity or 0)
+        direction = (m.direction or "").lower()
+        signed = raw_qty if direction == "increase" else -abs(raw_qty)
+        if signed >= 0:
+            in_qty += abs(signed)
+        else:
+            out_qty += abs(signed)
+        rows_out.append(
+            {
+                "id": m.id,
+                "product_id": m.product_id,
+                "product_name": m.product.name if m.product else None,
+                "variant_name": m.variant.name if m.variant else None,
+                "sku": (m.variant.sku if m.variant else None) or (m.product.sku if m.product else None),
+                "quantity": signed,
+                "direction": m.direction,
+                "movement_type": m.reason or m.direction,
+                "warehouse": m.warehouse,
+                "note": m.note,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+        )
+    summary = {
+        "count": len(rows_out),
+        "in_qty": in_qty,
+        "out_qty": out_qty,
+        "limit": limit,
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "assumptions": [
+            "direction=increase → giriş; decrease → çıkış (miktar işaretli).",
+            f"En fazla {limit} satır.",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "stok_hareketleri.csv",
+            ["id", "SKU", "Ürün", "Varyant", "Miktar", "Yön", "Neden", "Depo", "Tarih", "Not"],
+            [
+                [
+                    r["id"],
+                    r["sku"] or "",
+                    r["product_name"] or "",
+                    r["variant_name"] or "",
+                    r["quantity"],
+                    r["direction"] or "",
+                    r["movement_type"] or "",
+                    r["warehouse"] or "",
+                    r["created_at"] or "",
+                    r["note"] or "",
+                ]
+                for r in rows_out
+            ],
+        )
+    return {"summary": summary, "rows": rows_out}
+
+
+@router.get("/stock-idle")
+def stock_idle_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    days: int = Query(default=90, ge=1, le=3650),
+    format: str | None = Query(default=None),
+):
+    """Products with no stock movement in the last N days."""
+    from datetime import timedelta
+    from app.models.product import StockMovement
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    last_rows = (
+        db.query(StockMovement.product_id, func.max(StockMovement.created_at))
+        .group_by(StockMovement.product_id)
+        .all()
+    )
+    last_map = {r[0]: r[1] for r in last_rows}
+
+    products = (
+        db.query(Product)
+        .options(joinedload(Product.variants))
+        .filter(Product.is_active.is_(True))
+        .order_by(Product.name)
+        .all()
+    )
+    rows_out = []
+    for p in products:
+        last = last_map.get(p.id)
+        if last and last >= cutoff:
+            continue
+        qty = int(p.stock_qty or 0)
+        if p.variants:
+            qty = sum(int(v.stock_qty or 0) for v in p.variants)
+        rows_out.append(
+            {
+                "product_id": p.id,
+                "sku": p.sku,
+                "name": p.name,
+                "category": p.category,
+                "warehouse": p.warehouse,
+                "qty": qty,
+                "last_movement_at": last.isoformat() if last else None,
+                "days_idle": (datetime.utcnow() - last).days if last else None,
+            }
+        )
+    summary = {
+        "count": len(rows_out),
+        "days": days,
+        "assumptions": [
+            f"Son {days} günde stok hareketi olmayan aktif ürünler.",
+            "Hiç hareketi olmayanlar da listelenir (last_movement_at=null).",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "hareket_gormeyen_urunler.csv",
+            ["SKU", "Ürün", "Kategori", "Depo", "Miktar", "Son hareket", "Gün"],
+            [
+                [
+                    r["sku"] or "",
+                    r["name"],
+                    r["category"] or "",
+                    r["warehouse"] or "",
+                    r["qty"],
+                    r["last_movement_at"] or "",
+                    r["days_idle"] if r["days_idle"] is not None else "",
+                ]
+                for r in rows_out
+            ],
+        )
+    return {"summary": summary, "rows": rows_out}
+
+
+@router.get("/stock-sales-coverage")
+def stock_sales_coverage(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    days: int = Query(default=30, ge=1, le=365),
+    format: str | None = Query(default=None),
+):
+    """Current stock vs sold qty in last N days."""
+    from datetime import timedelta
+    from app.models.order import OrderLine
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    lines = (
+        db.query(OrderLine)
+        .join(Order, OrderLine.order_id == Order.id)
+        .options(joinedload(OrderLine.order))
+        .filter(Order.created_at >= cutoff)
+        .all()
+    )
+    sold: dict[int, int] = {}
+    for ln in lines:
+        if not ln.product_id:
+            continue
+        if ln.order and ln.order.status == "Sipariş İptali":
+            continue
+        sold[ln.product_id] = sold.get(ln.product_id, 0) + int(ln.quantity or 0)
+
+    products = (
+        db.query(Product)
+        .options(joinedload(Product.variants))
+        .filter(Product.is_active.is_(True))
+        .order_by(Product.name)
+        .all()
+    )
+    rows_out = []
+    short = 0
+    for p in products:
+        qty = int(p.stock_qty or 0)
+        if p.variants:
+            qty = sum(int(v.stock_qty or 0) for v in p.variants)
+        s = sold.get(p.id, 0)
+        if s == 0 and qty == 0:
+            continue
+        coverage = round(qty / s, 2) if s > 0 else None
+        if s > qty:
+            short += 1
+        rows_out.append(
+            {
+                "product_id": p.id,
+                "sku": p.sku,
+                "name": p.name,
+                "category": p.category,
+                "stock_qty": qty,
+                "sold_qty": s,
+                "coverage_ratio": coverage,
+                "shortfall": max(s - qty, 0),
+            }
+        )
+    rows_out.sort(key=lambda r: r["sold_qty"], reverse=True)
+    summary = {
+        "count": len(rows_out),
+        "days": days,
+        "shortfall_count": short,
+        "assumptions": [
+            f"Satış: son {days} gün sipariş satırları (iptal hariç).",
+            "Karşılama = stok / satış; 1.0 = stok satışı karşılıyor.",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "stok_satis_karsilama.csv",
+            ["SKU", "Ürün", "Stok", "Satış", "Oran", "Eksik"],
+            [
+                [
+                    r["sku"] or "",
+                    r["name"],
+                    r["stock_qty"],
+                    r["sold_qty"],
+                    r["coverage_ratio"] if r["coverage_ratio"] is not None else "",
+                    r["shortfall"],
+                ]
+                for r in rows_out
+            ],
+        )
+    return {"summary": summary, "rows": rows_out}
+
+
+@router.get("/account-balances")
+def account_balances_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    format: str | None = Query(default=None),
+):
+    from app.models.finance import (
+        BANK_IN_TYPES,
+        CASH_IN_TYPES,
+        BankAccount,
+        BankMovement,
+        CashMovement,
+        CashRegister,
+    )
+
+    rows_out: list[dict] = []
+    cash_total = Decimal("0")
+    bank_total = Decimal("0")
+
+    for reg in db.query(CashRegister).order_by(CashRegister.name).all():
+        moves = db.query(CashMovement).filter(CashMovement.cash_register_id == reg.id).all()
+        bal = _dec(getattr(reg, "opening_balance", 0) or 0)
+        for m in moves:
+            amt = _dec(m.amount)
+            if m.movement_type in CASH_IN_TYPES:
+                bal += amt
+            else:
+                bal -= amt
+        cash_total += bal
+        rows_out.append(
+            {
+                "kind": "cash",
+                "id": reg.id,
+                "name": reg.name,
+                "currency": getattr(reg, "currency", None) or "TRY",
+                "balance": _f(bal),
+                "is_active": bool(getattr(reg, "is_active", True)),
+            }
+        )
+
+    for acc in db.query(BankAccount).order_by(BankAccount.name).all():
+        moves = db.query(BankMovement).filter(BankMovement.bank_account_id == acc.id).all()
+        bal = _dec(getattr(acc, "opening_balance", 0) or 0)
+        for m in moves:
+            amt = _dec(m.amount)
+            if m.movement_type in BANK_IN_TYPES:
+                bal += amt
+            else:
+                bal -= amt
+        bank_total += bal
+        rows_out.append(
+            {
+                "kind": "bank",
+                "id": acc.id,
+                "name": acc.name,
+                "currency": getattr(acc, "currency", None) or "TRY",
+                "balance": _f(bal),
+                "is_active": bool(getattr(acc, "is_active", True)),
+                "account_type": getattr(acc, "account_type", None),
+            }
+        )
+
+    summary = {
+        "count": len(rows_out),
+        "cash_total": _f(cash_total),
+        "bank_total": _f(bank_total),
+        "grand_total": _f(cash_total + bank_total),
+        "assumptions": [
+            "Bakiye = açılış + giriş − çıkış (kasa/banka tip listeleri).",
+            "POS / kredi kartı hesapları banka tablosunda ise burada görünür.",
+        ],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "hesap_bakiyeleri.csv",
+            ["Tür", "Ad", "Para birimi", "Bakiye", "Aktif"],
+            [
+                [
+                    "Kasa" if r["kind"] == "cash" else "Banka",
+                    r["name"],
+                    r["currency"],
+                    r["balance"],
+                    "Evet" if r["is_active"] else "Hayır",
+                ]
+                for r in rows_out
+            ],
+        )
+    return {"summary": summary, "rows": rows_out}
+
+
+@router.get("/quotes")
+def quotes_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    format: str | None = Query(default=None),
+):
+    from app.models.quote import Quote
+
+    q = db.query(Quote).options(joinedload(Quote.customer))
+    if date_from:
+        q = q.filter(Quote.created_at >= _day_start(date_from))
+    if date_to:
+        q = q.filter(Quote.created_at <= _day_end(date_to))
+    quotes = q.order_by(Quote.created_at.desc()).all()
+    rows_out = []
+    total = Decimal("0")
+    for qt in quotes:
+        amt = _dec(getattr(qt, "total_amount", 0) or 0)
+        total += amt
+        rows_out.append(
+            {
+                "id": qt.id,
+                "number": getattr(qt, "quote_number", None) or getattr(qt, "number", None),
+                "customer_name": qt.customer.name if qt.customer else None,
+                "status": qt.status,
+                "total_amount": _f(amt),
+                "created_at": qt.created_at.isoformat() if qt.created_at else None,
+                "valid_until": qt.valid_until.isoformat()
+                if getattr(qt, "valid_until", None)
+                else None,
+            }
+        )
+    summary = {
+        "count": len(rows_out),
+        "total": _f(total),
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "assumptions": ["Teklif tutarları quote.total_amount alanından."],
+    }
+    if _wants_csv(request, format):
+        return _csv_response(
+            "teklifler_raporu.csv",
+            ["No", "Müşteri", "Durum", "Tutar", "Oluşturma", "Geçerlilik"],
+            [
+                [
+                    r["number"] or "",
+                    r["customer_name"] or "",
+                    r["status"] or "",
+                    r["total_amount"],
+                    r["created_at"] or "",
+                    r["valid_until"] or "",
+                ]
+                for r in rows_out
+            ],
+        )
+    return {"summary": summary, "rows": rows_out}
