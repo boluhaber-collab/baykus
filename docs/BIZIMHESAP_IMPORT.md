@@ -1,6 +1,6 @@
 # BizimHesap → Baykuş içe aktarma
 
-Bu rehber **ürün / depo / stok** API importunu ve **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)** aşamasını açıklar.
+Bu rehber **ürün / depo / stok** API importunu, **cari (müşteri–tedarikçi list + Detaylı Ekstre PDF)** ve **Hesaplarım (kasa / banka / ortak)** aşamalarını açıklar.
 
 ## 1) Token alma
 
@@ -189,12 +189,99 @@ Git Bash: `bash scripts/import-bizimhesap-cari.sh`
 
 Web **`/tools/import`** veya `POST /api/customers/import` hâlâ kullanılabilir (şablon sütunları: Ad, Firma, Telefon, …). Tedarikçi + ekstre için bu CLI tercih edilir.
 
-## 4) Güvenlik
+## 4) Hesaplarım (kasa / banka / ortak)
 
-- Token, ham JSON dump’ları, ekstre PDF’leri ve `*.db` **commit edilmez** (`tmp/`, `*.db`, `.env` gitignore’da).
+BizimHesap B2B API’sinde kasa/banka hareketi **yok**. Kaynak: panel **Hesaplarım → Kasa Raporu** Excel export’ları (Baykuş masaüstü aktarım paketiyle aynı dosyalar).
+
+### Kaynak dosyalar
+
+`tmp/bizimhesap/hesaplarim/` (gitignore — **xlsx commit etmeyin**):
+
+| Dosya | İçerik |
+|-------|--------|
+| `banka_hesaplari.xlsx` | Hesap listesi: Hesap Türü, Banka Adı, Hesap Adı, IBAN, … |
+| `banka_hareketleri.xlsx` | Banka + şirket ortağı hareketleri (~949) |
+| `kasa_hareketleri.xlsx` | TL Kasa hareketleri (~287) |
+| `raporlar/*.xlsx` | Ham BH `KASA RAPORU` export’ları (referans) |
+| `manifest.json` | Dönem / eşleme özeti |
+
+Dönem (bu pakette): **01.07.2025 – 25.08.2026**.
+
+### Eşleme
+
+| BH | Baykuş |
+|----|--------|
+| TL Kasa | `CashRegister` adı `TL Kasa` |
+| Hesap Türü=`Banka` | `BankAccount.account_type=Banka` |
+| Hesap Türü=`Şirket Ortağı` | `BankAccount.account_type=Şirket Ortağı` (Engin / Nevin) |
+| Tahsilat / Ödeme / Para Girişi–Çıkışı | kasa: `tahsilat`/`odeme`/`gider`/`transfer_*` — banka: `deposit`/`withdrawal`/`fee`/`transfer_*` |
+
+Not alanı: `BH_IMPORT:{Aktarım ID} | …` (idempotent yeniden çalıştırma).
+
+### Linux / box
+
+```bash
+cd /path/to/baykus-web
+./scripts/import-bizimhesap-hesaplar.sh
+# veya:
+cd apps/api && source .venv/bin/activate
+export DATABASE_URL=sqlite:///./baykus.db
+python scripts/import_bizimhesap_hesaplar.py
+python -m app.scripts.import_bizimhesap_hesaplar
+```
+
+### Windows PC
+
+1. `tmp\bizimhesap\hesaplarim\` altına xlsx + `manifest.json` kopyalayın (git’te yok).
+2. Çalıştırın:
+
+```powershell
+cd C:\Users\engin\Desktop\baykus\apps\api
+.\.venv\Scripts\Activate.ps1
+$env:DATABASE_URL = "sqlite:///./baykus.db"
+python scripts\import_bizimhesap_hesaplar.py
+# dry-run:
+python scripts\import_bizimhesap_hesaplar.py --dry-run
+```
+
+### Faydalı bayraklar
+
+| Bayrak | Anlam |
+|--------|--------|
+| `--hesap-dir DIR` | Kaynak klasör (varsayılan `../../tmp/bizimhesap/hesaplarim`) |
+| `--dry-run` | Sadece parse / sayım |
+| `--skip-backup` | SQLite yedeğini atla |
+| `--keep-demo` | Seed `Ziraat İşletme` / `Garanti Ticari` / demo hareketleri silme |
+
+### Ne yapar?
+
+1. `baykus.db` → `apps/api/backups/baykus_pre_bh_hesaplar_*.db`
+2. Varsayılan: demo kasa/banka siler; expense/loan FK’lerini null’lar
+3. Önceki `BH_IMPORT:` etiketli cash/bank hareketlerini siler (**idempotent**)
+4. `TL Kasa` + banka/ortak hesapları upsert (`notes` içinde `BH_IMPORT:{key}`)
+5. Hareketleri yazar; `opening_balance=0`
+
+### Beklenen smoke (kutu koşusu)
+
+| Metrik | Değer |
+|--------|--------|
+| Kasa | 1 (`TL Kasa`) |
+| Banka | 7 |
+| Şirket Ortağı | 2 (Engin, Nevin) |
+| `cash_movements` | 287 |
+| `bank_movements` | 949 |
+
+### OOS / boşluklar
+
+- **FON HESABI**: virman açıklamalarında geçiyor; ayrı hesap satırı yok → oluşturulmadı.
+- Canlı panel scrape bu pakette dönem sonu **25.08.2026**; daha yeni hareketler için BH’den yeni Kasa Raporu export’u alıp aynı klasöre koyup script’i yeniden çalıştırın.
+
+## 5) Güvenlik
+
+- Token, ham JSON dump’ları, ekstre PDF’leri, Hesaplarım xlsx ve `*.db` **commit edilmez** (`tmp/`, `*.db`, `.env` gitignore’da).
 - Commit edilenler: `scripts/import_bizimhesap_*.py`, `app/scripts/…` sarmalayıcıları, `docs/BIZIMHESAP_IMPORT.md`, `scripts/import-bizimhesap-*.sh`.
 
-## 5) Sorun giderme
+## 6) Sorun giderme
 
 | Belirti | Çözüm |
 |--------|--------|
@@ -205,3 +292,6 @@ Web **`/tools/import`** veya `POST /api/customers/import` hâlâ kullanılabilir
 | `pdftotext not found` | Poppler kurun; Windows PATH’e `pdftotext.exe` ekleyin |
 | Cari bakiyeler kayıp / çift | Yeniden çalıştırın (BH_IMPORT hareketleri silinip yeniden yazılır); `--keep-demo` ile demo karışmasın |
 | PDF’de satır kaçtı | `--dry-run` çıktısındaki `parse_unmatched_total` / `pdfs_continuity_warn`; best-effort — master list yine %100 yazılır |
+| Kasa/banka demo kaldı | `--keep-demo` kullanmayın; script seed Ziraat/Garanti Ticari + demo hareketleri siler |
+| `unmatched_bank_moves` > 0 | `banka_hareketleri` Hesap sütunu `banka_hesaplari` ile `Banka Adı - Hesap Adı` eşleşmeli |
+| openpyxl yok | `pip install openpyxl` (apps/api venv) |
