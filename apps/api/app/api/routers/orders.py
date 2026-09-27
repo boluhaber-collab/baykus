@@ -819,6 +819,8 @@ def work_order_pdf(
         "address": rows.get("address", rows.get("adres", "")),
         "logo_dosyasi": rows.get("logo_dosyasi", ""),
         "form_logo_dosyasi": rows.get("form_logo_dosyasi", ""),
+        "pdf_alt_baslik": rows.get("pdf_alt_baslik", "Kişiye ve Kuruma Özel Baskı Hizmetleri"),
+        "web_adresi": rows.get("web_adresi", "www.baykusbaski.com"),
     }
     pdf_bytes = build_work_order_pdf(order, settings)
     return Response(

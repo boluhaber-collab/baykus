@@ -155,6 +155,10 @@ def company_settings(db: Session) -> dict[str, str]:
         "tax_no": rows.get("tax_no", rows.get("vergi_no", "")),
         "logo_dosyasi": rows.get("logo_dosyasi", ""),
         "form_logo_dosyasi": rows.get("form_logo_dosyasi", ""),
+        "pdf_alt_baslik": rows.get("pdf_alt_baslik", "Kişiye ve Kuruma Özel Baskı Hizmetleri"),
+        "web_adresi": rows.get("web_adresi", "www.baykusbaski.com"),
+        "teklif_sablon_logo_goster": rows.get("teklif_sablon_logo_goster", "Evet"),
+        "teklif_sablon_baslik": rows.get("teklif_sablon_baslik", "Teklif Formu"),
         "theme_label": rows.get("theme_label", "Varsayılan"),
     }
 

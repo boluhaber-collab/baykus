@@ -455,7 +455,7 @@ def supplier_voucher_pdf(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ_ROLES)),
 ):
-    """Basit borç/alacak fişi PDF (masaüstü twin stil değil)."""
+    """Borç/alacak fişi PDF — masaüstü antetli letterhead."""
     from fastapi.responses import Response
     from app.models.settings_model import AppSetting
     from app.services.pdf import build_supplier_voucher_pdf
@@ -486,6 +486,8 @@ def supplier_voucher_pdf(
         "address": rows.get("address", rows.get("adres", "")),
         "logo_dosyasi": rows.get("logo_dosyasi", ""),
         "form_logo_dosyasi": rows.get("form_logo_dosyasi", ""),
+        "pdf_alt_baslik": rows.get("pdf_alt_baslik", "Kişiye ve Kuruma Özel Baskı Hizmetleri"),
+        "web_adresi": rows.get("web_adresi", "www.baykusbaski.com"),
     }
     pdf_bytes = build_supplier_voucher_pdf(
         supplier.name, tip_out, amount_out, date_out, due_out, note_out, settings

@@ -178,9 +178,11 @@ def assets_report_pdf(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ)),
 ) -> Response:
-    """Simple demirbaş PDF — not a ReportLab twin of desktop styling."""
+    """Demirbaş PDF — masaüstü antetli letterhead."""
+    from app.models.settings_model import AppSetting
     from app.services.pdf import build_assets_report_pdf
 
+    settings_map = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
     rows = [_out(a) for a in db.query(Asset).order_by(Asset.name).all()]
     pdf = build_assets_report_pdf(
         [
@@ -192,7 +194,8 @@ def assets_report_pdf(
                 "maintenance_date": r.maintenance_date.isoformat() if r.maintenance_date else "",
             }
             for r in rows
-        ]
+        ],
+        settings_map,
     )
     return Response(
         content=pdf,

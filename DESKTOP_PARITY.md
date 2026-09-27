@@ -129,7 +129,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 |-----|-------|
 | BizimHesap canlı sırlar / DPAPI | Yasak — sadece iskelet ayar JSON |
 | Selenium / WhatsApp Desktop otomasyonu | Yasak — `wa.me` link + taslak |
-| Cari Döküm PDF (ReportLab masaüstü aynısı) | Basit web PDF + yazdırılabilir HTML + CSV var; masaüstü ReportLab twin değil |
+| Cari Döküm PDF (ReportLab masaüstü aynısı) | **done** — antetli letterhead twin (`pdf_modern_baslik` / logo / kutu / tablo / footer) + HTML + CSV |
 | Merkezi DB’ye SQLite aktarım / canlı Postgres şifresi | Şifre saklanmaz; host alanları ayarda |
 | OneDrive / Windows yerel yollar | Web sunucu yedek zip |
 
@@ -238,7 +238,7 @@ Bilinçli boşluklar (karşılaştırmalı kontrol için): BizimHesap canlı syn
 | Demirbaşlar | `/finance/assets` — Seri No · Güncel Değer · Durum · Bakım · filtre · **PDF Rapor** (`/api/finance/assets/report/pdf`) | done |
 | Fihrist | `/directory` — Müşteri / Tedarikçi / Kişi sekmeleri · Yenile/Senkron · arama · düzenle | done |
 | WhatsApp Takip | `/whatsapp/track` — aday listesi · tür filtresi · şablon · önizleme · **wa.me** (Selenium yok) | done |
-| Cari PDF | `/reports/cari-statements` — CSV + basit ReportLab PDF + yazdırılabilir HTML (`format=pdf|html`) | done (not twin) |
+| Cari PDF | `/reports/cari-statements` — CSV + antetli ReportLab twin PDF + yazdırılabilir HTML (`format=pdf|html`) | done |
 | Sistem derinleştirme | Kilit Modu yardım metinleri · Sağlık Merkezi sekmeler/SQLite satır · Merkezi DB checklist · İşlem Geçmişi etiketi | done |
 
 API: Alembic **015** (`assets.serial_no/current_value/status/maintenance_date`). SQLite: `python -m app.bootstrap_sqlite` kolon yamaları.
@@ -391,7 +391,7 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live po
 
 ### Kalan (dürüst)
 
-- Masaüstü ReportLab twin PDF stilleri (cari/demirbaş/fiyat listesi) — web polish’li basit PDF (batch 18)
+- ~~Masaüstü ReportLab twin PDF stilleri~~ — Batch 23 antetli twin
 - Merkezi DB canlı şifre / VPS kullanıcı senkron (masaüstü postgres users)
 
 ## Batch 19 — Visual polish vs parity-shots (2026-09-27)
@@ -416,7 +416,7 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live po
 
 - İnce sayfa densite / StatusFooter tutarlılığı (kalan listeler)
 - Üretim / Sipariş Merkezi ince UX
-- ReportLab twin PDF (bilinçli basit)
+- ~~ReportLab twin PDF~~ — Batch 23 antetli twin
 
 
 ## Batch 20 — Sipariş/Üretim densite + StatusFooter + smoke (2026-09-27)
@@ -438,7 +438,7 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live po
 
 ### Kalan (dürüst) → Batch 21’de kapatılanlar: hub StatusFooter + densite.
 
-- Masaüstü ReportLab twin PDF stilleri — web polish’li basit PDF
+- ~~Masaüstü ReportLab twin PDF stilleri~~ — Batch 23 antetli twin
 - Merkezi DB canlı şifre / VPS kullanıcı senkron
 
 
@@ -482,7 +482,7 @@ Batch 21 hub’larından sonra kalan ince alt sayfalar + web PDF görünüm iyil
 | Smoke | `/health` · login · `/api/auth/me` · `/api/dashboard/summary` · Direkt Satışlar `channels=perakende,mağaza,…` 200 | done |
 | Zip | `/workspace/baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
 
-Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI / live postgres password / VPS kullanıcı senkron, masaüstü ReportLab birebir twin PDF.
+Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI / live postgres password / VPS kullanıcı senkron, ~~masaüstü ReportLab birebir twin PDF~~ (Batch 23'te kapatıldı).
 
 ### Kalan (dürüst) → Batch 23’te kapatılanlar: detay densite + transfer CTA + kalan list StatusFooter.
 
@@ -504,7 +504,7 @@ Batch 22 ince alt sayfalarından sonra kalan detay kartları ve StatusFooter’s
 | Smoke | `/health` · login · `/api/auth/me` · `/api/dashboard/summary` · Direkt Satışlar channels 200 · `tsc --noEmit` | done |
 | Zip | `/workspace/baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
 
-Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI / live postgres password / VPS kullanıcı senkron, masaüstü ReportLab birebir twin PDF.
+Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI / live postgres password / VPS kullanıcı senkron, ~~masaüstü ReportLab birebir twin PDF~~ (Batch 23'te kapatıldı).
 
 ### Kalan (dürüst) — çoğunlukla OOS
 
@@ -634,3 +634,18 @@ Canlı (gerçek API): Basit Satış, Ürün Alış-Satış, Alışlar, Teklifler
 
 OOS stub (sahte rakam yok): Satış Kaybı, İadeler, Çalışanlar, KDV, Senetler, BA-BS, Çekler, Kullanıcı Satış-Tahsilat, Personel Maaş.
 
+
+## Batch 23 — Antetli PDF letterhead twin (2026-09-27)
+
+Masaüstü `reports.py` + `pdf_logo_ekle` / `pdf_modern_baslik` / `pdf_modern_kutu` / `pdf_excel_tablo` / `pdf_modern_altbilgi` web'e 1:1 port edildi (`apps/api/app/services/pdf.py`, canvas).
+
+| Belge | Endpoint | Durum |
+|-------|----------|-------|
+| Teklif | `GET /api/quotes/{id}/pdf` | done |
+| İş emri | `GET /api/orders/{id}/work-order-pdf` | done |
+| Cari ekstre | `GET /api/reports/cari-statements?format=pdf` (+ müşteri detay) | done |
+| Demirbaş | `GET /api/finance/assets/report/pdf` | done |
+| Fiyat listesi | `GET /api/price-lists/{id}/export?fmt=pdf` | done |
+| Tedarikçi fiş | `GET /api/suppliers/{id}/voucher-pdf` | done |
+
+Fallback logo: `apps/api/app/static/300x100logo.png`. Settings: `form_logo_dosyasi`, `pdf_alt_baslik`, `web_adresi`.
