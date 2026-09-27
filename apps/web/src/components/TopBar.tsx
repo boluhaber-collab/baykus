@@ -16,14 +16,14 @@ export default function TopBar() {
       <button
         type="button"
         onClick={() => router.back()}
-        className="inline-flex items-center gap-1.5 rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 shadow-sm"
+        className="inline-flex items-center gap-1.5 rounded bg-slate-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-900 shadow-sm"
       >
         <span aria-hidden>←</span>
         Geri
       </button>
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 shadow-sm"
+        className="inline-flex items-center gap-1.5 rounded bg-emerald-800 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-900 shadow-sm"
       >
         <span aria-hidden>🏠</span>
         Ana Sayfa

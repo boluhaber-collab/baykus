@@ -72,12 +72,14 @@ body {
     background-color: var(--baykus-primary-dark);
   }
   .bk-btn-ghost {
-    border: 1px solid var(--baykus-line);
+    border: 1px solid #94a3b8;
     background: #fff;
-    color: var(--baykus-text);
+    color: #0f172a;
+    font-weight: 600;
   }
   .bk-btn-ghost:hover {
-    background-color: var(--baykus-bg);
+    background-color: #f1f5f9;
+    border-color: #64748b;
   }
   .bk-btn-danger {
     border: 1px solid #fecaca;
@@ -604,9 +606,10 @@ body {
     min-height: 4.25rem;
     box-shadow: 0 1px 2px rgba(0,0,0,0.08);
   }
-  .bk-party-kpi-card--peach { background: #e68778; }
-  .bk-party-kpi-card--cyan { background: #7fb5df; }
-  .bk-party-kpi-card--mint { background: #8bd0a7; }
+  /* Stronger fills so white labels stay readable (was pastel peach/cyan/mint). */
+  .bk-party-kpi-card--peach { background: #c2410c; }
+  .bk-party-kpi-card--cyan { background: #0369a1; }
+  .bk-party-kpi-card--mint { background: #047857; }
   .bk-party-kpi-icon {
     font-size: 1.6rem;
     opacity: 0.95;
@@ -651,17 +654,30 @@ body {
     line-height: 1.2;
   }
   .bk-party-chip:hover { filter: brightness(1.05); }
-  .bk-party-chip--navy { background: #334155; }
-  .bk-party-chip--green { background: #198754; }
+  .bk-party-chip--navy { background: #1e293b; }
+  .bk-party-chip--green { background: #15803d; }
   .bk-party-chip--white {
     background: #fff;
-    color: #334155;
-    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    border: 1px solid #64748b;
   }
-  .bk-party-chip--purple { background: #7c3aed; }
-  .bk-party-chip--cyan { background: #0ea5e9; }
-  .bk-party-chip--yellow { background: #eab308; color: #1f2937; }
-  .bk-party-chip--orange { background: #f59e0b; color: #1f2937; }
+  .bk-party-chip--purple { background: #6d28d9; }
+  /* Dark text on light cyan/yellow/orange — white-on-pastel failed WCAG. */
+  .bk-party-chip--cyan {
+    background: #e0f2fe;
+    color: #0c4a6e;
+    border: 1px solid #7dd3fc;
+  }
+  .bk-party-chip--yellow {
+    background: #fde68a;
+    color: #78350f;
+    border: 1px solid #fbbf24;
+  }
+  .bk-party-chip--orange {
+    background: #ffedd5;
+    color: #9a3412;
+    border: 1px solid #fb923c;
+  }
   .bk-party-chip-wrap {
     position: relative;
     display: inline-flex;

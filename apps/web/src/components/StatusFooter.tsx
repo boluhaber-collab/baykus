@@ -44,21 +44,21 @@ export default function StatusFooter({
             void load();
             onRefresh?.();
           }}
-          className="bk-btn bk-btn-ghost text-xs"
+          className="bk-btn bk-btn-ghost text-xs font-semibold"
         >
           ↻ Yenile
         </button>
         <Link
           href="/tasks"
           className="bk-btn text-xs font-semibold text-white"
-          style={{ backgroundColor: "#2563eb" }}
+          style={{ backgroundColor: "#1d4ed8" }}
         >
           ✓ Görevler
         </Link>
         <Link
           href="/orders/weekly-plan"
-          className="bk-btn text-xs font-semibold text-white"
-          style={{ backgroundColor: "#f59e0b" }}
+          className="bk-btn text-xs font-semibold"
+          style={{ backgroundColor: "#fde68a", color: "#78350f", border: "1px solid #fbbf24" }}
         >
           📅 Haftalık Plan
         </Link>
