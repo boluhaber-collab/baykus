@@ -327,7 +327,7 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI / postgr
 |---------|-----|-------|
 | Müşteri kart detay (`musteri_kart_detay_penceresi` / `musteri_kart_ozeti`) | `/customers/[id]` — özet Açık Bakiye / Toplam Borç / Toplam Tahsilat + son satış · işlemler (Satış, Teklif, Tahsilat, WA, Cari PDF, Mutabakat, Takip, Devir) · sekmeler Bilgi / Hareketler / Siparişler / Notlar / WhatsApp | done |
 | Tedarikçi detay (`tedarikci_detay_penceresi`) | `/suppliers/[id]` — kimlik+not · bakiye kartları · Alış / Ödeme / Ekstre / Borç-Alacak Fişi / Kartı Düzenle · ekstre + alışlar | done |
-| Ürün kart / varyant (`urun_kartlari_varyant_paneli`) | `/products/[id]` — BEDEN/RENK/Baskı/Satış/Alış/Stok tablosu · depo bazlı stok (`GET /api/products/{id}/warehouse-stocks`) · Barkod/Etiket + Hızlı Varyant link | done |
+| Ürün kart / varyant (`urun_kartlari_varyant_paneli`) | `/products/[id]` — KPI Alış/Satış/Toplam stok/Stok değeri · tıklanınca «Tüm Stoklar» (qty>0) · varsayılan varyant/depo tablosu stoğu olanlar + «Tüm varyantlar» · BHV: gizli (`displaySku`) · önceki satış/alış · edit formu tüm varyantlar | done |
 | Sipariş detay toolbar (`siparis_detay_penceresi_ac`) | `/orders/[id]` — tek toolbar: Durum · Tasarım · WA · İş Emri PDF · Tahsilat · Yazdır (+ yaşam çizgisi/düzenle) | done |
 | Satın alma detay | `/purchases/[id]` — özet kartlar · kalem tablosu + dip toplam · Onay/Ödeme/Fiş/Ekstre/Yazdır CTA | done |
 | Global kısayollar | `useBaykusHotkeys` (AppShell): Ctrl+S / F1 → `[data-baykus-save]` · F2 → `/sales/retail/new` · Escape → geri | done |
@@ -496,7 +496,7 @@ Batch 22 ince alt sayfalarından sonra kalan detay kartları ve StatusFooter’s
 |---------|-----|-------|
 | Müşteri detay | `/customers/[id]` — sticky · `bk-kpi-strip` (açık/borç/tahsilat) · `bk-table` ekstre · StatusFooter | done |
 | Tedarikçi detay | `/suppliers/[id]` — sticky · KPI · `bk-table` ekstre · StatusFooter | done |
-| Ürün detay | `/products/[id]` — sticky · KPI (satış/alış/stok/depo) · `bk-table` varyant+depo · StatusFooter | done |
+| Ürün detay | `/products/[id]` — sticky · KPI (alış/satış/stok/stok değeri) · in-stock default + «Tüm Stoklar» modal · StatusFooter | done |
 | Sipariş detay | `/orders/[id]` — sticky toolbar · KPI (toplam/ödenen/kalan/teslim) · `bk-table` kalemler · StatusFooter | done |
 | Depolar transfer UX | `/stock/warehouses` — her zaman görünür «Depolar Arası Transfer» CTA · KPI şerit (depo/aktif/stok/transfer) · seçili depo banner CTA · modal (ayrı `/stock/transfer` yok) | done |
 | Kalan list StatusFooter | `/purchases` · `/price-lists` · `/payables` · `/cari` · `/tasks` · `/suppliers/payables` · `/production/work-orders` · `/orders/weekly-plan` · `/tools/last-purchase-prices` · `/crm/special-days` · `/crm/campaigns` — sticky + StatusFooter (+ purchases/price-lists KPI) | done |
