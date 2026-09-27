@@ -156,7 +156,7 @@ export type CustomerDetail = Customer & {
 
 export const CARI_TYPE_LABELS: Record<string, string> = {
   sale: "Satış",
-  payment: "Ödeme",
+  payment: "Tahsilat",
   adjustment: "Düzeltme",
   deposit: "Kapora / Depozito",
 };
@@ -751,7 +751,7 @@ export type SupplierDetail = Supplier & {
 };
 
 export const SUPPLIER_MOVEMENT_LABELS: Record<string, string> = {
-  purchase: "Satın Alma",
+  purchase: "Alış",
   payment: "Ödeme",
   adjustment: "Düzeltme",
 };

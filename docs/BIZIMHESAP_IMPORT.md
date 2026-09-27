@@ -172,7 +172,8 @@ Git Bash: `bash scripts/import-bizimhesap-cari.sh`
 - Tutarlar **Bakiye delta** ile türetilir (Açıklama içindeki fiyat/kur rakamlarına dayanıklı)
 - Müşteri: Baykuş borç/alacak ≈ BH Borç/Alacak; bakiye aynı işaret
 - Tedarikçi: Baykuş borç ≈ BH Alacak (borç↑), alacak ≈ BH Borç (ödeme); **Baykuş bakiye ≈ −BH bakiye**
-- Not alanı: `BH_IMPORT:{guid}:{idx} | Hareket=… | Belge=… | … | BH_Bakiye=…`
+- Not alanı: `BH_IMPORT:{guid}:{idx} | Hareket=… | Belge=… | [açıklama] | Kalem=NAME xQTY UNIT @PRICE=AMOUNT; … | BH_Bakiye=…`
+- Satış/Alış PDF devam satırları (ürün/hizmet kalemleri) `Kalem=` olarak nota yazılır; müşteri/tedarikçi kart sol panelleri bu hareketleri listeler (Order/Purchase stub yok).
 
 ### Beklenen smoke (örnek kutu koşusu)
 

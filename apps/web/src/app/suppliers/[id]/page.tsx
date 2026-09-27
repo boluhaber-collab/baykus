@@ -20,6 +20,11 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
+import {
+  belgeFromNote,
+  detailFromBhNote,
+  hareketLabel,
+} from "@/lib/bhNote";
 import type {
   PurchaseDetail,
   SupplierMovement,
@@ -177,10 +182,63 @@ export default function SupplierDetailPage() {
     return moves.filter(
       (m) =>
         m.movement_type === "payment" ||
-        m.movement_type === "adjustment" ||
-        (Number(m.credit) > 0 && !m.purchase_id),
+        (m.movement_type === "adjustment" && Number(m.credit) > 0) ||
+        (Number(m.credit) > 0 && m.movement_type !== "purchase"),
     );
   }, [statement]);
+
+  /** Alış hareketleri (BizimHesap import — Purchase stub yok). */
+  const purchaseMovements = useMemo(() => {
+    const moves = statement?.movements || [];
+    return moves.filter(
+      (m) =>
+        m.movement_type === "purchase" ||
+        (Number(m.debit) > 0 && m.movement_type !== "payment"),
+    );
+  }, [statement]);
+
+  type PurchasePanelRow = {
+    id: string;
+    source: "movement" | "purchase";
+    date: string;
+    no: string;
+    status: string;
+    amount: number;
+    movement?: SupplierMovement;
+    purchase?: SupplierPurchaseBrief;
+  };
+
+  const purchaseRows = useMemo(() => {
+    const rows: PurchasePanelRow[] = [];
+    const linked = new Set<number>();
+    for (const m of purchaseMovements) {
+      if (m.purchase_id) linked.add(m.purchase_id);
+      const belge = belgeFromNote(m.note);
+      rows.push({
+        id: `m-${m.id}`,
+        source: "movement",
+        date: m.movement_date,
+        no: belge || m.purchase_number || `A-${m.id}`,
+        status: hareketLabel(m.movement_type, m.note, SUPPLIER_MOVEMENT_LABELS),
+        amount: Number(m.debit) > 0 ? Number(m.debit) : Number(m.credit),
+        movement: m,
+      });
+    }
+    for (const p of supplier?.recent_purchases || []) {
+      if (linked.has(p.id)) continue;
+      rows.push({
+        id: `p-${p.id}`,
+        source: "purchase",
+        date: p.purchase_date,
+        no: p.purchase_number,
+        status: p.status,
+        amount: Number(p.total_amount),
+        purchase: p,
+      });
+    }
+    rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    return rows;
+  }, [purchaseMovements, supplier]);
 
   if (!supplier && !error) {
     return <div className="text-slate-500">Yükleniyor…</div>;
@@ -214,40 +272,64 @@ export default function SupplierDetailPage() {
   }
 
   const purchasesPanel = (
-    <ExpandableMovementTable<SupplierPurchaseBrief>
-      rows={(supplier.recent_purchases || []).slice(0, 12)}
+    <ExpandableMovementTable<PurchasePanelRow>
+      rows={purchaseRows.slice(0, 12)}
       emptyText="Alış kaydı yok"
-      getCta={(p) => ({ href: `/purchases/${p.id}`, label: "Alış ekranına git" })}
-      loadDetail={async (p) => {
-        const purchase = await apiFetch<PurchaseDetail>(`/api/purchases/${p.id}`);
-        return linesFromPurchase(purchase);
+      getNote={(r) =>
+        r.movement ? detailFromBhNote(r.movement.note, r.amount).note : null
+      }
+      getCta={(r) => {
+        const pid = r.purchase?.id ?? r.movement?.purchase_id;
+        return pid ? { href: `/purchases/${pid}`, label: "Alış ekranına git" } : null;
+      }}
+      loadDetail={async (r) => {
+        const pid = r.purchase?.id ?? r.movement?.purchase_id;
+        if (pid) {
+          const purchase = await apiFetch<PurchaseDetail>(`/api/purchases/${pid}`);
+          const detail = linesFromPurchase(purchase);
+          if (r.movement?.note) {
+            const fromNote = detailFromBhNote(r.movement.note, r.amount);
+            return {
+              lines: (detail.lines && detail.lines.length ? detail.lines : fromNote.lines),
+              note: fromNote.note || detail.note || null,
+            };
+          }
+          return detail;
+        }
+        return detailFromBhNote(r.movement?.note, r.amount);
       }}
       columns={[
         {
           key: "date",
           header: "Tarih",
-          render: (p) => <span className="whitespace-nowrap">{p.purchase_date}</span>,
+          render: (r) => <span className="whitespace-nowrap">{r.date || "—"}</span>,
         },
         {
           key: "no",
           header: "No",
-          render: (p) => (
-            <Link href={`/purchases/${p.id}`} className="text-baykus-700 hover:underline">
-              {p.purchase_number}
-            </Link>
-          ),
+          render: (r) => {
+            const pid = r.purchase?.id ?? r.movement?.purchase_id;
+            if (pid) {
+              return (
+                <Link href={`/purchases/${pid}`} className="text-baykus-700 hover:underline">
+                  {r.no}
+                </Link>
+              );
+            }
+            return <span className="font-medium text-slate-700">{r.no}</span>;
+          },
         },
         {
           key: "status",
           header: "Durum",
           className: "text-red-700",
-          render: (p) => p.status,
+          render: (r) => r.status,
         },
         {
           key: "tutar",
           header: "Tutar",
           align: "right",
-          render: (p) => formatMoney(Number(p.total_amount)),
+          render: (r) => formatMoney(r.amount),
         },
       ]}
     />
@@ -257,15 +339,20 @@ export default function SupplierDetailPage() {
     <ExpandableMovementTable<SupplierMovement>
       rows={payments.slice(0, 12)}
       emptyText="Ödeme yok"
-      getNote={(m) => m.note}
+      getNote={(m) => detailFromBhNote(m.note).note}
       getCta={(m) =>
         m.purchase_id ? { href: `/purchases/${m.purchase_id}`, label: "Alış ekranına git" } : null
       }
       loadDetail={async (m) => {
-        if (!m.purchase_id) return { lines: [], note: m.note || null };
+        const amt = Number(m.credit) > 0 ? Number(m.credit) : Number(m.debit);
+        if (!m.purchase_id) return detailFromBhNote(m.note, amt);
         const purchase = await apiFetch<PurchaseDetail>(`/api/purchases/${m.purchase_id}`);
         const detail = linesFromPurchase(purchase);
-        return { lines: detail.lines, note: m.note || detail.note || null };
+        const fromNote = detailFromBhNote(m.note, amt);
+        return {
+          lines: (detail.lines && detail.lines.length ? detail.lines : fromNote.lines),
+          note: fromNote.note || detail.note || null,
+        };
       }}
       columns={[
         {
@@ -283,7 +370,7 @@ export default function SupplierDetailPage() {
         {
           key: "sekli",
           header: "Şekli",
-          render: (m) => SUPPLIER_MOVEMENT_LABELS[m.movement_type] || m.movement_type,
+          render: (m) => hareketLabel(m.movement_type, m.note, SUPPLIER_MOVEMENT_LABELS),
         },
       ]}
     />
@@ -407,8 +494,11 @@ export default function SupplierDetailPage() {
           {
             key: "alislar",
             title: "Önceki Ürün/Hizmet Alışları",
-            footerHref: "/purchases",
             footerLabel: "tamamı için tıklayın...",
+            footerOnClick: () => {
+              setShowSecondary(true);
+              setTimeout(scrollEkstre, 50);
+            },
             children: purchasesPanel,
           },
         ]}
@@ -651,19 +741,25 @@ export default function SupplierDetailPage() {
               <ExpandableMovementTable<SupplierMovement>
                 rows={statement?.movements || []}
                 emptyText="Hareket yok"
-                getNote={(m) => m.note}
+                getNote={(m) => detailFromBhNote(m.note).note}
                 getCta={(m) =>
                   m.purchase_id
                     ? { href: `/purchases/${m.purchase_id}`, label: "Alış ekranına git" }
                     : null
                 }
                 loadDetail={async (m) => {
-                  if (!m.purchase_id) return { lines: [], note: m.note || null };
+                  const amt =
+                    Number(m.debit) > 0 ? Number(m.debit) : Number(m.credit);
+                  if (!m.purchase_id) return detailFromBhNote(m.note, amt);
                   const purchase = await apiFetch<PurchaseDetail>(
                     `/api/purchases/${m.purchase_id}`,
                   );
                   const detail = linesFromPurchase(purchase);
-                  return { lines: detail.lines, note: m.note || detail.note || null };
+                  const fromNote = detailFromBhNote(m.note, amt);
+                  return {
+                    lines: (detail.lines && detail.lines.length ? detail.lines : fromNote.lines),
+                    note: fromNote.note || detail.note || null,
+                  };
                 }}
                 columns={[
                   {
@@ -677,7 +773,7 @@ export default function SupplierDetailPage() {
                     key: "type",
                     header: "Tip",
                     render: (m) =>
-                      SUPPLIER_MOVEMENT_LABELS[m.movement_type] || m.movement_type,
+                      hareketLabel(m.movement_type, m.note, SUPPLIER_MOVEMENT_LABELS),
                   },
                   {
                     key: "doc",
@@ -698,7 +794,7 @@ export default function SupplierDetailPage() {
                     key: "note",
                     header: "Not",
                     className: "text-slate-500",
-                    render: (m) => m.note || "—",
+                    render: (m) => detailFromBhNote(m.note).note || m.note || "—",
                   },
                   {
                     key: "debit",

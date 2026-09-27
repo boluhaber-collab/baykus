@@ -21,6 +21,11 @@ import ExpandableMovementTable, {
   linesFromOrder,
 } from "@/components/ExpandableMovementTable";
 import PartyCardLayout, { partySmsHref } from "@/components/PartyCardLayout";
+import {
+  belgeFromNote,
+  detailFromBhNote,
+  hareketLabel,
+} from "@/lib/bhNote";
 import type { CariMovement, CustomerOrderBrief, OrderDetail } from "@/lib/api";
 
 type TabKey = "bilgi" | "hareketler" | "siparisler" | "notlar" | "whatsapp";
@@ -136,6 +141,61 @@ export default function CustomerDetailPage() {
         (Number(m.credit) > 0 && m.movement_type !== "sale"),
     );
   }, [statement]);
+
+  /** Satış / borç hareketleri (BizimHesap import — Order stub yok). */
+  const saleMovements = useMemo(() => {
+    const moves = statement?.movements || [];
+    return moves.filter(
+      (m) =>
+        m.movement_type === "sale" ||
+        (Number(m.debit) > 0 &&
+          m.movement_type !== "payment" &&
+          m.movement_type !== "deposit"),
+    );
+  }, [statement]);
+
+  type SalesPanelRow = {
+    id: string;
+    source: "movement" | "order";
+    date: string;
+    no: string;
+    status: string;
+    amount: number;
+    movement?: CariMovement;
+    order?: CustomerOrderBrief;
+  };
+
+  const salesRows = useMemo(() => {
+    const rows: SalesPanelRow[] = [];
+    const linkedOrderIds = new Set<number>();
+    for (const m of saleMovements) {
+      if (m.order_id) linkedOrderIds.add(m.order_id);
+      const belge = belgeFromNote(m.note);
+      rows.push({
+        id: `m-${m.id}`,
+        source: "movement",
+        date: m.movement_date,
+        no: belge || m.order_number || `S-${m.id}`,
+        status: hareketLabel(m.movement_type, m.note, CARI_TYPE_LABELS),
+        amount: Number(m.debit) > 0 ? Number(m.debit) : Number(m.credit),
+        movement: m,
+      });
+    }
+    for (const o of customer?.recent_orders || []) {
+      if (linkedOrderIds.has(o.id)) continue;
+      rows.push({
+        id: `o-${o.id}`,
+        source: "order",
+        date: o.created_at?.slice(0, 10) || "",
+        no: o.order_number,
+        status: o.status,
+        amount: Number(o.total_amount),
+        order: o,
+      });
+    }
+    rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    return rows;
+  }, [saleMovements, customer]);
 
   async function saveEdit(e: FormEvent) {
     e.preventDefault();
@@ -277,45 +337,73 @@ export default function CustomerDetailPage() {
   }
 
   const salesPanel = (
-    <ExpandableMovementTable<CustomerOrderBrief>
-      rows={(customer.recent_orders || []).slice(0, 12)}
+    <ExpandableMovementTable<SalesPanelRow>
+      rows={salesRows.slice(0, 12)}
       emptyText="Satış / sipariş yok"
-      getCta={(o) => ({ href: `/orders/${o.id}`, label: "Satış ekranına git" })}
-      loadDetail={async (o) => {
-        const order = await apiFetch<OrderDetail>(`/api/orders/${o.id}`);
-        return linesFromOrder(order);
+      getNote={(r) =>
+        r.movement ? detailFromBhNote(r.movement.note, r.amount).note : null
+      }
+      getCta={(r) => {
+        const oid = r.order?.id ?? r.movement?.order_id;
+        return oid ? { href: `/orders/${oid}`, label: "Satış ekranına git" } : null;
+      }}
+      loadDetail={async (r) => {
+        const oid = r.order?.id ?? r.movement?.order_id;
+        if (oid) {
+          const order = await apiFetch<OrderDetail>(`/api/orders/${oid}`);
+          const detail = linesFromOrder(order);
+          if (r.movement?.note) {
+            const fromNote = detailFromBhNote(r.movement.note, r.amount);
+            return {
+              lines: (detail.lines && detail.lines.length ? detail.lines : fromNote.lines),
+              note: fromNote.note || detail.note || null,
+            };
+          }
+          return detail;
+        }
+        return detailFromBhNote(r.movement?.note, r.amount);
       }}
       columns={[
         {
           key: "date",
           header: "Tarih",
-          render: (o) => (
-            <span className="whitespace-nowrap">{o.created_at?.slice(0, 10) || "—"}</span>
-          ),
+          render: (r) => <span className="whitespace-nowrap">{r.date || "—"}</span>,
         },
         {
           key: "no",
           header: "No",
-          render: (o) => (
-            <Link href={`/orders/${o.id}`} className="font-medium text-baykus-700 hover:underline">
-              {o.order_number}
-            </Link>
-          ),
+          render: (r) => {
+            const oid = r.order?.id ?? r.movement?.order_id;
+            if (oid) {
+              return (
+                <Link
+                  href={`/orders/${oid}`}
+                  className="font-medium text-baykus-700 hover:underline"
+                >
+                  {r.no}
+                </Link>
+              );
+            }
+            return <span className="font-medium text-slate-700">{r.no}</span>;
+          },
         },
         {
           key: "status",
           header: "Durum",
-          render: (o) => (
-            <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(o.status)}`}>
-              {o.status}
-            </span>
-          ),
+          render: (r) =>
+            r.source === "order" ? (
+              <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(r.status)}`}>
+                {r.status}
+              </span>
+            ) : (
+              <span className="text-slate-700">{r.status}</span>
+            ),
         },
         {
           key: "tutar",
           header: "Tutar",
           align: "right",
-          render: (o) => formatMoney(Number(o.total_amount)),
+          render: (r) => formatMoney(r.amount),
         },
       ]}
     />
@@ -325,15 +413,20 @@ export default function CustomerDetailPage() {
     <ExpandableMovementTable<CariMovement>
       rows={collections.slice(0, 12)}
       emptyText="Tahsilat yok"
-      getNote={(m) => m.note}
+      getNote={(m) => detailFromBhNote(m.note).note}
       getCta={(m) =>
         m.order_id ? { href: `/orders/${m.order_id}`, label: "Sipariş ekranına git" } : null
       }
       loadDetail={async (m) => {
-        if (!m.order_id) return { lines: [], note: m.note || null };
+        const amt = Number(m.credit) > 0 ? Number(m.credit) : Number(m.debit);
+        if (!m.order_id) return detailFromBhNote(m.note, amt);
         const order = await apiFetch<OrderDetail>(`/api/orders/${m.order_id}`);
         const detail = linesFromOrder(order);
-        return { lines: detail.lines, note: m.note || detail.note || null };
+        const fromNote = detailFromBhNote(m.note, amt);
+        return {
+          lines: (detail.lines && detail.lines.length ? detail.lines : fromNote.lines),
+          note: fromNote.note || detail.note || null,
+        };
       }}
       columns={[
         {
@@ -351,7 +444,7 @@ export default function CustomerDetailPage() {
         {
           key: "sekli",
           header: "Şekli",
-          render: (m) => CARI_TYPE_LABELS[m.movement_type] || m.movement_type,
+          render: (m) => hareketLabel(m.movement_type, m.note, CARI_TYPE_LABELS),
         },
       ]}
     />
@@ -480,8 +573,8 @@ export default function CustomerDetailPage() {
           {
             key: "satislar",
             title: "Önceki Satışlar/Siparişler",
-            footerHref: "/orders",
             footerLabel: "tamamı için tıklayın...",
+            footerOnClick: () => openSecondary("siparisler"),
             children: salesPanel,
           },
         ]}
@@ -767,7 +860,7 @@ export default function CustomerDetailPage() {
                   <ExpandableMovementTable<CariMovement>
                     rows={statement?.movements || []}
                     emptyText="Hareket yok"
-                    getNote={(m) => m.note}
+                    getNote={(m) => detailFromBhNote(m.note).note}
                     getCta={(m) =>
                       m.order_id
                         ? {
@@ -780,10 +873,16 @@ export default function CustomerDetailPage() {
                         : null
                     }
                     loadDetail={async (m) => {
-                      if (!m.order_id) return { lines: [], note: m.note || null };
+                      const amt =
+                        Number(m.debit) > 0 ? Number(m.debit) : Number(m.credit);
+                      if (!m.order_id) return detailFromBhNote(m.note, amt);
                       const order = await apiFetch<OrderDetail>(`/api/orders/${m.order_id}`);
                       const detail = linesFromOrder(order);
-                      return { lines: detail.lines, note: m.note || detail.note || null };
+                      const fromNote = detailFromBhNote(m.note, amt);
+                      return {
+                        lines: (detail.lines && detail.lines.length ? detail.lines : fromNote.lines),
+                        note: fromNote.note || detail.note || null,
+                      };
                     }}
                     leadingRows={
                       statement ? (
@@ -809,7 +908,8 @@ export default function CustomerDetailPage() {
                       {
                         key: "type",
                         header: "Tip",
-                        render: (m) => CARI_TYPE_LABELS[m.movement_type] || m.movement_type,
+                        render: (m) =>
+                          hareketLabel(m.movement_type, m.note, CARI_TYPE_LABELS),
                       },
                       {
                         key: "note",
@@ -817,7 +917,7 @@ export default function CustomerDetailPage() {
                         className: "text-slate-600",
                         render: (m) => (
                           <>
-                            {m.note || "—"}
+                            {detailFromBhNote(m.note).note || m.note || "—"}
                             {m.order_number && (
                               <>
                                 {" "}

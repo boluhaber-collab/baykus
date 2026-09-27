@@ -171,6 +171,9 @@ class HareketLine:
     bakiye: Decimal  # BH statement running balance (informational)
     payment_method: str = ""
     raw: str = ""
+    # Compact item lines from PDF continuation rows (Satış/Alış detail).
+    # Format: "NAME xQTY UNIT @PRICE=AMOUNT"
+    kalems: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -266,6 +269,91 @@ def _belge_and_aciklama(rest: str, moneys: list[str]) -> tuple[str, str]:
     return belge, aciklama
 
 
+UNIT_RE = re.compile(
+    r"(Ad|Mtül|Mtul|Mt|M²|m2|Kg|kg|Lt|lt|Paket|Pk|Takım|Çift|Metre|m\b)",
+    re.I,
+)
+KALEM_LINE_RE = re.compile(
+    r"^\s{4,}(?P<body>.+?)\s+(?P<qty>\d+(?:[.,]\d+)?)\s*(?P<unit>[A-Za-zÇĞİÖŞÜçğıöşü²%]*)?\s+"
+    r"(?P<rest>.*)$"
+)
+
+
+def _format_kalem(name: str, qty: str, unit: str, price: Decimal, amount: Decimal) -> str:
+    q = qty.replace(".", "").replace(",", ".") if "," in qty else qty
+    u = (unit or "").strip()
+    bit = f"{name.strip()} x{q}"
+    if u:
+        bit += f" {u}"
+    bit += f" @{price}={amount}"
+    return bit
+
+
+def _parse_kalem_line(ln: str) -> str | None:
+    """Parse a PDF continuation item row into compact Kalem= entry, or None."""
+    s = ln.rstrip()
+    if not s.strip():
+        return None
+    if LINE_RE.match(s):
+        return None
+    if DATE_RE.match(s.lstrip()[:10] if s.lstrip() else ""):
+        return None
+    # Skip headers / footers / totals
+    low = s.casefold()
+    if any(
+        x in low
+        for x in (
+            "tarih",
+            "henna",
+            "tabaklar",
+            "cadde avm",
+            "belge no",
+            "sayfa",
+            "toplam",
+            "genel toplam",
+        )
+    ):
+        return None
+    moneys = MONEY_RE.findall(s)
+    if len(moneys) < 2:
+        return None
+    amount = parse_money(moneys[-1])
+    price = parse_money(moneys[-2])
+    # Strip trailing money tokens from working copy
+    cut = s
+    for mon in reversed(moneys[-2:]):
+        p = cut.rfind(mon)
+        if p >= 0:
+            cut = cut[:p]
+    cut = cut.strip()
+    # qty + optional unit at end of cut
+    m = re.search(
+        rf"^(?P<name>.+?)\s+(?P<qty>\d+(?:[.,]\d+)?)\s*(?P<unit>{UNIT_RE.pattern})?\s*$",
+        cut,
+    )
+    if m:
+        name = m.group("name").strip()
+        qty = m.group("qty")
+        unit = (m.group("unit") or "").strip()
+    else:
+        # qty without unit (e.g. "TRANSFER BASKI 119")
+        m2 = re.search(r"^(?P<name>.+?)\s+(?P<qty>\d+(?:[.,]\d+)?)\s*$", cut)
+        if m2:
+            name = m2.group("name").strip()
+            qty = m2.group("qty")
+            unit = ""
+        else:
+            name = cut
+            qty = "1"
+            unit = ""
+    if not name or len(name) < 2:
+        return None
+    # Reject lines that are mostly numbers / noise
+    if re.fullmatch(r"[\d\s.,\-]+", name):
+        return None
+    return _format_kalem(name, qty, unit, price, amount)
+
+
 def parse_ekstre_pdf(pdf: Path, *, is_supplier: bool) -> ParseReport:
     """Parse Detaylı Ekstre PDF into Baykuş debit/credit lines.
 
@@ -286,6 +374,14 @@ def parse_ekstre_pdf(pdf: Path, *, is_supplier: bool) -> ParseReport:
     for ln in lines:
         m = LINE_RE.match(ln)
         if not m:
+            # Attach Satış/Alış item continuation rows to the previous hareket
+            if report.lines:
+                last = report.lines[-1]
+                if last.hareket in ("Satış", "Alış"):
+                    kalem = _parse_kalem_line(ln)
+                    if kalem:
+                        last.kalems.append(kalem)
+                        continue
             # collect possible orphan date lines for quality report
             if DATE_RE.match(ln.strip()[:10] if ln.strip() else "") and "Tarih" not in ln:
                 if MONEY_RE.search(ln) and not HAREKET_RE.search(ln):
@@ -415,6 +511,7 @@ def movement_note(
     payment_method: str,
     bh_bakiye: Decimal,
     line_idx: int,
+    kalems: list[str] | None = None,
 ) -> str:
     parts = [
         f"{BH_NOTE_PREFIX}{guid}:{line_idx}",
@@ -426,6 +523,14 @@ def movement_note(
         parts.append(f"Odeme={payment_method}")
     if aciklama:
         parts.append(aciklama[:180])
+    if kalems:
+        # Keep room for BH_Bakiye; pack as many kalems as fit under 900.
+        kalem_joined = "; ".join(kalems)
+        prefix_len = len(" | ".join(parts)) + len(" | Kalem=") + len(f" | BH_Bakiye={bh_bakiye}")
+        budget = max(40, 900 - prefix_len)
+        if len(kalem_joined) > budget:
+            kalem_joined = kalem_joined[: budget - 1].rstrip("; ") + "…"
+        parts.append(f"Kalem={kalem_joined}")
     parts.append(f"BH_Bakiye={bh_bakiye}")
     return " | ".join(parts)[:900]
 
@@ -638,6 +743,7 @@ def import_party_movements(
             payment_method=hl.payment_method,
             bh_bakiye=hl.bakiye,
             line_idx=i,
+            kalems=hl.kalems,
         )
         if is_supplier:
             mtype = _supplier_movement_type(hl.hareket)
