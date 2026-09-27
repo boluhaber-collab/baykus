@@ -11,6 +11,7 @@ import {
   orderRowTagClass,
   statusBadgeClass,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function OverdueOrdersPage() {
   const [items, setItems] = useState<OrderListItem[]>([]);
@@ -61,11 +62,11 @@ export default function OverdueOrdersPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 pb-2">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold text-red-700">Geciken İşler</h2>
-          <p className="text-xs text-baykus-muted">Üretim › Geciken İşler · teslim tarihi geçmiş açık siparişler</p>
+          <h2 className="text-lg font-bold text-red-700 leading-tight">Geciken İşler</h2>
+          <p className="text-[11px] text-baykus-muted">Üretim › Geciken İşler · teslim tarihi geçmiş açık siparişler</p>
         </div>
         <div className="flex gap-2">
           <Link href="/orders/delivery-alarm" className="bk-btn bk-btn-ghost text-xs">
@@ -82,16 +83,22 @@ export default function OverdueOrdersPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="grid sm:grid-cols-3 gap-2">
-        <div className="rounded border border-red-200 bg-red-50 px-3 py-2">
-          <div className="text-[11px] text-red-800">Geciken sipariş</div>
-          <div className="text-2xl font-bold text-red-900">{filtered.length}</div>
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#dc2626" }}>
+          <span className="bk-kpi-icon">!</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Geciken Sipariş</div>
+            <div className="bk-kpi-value">{filtered.length}</div>
+          </div>
         </div>
-        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2">
-          <div className="text-[11px] text-amber-800">Kalan tahsilat</div>
-          <div className="text-xl font-bold text-amber-900 tabular-nums">{formatMoney(remainingTotal)}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Kalan Tahsilat</div>
+            <div className="bk-kpi-value truncate">{formatMoney(remainingTotal)}</div>
+          </div>
         </div>
-        <div className="rounded border bg-white px-3 py-2 flex items-end">
+        <div className="rounded border border-baykus-line bg-white px-3 py-2 flex items-center">
           <input className="bk-input" placeholder="Ara…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
@@ -166,6 +173,7 @@ export default function OverdueOrdersPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

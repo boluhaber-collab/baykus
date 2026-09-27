@@ -12,6 +12,7 @@ import {
   orderRowTagClass,
   statusBadgeClass,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const FLOW = ["Sipariş Alındı", "Hazırlanıyor", "Baskıda", "Hazır", "Teslim Edildi"] as const;
 const STAGE_COLORS: Record<string, string> = {
@@ -103,11 +104,11 @@ export default function ProductionHubPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 pb-2">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold">Üretim Akış Paneli</h2>
-          <p className="text-xs text-baykus-muted">Atölye · aşama sütunları · ilerlet · iş emri</p>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Üretim Akış Paneli</h2>
+          <p className="text-[11px] text-baykus-muted">Üretim / Atölye › aşama sütunları · ilerlet · iş emri PDF</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/production/work-orders" className="bk-btn text-xs text-white" style={{ background: "#7c3aed" }}>
@@ -130,26 +131,34 @@ export default function ProductionHubPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="rounded border bg-white px-3 py-2 text-xs">
-          <span className="text-baykus-muted">Açık toplam</span>
-          <div className="text-lg font-bold">{items.length}</div>
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">▣</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Açık Toplam</div>
+            <div className="bk-kpi-value">{items.length}</div>
+          </div>
         </div>
         {FLOW.slice(0, -1).map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => setStatus(status === s ? "" : s)}
-            className={`rounded px-2.5 py-1.5 text-xs font-medium border text-white ${
-              status === s ? "ring-2 ring-offset-1 ring-slate-800" : "border-transparent"
-            }`}
-            style={{ background: STAGE_COLORS[s] }}
+            className={`bk-kpi-card text-left ${status === s ? "ring-2 ring-offset-1 ring-slate-800" : ""}`}
+            style={{ backgroundColor: STAGE_COLORS[s] }}
           >
-            {s}: {(byStatus[s] || []).length}
+            <span className="bk-kpi-icon">·</span>
+            <div className="flex-1 text-right min-w-0">
+              <div className="bk-kpi-label truncate">{s}</div>
+              <div className="bk-kpi-value">{(byStatus[s] || []).length}</div>
+            </div>
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2 items-center">
         <input
-          className="bk-input max-w-[180px] ml-auto text-xs"
+          className="bk-input max-w-[180px] text-xs"
           placeholder="Ara…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -171,7 +180,7 @@ export default function ProductionHubPage() {
       </div>
 
       {view === "stages" ? (
-        <div className="grid lg:grid-cols-4 gap-2 overflow-x-auto">
+        <div className="flex gap-2 overflow-x-auto pb-1 items-stretch">
           {FLOW.slice(0, -1).map((s) => {
             const col = (byStatus[s] || []).filter((o) => {
               if (status && o.status !== status) return false;
@@ -180,19 +189,19 @@ export default function ProductionHubPage() {
               return [o.order_number, o.customer_name].join(" ").toLowerCase().includes(needle);
             });
             return (
-              <div key={s} className="rounded border bg-slate-50 min-w-[200px] flex flex-col max-h-[70vh]">
+              <div key={s} className="bk-kanban-col">
                 <div
-                  className="px-2.5 py-2 text-white text-xs font-bold flex justify-between"
-                  style={{ background: STAGE_COLORS[s] }}
+                  className="bk-kanban-col-head"
+                  style={{ background: "#151b26", borderBottom: `3px solid ${STAGE_COLORS[s]}` }}
                 >
-                  <span>{s}</span>
-                  <span>{col.length}</span>
+                  <span className="truncate">{s}</span>
+                  <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold">{col.length}</span>
                 </div>
-                <ul className="p-1.5 space-y-1.5 overflow-auto flex-1">
+                <ul className="p-1.5 space-y-1.5 overflow-auto max-h-[70vh]">
                   {col.map((o) => {
                     const nxt = nextStatus(o.status);
                     return (
-                      <li key={o.id} className="rounded border bg-white p-2 shadow-sm text-xs">
+                      <li key={o.id} className="bk-kanban-card">
                         <div className="flex justify-between gap-1">
                           <Link href={`/orders/${o.id}`} className="font-semibold text-baykus-primary hover:underline">
                             {o.order_number}
@@ -311,6 +320,7 @@ export default function ProductionHubPage() {
           </table>
         </div>
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

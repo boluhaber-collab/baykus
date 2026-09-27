@@ -416,3 +416,27 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live po
 - İnce sayfa densite / StatusFooter tutarlılığı (kalan listeler)
 - Üretim / Sipariş Merkezi ince UX
 - ReportLab twin PDF (bilinçli basit)
+
+
+## Batch 20 — Sipariş/Üretim densite + StatusFooter + smoke (2026-09-27)
+
+Batch 19 sonrası kalan görsel boşluklar (Sipariş Merkezi / Atölye / E-Ticaret / Teslim).
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Sipariş Merkezi KPI + footer | `/orders` — `bk-kpi-strip` (teklif/sipariş/açık/hazır·teslim) · densite · `StatusFooter` | done |
+| Üretim Akış Paneli | `/production` — KPI aşama şerit · `bk-kanban-col` sütunlar · StatusFooter | done |
+| İnternet Satışları | `/ecommerce` — renkli `bk-kpi` (ciro/tahsil/kalan/adet) · StatusFooter | done |
+| Teslim Takibi | `/orders/delivery` — filtre KPI (bugün/geciken/bekleyen/7 gün) · StatusFooter | done |
+| Geciken İşler | `/orders/overdue` — kırmızı/turuncu KPI · StatusFooter | done |
+| Teslim Alarmı | `/orders/delivery-alarm` — bugün/yaklaşan KPI · StatusFooter | done |
+| Smoke | `/health` 200 · login form (`admin@baykus.local`) · `/api/auth/me` · `/api/dashboard/summary` · `/api/orders?channels=perakende,…` (Direkt Satışlar) 200 | done |
+| Zip | `/workspace/baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password / ReportLab twin stiller.
+
+### Kalan (dürüst)
+
+- Çoğu liste sayfasında StatusFooter henüz yok (müşteri/ürün/finans/rapor hub’ları) — densite tutarlılığı devam edebilir
+- Masaüstü ReportLab twin PDF stilleri — web polish’li basit PDF
+- Merkezi DB canlı şifre / VPS kullanıcı senkron

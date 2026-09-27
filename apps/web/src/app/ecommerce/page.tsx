@@ -9,6 +9,7 @@ import {
   formatMoney,
   statusBadgeClass,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const NET = ["internet", "Trendyol", "Hepsiburada", "N11"] as const;
 
@@ -68,11 +69,11 @@ export default function EcommerceHubPage() {
   }, [items]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 pb-2">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold">İnternet Satışları</h2>
-          <p className="text-xs text-baykus-muted">E-Ticaret › İnternet / pazaryeri siparişleri</p>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">İnternet Satışları</h2>
+          <p className="text-[11px] text-baykus-muted">E-Ticaret › İnternet / pazaryeri siparişleri</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/sales/create?type=internet" className="bk-btn text-xs text-white" style={{ background: "#7c3aed" }}>
@@ -84,22 +85,34 @@ export default function EcommerceHubPage() {
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-4 gap-2">
-        <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2">
-          <div className="text-[11px] text-emerald-800">Ciro</div>
-          <div className="text-lg font-bold tabular-nums text-emerald-900">{formatMoney(total)}</div>
+      <div className="bk-kpi-strip">
+        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Ciro</div>
+            <div className="bk-kpi-value truncate">{formatMoney(total)}</div>
+          </div>
         </div>
-        <div className="rounded border border-sky-200 bg-sky-50 px-3 py-2">
-          <div className="text-[11px] text-sky-800">Tahsil</div>
-          <div className="text-lg font-bold tabular-nums text-sky-900">{formatMoney(paid)}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+          <span className="bk-kpi-icon">✓</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Tahsil</div>
+            <div className="bk-kpi-value truncate">{formatMoney(paid)}</div>
+          </div>
         </div>
-        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2">
-          <div className="text-[11px] text-amber-800">Kalan</div>
-          <div className="text-lg font-bold tabular-nums text-amber-900">{formatMoney(remaining)}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+          <span className="bk-kpi-icon">⏳</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Kalan</div>
+            <div className="bk-kpi-value truncate">{formatMoney(remaining)}</div>
+          </div>
         </div>
-        <div className="rounded border bg-white px-3 py-2">
-          <div className="text-[11px] text-baykus-muted">Sipariş</div>
-          <div className="text-lg font-bold">{visible.length}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#7c3aed" }}>
+          <span className="bk-kpi-icon">🌐</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Sipariş</div>
+            <div className="bk-kpi-value">{visible.length}</div>
+          </div>
         </div>
       </div>
 
@@ -196,6 +209,7 @@ export default function EcommerceHubPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

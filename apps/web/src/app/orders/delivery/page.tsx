@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OrderListItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Filter = "today" | "overdue" | "due" | "upcoming";
 
@@ -65,11 +66,11 @@ export default function DeliveryTrackingPage() {
   const total = filtered.reduce((s, o) => s + Number(o.total_amount || 0), 0);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 pb-2">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold">Teslim Takibi</h2>
-          <p className="text-xs text-baykus-muted">
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Teslim Takibi</h2>
+          <p className="text-[11px] text-baykus-muted">
             Satış / Sipariş › Sipariş Merkezi › Teslim Takibi · delivery_date / due_date
           </p>
         </div>
@@ -89,19 +90,20 @@ export default function DeliveryTrackingPage() {
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-4 gap-2">
+      <div className="bk-kpi-strip">
         {FILTERS.map((f) => (
           <button
             key={f.id}
             type="button"
             onClick={() => setFilter(f.id)}
-            className={`rounded border px-3 py-2 text-left ${filter === f.id ? "ring-2 ring-offset-1" : ""}`}
-            style={{ borderColor: f.color, background: filter === f.id ? `${f.color}18` : "#fff" }}
+            className={`bk-kpi-card text-left ${filter === f.id ? "ring-2 ring-offset-1 ring-slate-800" : ""}`}
+            style={{ backgroundColor: f.color }}
           >
-            <div className="text-[11px] font-semibold" style={{ color: f.color }}>
-              {f.label}
+            <span className="bk-kpi-icon">·</span>
+            <div className="flex-1 text-right">
+              <div className="bk-kpi-label">{f.label}</div>
+              <div className="bk-kpi-value">{counts[f.id]}</div>
             </div>
-            <div className="text-xl font-bold tabular-nums">{counts[f.id]}</div>
           </button>
         ))}
       </div>
@@ -173,6 +175,7 @@ export default function DeliveryTrackingPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

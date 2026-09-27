@@ -11,6 +11,7 @@ import {
   orderRowTagClass,
   statusBadgeClass,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function DeliveryAlarmPage() {
   const [today, setToday] = useState<OrderListItem[]>([]);
@@ -59,11 +60,11 @@ export default function DeliveryAlarmPage() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 pb-2">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold">Teslim Alarmı</h2>
-          <p className="text-xs text-baykus-muted">Üretim › Teslim Alarmı · bugün + yaklaşan 7 gün</p>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Teslim Alarmı</h2>
+          <p className="text-[11px] text-baykus-muted">Üretim › Teslim Alarmı · bugün + yaklaşan 7 gün</p>
         </div>
         <div className="flex gap-2">
           <Link href="/orders/overdue" className="bk-btn text-xs text-white" style={{ background: "#dc2626" }}>
@@ -80,24 +81,30 @@ export default function DeliveryAlarmPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="grid sm:grid-cols-2 gap-2">
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
         <button
           type="button"
           onClick={() => setTab("today")}
-          className={`rounded border px-4 py-3 text-left ${tab === "today" ? "ring-2 ring-red-500" : ""}`}
-          style={{ background: "#fef2f2", borderColor: "#fecaca" }}
+          className={`bk-kpi-card text-left ${tab === "today" ? "ring-2 ring-offset-1 ring-slate-800" : ""}`}
+          style={{ backgroundColor: "#dc2626" }}
         >
-          <div className="text-[11px] text-red-800">Bugün Teslim</div>
-          <div className="text-2xl font-bold text-red-900">{today.length}</div>
+          <span className="bk-kpi-icon">📅</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Bugün Teslim</div>
+            <div className="bk-kpi-value">{today.length}</div>
+          </div>
         </button>
         <button
           type="button"
           onClick={() => setTab("upcoming")}
-          className={`rounded border px-4 py-3 text-left ${tab === "upcoming" ? "ring-2 ring-amber-500" : ""}`}
-          style={{ background: "#fffbeb", borderColor: "#fde68a" }}
+          className={`bk-kpi-card text-left ${tab === "upcoming" ? "ring-2 ring-offset-1 ring-slate-800" : ""}`}
+          style={{ backgroundColor: "#f59e0b" }}
         >
-          <div className="text-[11px] text-amber-800">Yaklaşan (7 gün)</div>
-          <div className="text-2xl font-bold text-amber-900">{upcoming.length}</div>
+          <span className="bk-kpi-icon">⏳</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Yaklaşan (7 gün)</div>
+            <div className="bk-kpi-value">{upcoming.length}</div>
+          </div>
         </button>
       </div>
 
@@ -174,6 +181,7 @@ export default function DeliveryAlarmPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import { HubTabs } from "@/components/hub/HubChrome";
+import StatusFooter from "@/components/StatusFooter";
 
 type NotebookTab =
   | "teklifler"
@@ -210,13 +211,12 @@ function OrdersNotebookInner() {
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
+    <div className="space-y-2 pb-2">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold text-baykus-text">Sipariş Merkezi</h1>
-          <p className="text-xs text-baykus-muted">
-            Teklif: {summary.teklif} · Sipariş: {summary.siparis} · Açık: {summary.acik} · Hazır:{" "}
-            {summary.hazir} · Teslim: {summary.teslim}
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Sipariş Merkezi</h1>
+          <p className="text-[11px] text-baykus-muted">
+            Satış / Sipariş › notebook sekmeler · toplu durum · satır renkleri
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -233,6 +233,40 @@ function OrdersNotebookInner() {
           <Link href="/sales/create" className="bk-btn bk-btn-primary text-xs">
             + Satış / Teklif
           </Link>
+        </div>
+      </div>
+
+      <div className="bk-kpi-strip">
+        <div className="bk-kpi-card" style={{ backgroundColor: "#7c3aed" }}>
+          <span className="bk-kpi-icon">☰</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Teklif</div>
+            <div className="bk-kpi-value">{summary.teklif}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">▣</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Sipariş</div>
+            <div className="bk-kpi-value">{summary.siparis}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+          <span className="bk-kpi-icon">○</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Açık</div>
+            <div className="bk-kpi-value">{summary.acik}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">✓</span>
+          <div className="flex-1 text-right">
+            <div className="bk-kpi-label">Hazır / Teslim</div>
+            <div className="bk-kpi-value">
+              {summary.hazir}
+              <span className="text-sm font-semibold opacity-90"> / {summary.teslim}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -294,7 +328,7 @@ function OrdersNotebookInner() {
       </div>
 
       {tab !== "teklifler" && (
-        <div className="flex flex-wrap items-center gap-2 mb-3 rounded-lg border border-baykus-line bg-white px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 rounded border border-baykus-line bg-white px-3 py-2">
           <span className="text-xs text-baykus-muted font-medium">Toplu durum</span>
           <select
             value={bulkStatus}
@@ -330,7 +364,7 @@ function OrdersNotebookInner() {
         </div>
       )}
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
+      {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
       {tab === "teklifler" ? (
         <div className="bk-table-wrap">
@@ -516,6 +550,8 @@ function OrdersNotebookInner() {
           </table>
         </div>
       )}
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }
