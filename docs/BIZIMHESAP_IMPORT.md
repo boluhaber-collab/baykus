@@ -284,7 +284,15 @@ python scripts\import_bizimhesap_hesaplar.py
 
 ### Canlı yeniden scrape (box)
 
-Oturum çerezi gerekir (`uygulama.bizimhesap.com`). Hesap listesi `/web/ngn/acc/ngnaccounts`; hareketler `GetCashTrx`. Çıktıyı `tmp/bizimhesap/hesaplarim/` altına yazıp script’i yeniden çalıştırın.
+```bash
+cd /path/to/baykus-web
+./scripts/scrape-bizimhesap-hesaplarim.sh
+# veya:
+cd apps/api && source .venv/bin/activate
+python scripts/scrape_bizimhesap_hesaplarim.py --out ../../tmp/bizimhesap/hesaplarim
+```
+
+Panel login: `BIZIMHESAP_USER` / `BIZIMHESAP_PASSWORD` (box-secrets `card.*`). Hesap listesi `/web/ngn/acc/ngnaccounts`; hareketler `GetCashTrx`. Bakiyeler GetCashTrx son satırından alınır (kart parse karışabilir). Ardından `import_bizimhesap_hesaplar.py`.
 
 ### OOS / boşluklar
 
