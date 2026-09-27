@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 type Row = {
   id: number;
@@ -136,7 +137,7 @@ export default function ExpenseReportsPage() {
                 <td>{r.category || "—"}</td>
                 <td className="text-xs">{r.payment_method || "—"}</td>
                 <td className="text-xs">{r.posted ? "İşlenmiş" : "Bekliyor"}</td>
-                <td className="text-xs text-baykus-muted">{r.note || "—"}</td>
+                <td className="text-xs text-baykus-muted">{sanitizeDisplayNote(r.note) || "—"}</td>
                 <td className="text-right tabular-nums">{formatMoney(r.amount)}</td>
               </tr>
             ))}

@@ -10,11 +10,32 @@ import { decodeHtmlEntities } from "@/lib/htmlEntities";
 
 const BH_PREFIX = "BH_IMPORT:";
 
+/** Bare sync marker / hex GUID — never show as Açıklama. */
+const BH_MARKER_ONLY_RE =
+  /^(?:BH_IMPORT(?::\S*)?|BH_FROM_STOCK(?::\S*)?|BHV:[A-Za-z0-9:_\-]+|BH:[A-Za-z0-9:_\-]+)$/i;
+const HEX_GUID_RE = /^[A-Fa-f0-9]{16,}$/;
+const STRIP_BH_TOKEN_RE = /\b(?:BH_IMPORT|BH_FROM_STOCK|BHV?):\S+/gi;
+
+/** True when text is empty or only a BH sync marker / GUID. */
+export function isBhMarkerOnly(text: string | null | undefined): boolean {
+  const t = (text || "").trim();
+  if (!t) return true;
+  if (t.includes("|")) return false;
+  if (BH_MARKER_ONLY_RE.test(t)) return true;
+  if (HEX_GUID_RE.test(t)) return true;
+  return false;
+}
+
 /** True when note is from BizimHesap import — must not be deletable via UI/API. */
 export function isBhImportNote(note: string | null | undefined): boolean {
   const raw = (note || "").trim();
   if (!raw) return false;
-  return raw.startsWith(BH_PREFIX) || raw.includes(BH_PREFIX);
+  return (
+    raw.startsWith(BH_PREFIX) ||
+    raw.includes(BH_PREFIX) ||
+    /^BH_FROM_STOCK:/i.test(raw) ||
+    BH_MARKER_ONLY_RE.test(raw)
+  );
 }
 
 export type BhNoteParts = {
@@ -95,7 +116,14 @@ export function parseBhNote(note: string | null | undefined): BhNoteParts {
   if (!raw) {
     return { isBh: false, displayNote: null };
   }
-  if (!raw.startsWith(BH_PREFIX) && !raw.includes("Hareket=")) {
+  if (isBhMarkerOnly(raw)) {
+    return { isBh: true, displayNote: null };
+  }
+  if (
+    !raw.startsWith(BH_PREFIX) &&
+    !/^BH_FROM_STOCK:/i.test(raw) &&
+    !raw.includes("Hareket=")
+  ) {
     return { isBh: false, displayNote: raw };
   }
 
@@ -111,7 +139,7 @@ export function parseBhNote(note: string | null | undefined): BhNoteParts {
   const free: string[] = [];
 
   for (const p of parts) {
-    if (p.startsWith(BH_PREFIX)) continue;
+    if (p.startsWith(BH_PREFIX) || /^BH_FROM_STOCK:/i.test(p) || isBhMarkerOnly(p)) continue;
     const eq = p.indexOf("=");
     if (eq > 0 && eq < 24) {
       const key = p.slice(0, eq).trim();
@@ -160,7 +188,11 @@ export function parseBhNote(note: string | null | undefined): BhNoteParts {
     ? free.filter((f) => f !== cari && f.toLowerCase() !== cari.toLowerCase())
     : free;
 
-  const aciklama = freeClean.join(" · ").trim() || undefined;
+  const freeNoMarkers = freeClean.filter((f) => !isBhMarkerOnly(f));
+  let aciklama = freeNoMarkers.join(" · ").trim() || undefined;
+  if (aciklama) {
+    aciklama = aciklama.replace(STRIP_BH_TOKEN_RE, "").replace(/\s*[·|]\s*/g, " · ").replace(/^\s*·\s*|\s*·\s*$/g, "").trim() || undefined;
+  }
   const displayBits: string[] = [];
   if (belge) displayBits.push(`Belge ${belge}`);
   if (odeme) displayBits.push(odeme);
@@ -168,7 +200,7 @@ export function parseBhNote(note: string | null | undefined): BhNoteParts {
   if (!displayBits.length && hareket) displayBits.push(hareket);
 
   return {
-    isBh: raw.startsWith(BH_PREFIX) || Boolean(hareket),
+    isBh: raw.startsWith(BH_PREFIX) || /^BH_FROM_STOCK:/i.test(raw) || Boolean(hareket),
     hareket,
     belge,
     odeme,
@@ -238,9 +270,35 @@ export function belgeFromNote(note: string | null | undefined): string | null {
 /** Clean Açıklama for account ledger (no BH_IMPORT / Hareket= / Kaynak=). */
 export function accountAciklama(note: string | null | undefined): string {
   const parsed = parseBhNote(note);
-  if (parsed.aciklama) return parsed.aciklama;
-  if (!parsed.isBh && parsed.displayNote) return parsed.displayNote;
+  if (parsed.aciklama && !isBhMarkerOnly(parsed.aciklama)) return parsed.aciklama;
+  if (!parsed.isBh && parsed.displayNote && !isBhMarkerOnly(parsed.displayNote)) {
+    return parsed.displayNote;
+  }
   return "";
+}
+
+/**
+ * Program-wide display note: real human text only.
+ * Bare BH_IMPORT:… / BH:… / BHV:… markers → fallback (default empty).
+ */
+export function sanitizeDisplayNote(
+  note: string | null | undefined,
+  fallback = "",
+): string {
+  const parsed = parseBhNote(note);
+  if (parsed.aciklama && !isBhMarkerOnly(parsed.aciklama)) return parsed.aciklama;
+  if (parsed.displayNote && !isBhMarkerOnly(parsed.displayNote)) return parsed.displayNote;
+  if (!parsed.isBh) {
+    const raw = decodeHtmlEntities(note || "").trim();
+    if (raw && !isBhMarkerOnly(raw)) {
+      const cleaned = raw
+        .replace(STRIP_BH_TOKEN_RE, "")
+        .replace(/^\s*[·|\-]\s*|\s*[·|\-]\s*$/g, "")
+        .trim();
+      if (cleaned && !isBhMarkerOnly(cleaned)) return cleaned;
+    }
+  }
+  return fallback;
 }
 
 /** Hesap column: Cari= from note, else optional fallback (e.g. customer_name). */

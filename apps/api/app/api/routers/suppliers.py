@@ -29,6 +29,8 @@ from app.schemas.supplier import (
     SupplierUpdate,
 )
 
+from app.utils.bh_note import sanitize_display_note
+
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
 READ_ROLES = ("admin", "üretim", "muhasebe", "satış")
@@ -480,7 +482,7 @@ def supplier_statement_pdf(
             "debit": float(m.debit or 0),
             "credit": float(m.credit or 0),
             "balance": float(m.running_balance) if m.running_balance is not None else None,
-            "note": m.note,
+            "note": sanitize_display_note(m.note),
         }
         for m in stmt.movements
     ]

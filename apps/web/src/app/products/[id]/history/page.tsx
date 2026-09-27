@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 type PriceRow = {
   tarih?: string | null;
@@ -186,7 +187,7 @@ export default function ProductHistoryPage() {
                   <td className="text-right tabular-nums font-medium">{m.qty_after}</td>
                   <td className="text-xs">{m.warehouse || "—"}</td>
                   <td className="text-xs text-slate-500">
-                    {[m.reason, m.note].filter(Boolean).join(" · ") || "—"}
+                    {[m.reason, sanitizeDisplayNote(m.note)].filter(Boolean).join(" · ") || "—"}
                   </td>
                 </tr>
               ))}

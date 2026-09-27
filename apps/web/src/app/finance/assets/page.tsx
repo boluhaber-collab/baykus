@@ -2,8 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Asset, apiFetch, formatMoney, getApiBase, getToken } from "@/lib/api";
-import { decodeHtmlEntities } from "@/lib/htmlEntities";
 import StatusFooter from "@/components/StatusFooter";
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 const STATUSES = ["Aktif", "Bakımda", "Arızalı", "Satıldı", "Hurda"] as const;
 
@@ -290,7 +290,7 @@ export default function AssetsPage() {
                 <td className="text-right tabular-nums">{formatMoney(Number(a.current_value ?? a.cost))}</td>
                 <td>{a.status || "—"}</td>
                 <td>{a.maintenance_date || "—"}</td>
-                <td className="text-xs max-w-[140px] truncate">{decodeHtmlEntities(a.note)}</td>
+                <td className="text-xs max-w-[140px] truncate">{sanitizeDisplayNote(a.note) || "—"}</td>
                 <td className="text-right whitespace-nowrap">
                   <button type="button" className="text-baykus-primary hover:underline text-xs mr-2" onClick={() => startEdit(a)}>
                     Düzenle

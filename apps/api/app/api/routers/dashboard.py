@@ -39,6 +39,8 @@ from app.schemas.common import (
     TaskBrief,
 )
 
+from app.utils.bh_note import sanitize_display_note
+
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
@@ -495,7 +497,7 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
             customer_name=m.customer.name if m.customer is not None else None,
             credit=_dec(m.credit),
             movement_date=m.movement_date,
-            note=m.note,
+            note=sanitize_display_note(m.note) or None,
             order_number=m.order.order_number if m.order is not None else None,
         )
         for m in cari_pay
@@ -519,7 +521,7 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
                 direction="in" if m.movement_type in CASH_IN_TYPES else "out",
                 movement_date=m.movement_date,
                 account_name=m.cash_register.name if m.cash_register else "Kasa",
-                note=m.note,
+                note=sanitize_display_note(m.note) or None,
             )
         )
     for m in (
@@ -538,7 +540,7 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
                 direction="in" if m.movement_type in BANK_IN_TYPES else "out",
                 movement_date=m.movement_date,
                 account_name=m.bank_account.name if m.bank_account else None,
-                note=m.note,
+                note=sanitize_display_note(m.note) or None,
             )
         )
     recent_fin.sort(key=lambda x: (x.movement_date, x.id), reverse=True)

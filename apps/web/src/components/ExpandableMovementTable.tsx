@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, ReactNode, useCallback, useState } from "react";
 import { formatMoney } from "@/lib/api";
 import { decodeHtmlEntities } from "@/lib/htmlEntities";
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 export type ExpandLineItem = {
   label: string;
@@ -71,7 +72,7 @@ function ExpandPanel({
   const loading = detail?.loading;
   const error = detail?.error;
   const lines = detail?.lines || [];
-  const note = decodeHtmlEntities(detail?.note ?? fallbackNote ?? "").trim();
+  const note = sanitizeDisplayNote(detail?.note ?? fallbackNote ?? "");
   const userName = decodeHtmlEntities(detail?.userName || "").trim();
 
   return (

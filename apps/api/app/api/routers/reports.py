@@ -27,6 +27,8 @@ from app.models.product import Product
 from app.models.supplier import Purchase, Supplier, SupplierMovement
 from app.models.user import User
 
+from app.utils.bh_note import sanitize_display_note
+
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 READ_ROLES = ("admin", "muhasebe", "satış")
@@ -832,7 +834,7 @@ def finance_report(
                     "amount": _f(amt),
                     "movement_date": m.movement_date.isoformat() if m.movement_date else None,
                     "category": m.category,
-                    "note": m.note,
+                    "note": sanitize_display_note(m.note) or None,
                     "party_name": m.customer.name if m.customer else None,
                 }
             )
@@ -863,7 +865,7 @@ def finance_report(
                     "amount": _f(amt),
                     "movement_date": m.movement_date.isoformat() if m.movement_date else None,
                     "category": m.category,
-                    "note": m.note,
+                    "note": sanitize_display_note(m.note) or None,
                     "party_name": m.customer.name if m.customer else None,
                 }
             )
@@ -1052,7 +1054,7 @@ def expenses_report(
             "category": r.category.name if r.category else None,
             "amount": _f(r.amount),
             "payment_method": getattr(r, "payment_method", None),
-            "note": getattr(r, "note", None),
+            "note": sanitize_display_note(getattr(r, "note", None)) or None,
             "posted": bool(getattr(r, "is_posted", False)),
         }
         for r in rows
@@ -1169,7 +1171,7 @@ def cari_statements_report(
                 "debit": _f(m.debit),
                 "credit": _f(m.credit),
                 "balance": _f(running),
-                "note": m.note,
+                "note": sanitize_display_note(m.note) or None,
                 "order_id": m.order_id,
             }
         )
@@ -1666,7 +1668,7 @@ def stock_movements_report(
                 "direction": m.direction,
                 "movement_type": m.reason or m.direction,
                 "warehouse": m.warehouse,
-                "note": m.note,
+                "note": sanitize_display_note(m.note) or None,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
         )

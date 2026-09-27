@@ -13,6 +13,8 @@ from app.models.asset import ASSET_STATUSES, DEPRECIATION_METHODS, Asset
 from app.models.user import User
 from app.schemas.asset import AssetCreate, AssetOut, AssetUpdate
 
+from app.utils.bh_note import sanitize_display_note
+
 router = APIRouter(prefix="/finance/assets", tags=["assets"])
 
 READ = ("admin", "muhasebe")
@@ -69,7 +71,7 @@ def _out(a: Asset) -> AssetOut:
         maintenance_date=getattr(a, "maintenance_date", None),
         depreciation_method=a.depreciation_method or "none",
         useful_life_months=a.useful_life_months,
-        note=a.note,
+        note=sanitize_display_note(a.note) or None,
         active=bool(a.active),
         book_value=book,
         monthly_depreciation=monthly,

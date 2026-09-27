@@ -15,6 +15,7 @@ import {
 import StatusFooter from "@/components/StatusFooter";
 import { parseProductDescription } from "@/lib/productMeta";
 import { displaySku } from "@/lib/productLabel";
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 type WarehouseStockRow = {
   warehouse: string;
@@ -650,7 +651,7 @@ export default function ProductDetailPage() {
                     </span>
                     {m.variant_name && <span className="text-slate-500">({m.variant_name})</span>}
                     {m.reason && <span>— {m.reason}</span>}
-                    {m.note && <span className="text-slate-400">{m.note}</span>}
+                    {(() => { const n = sanitizeDisplayNote(m.note); return n ? <span className="text-slate-400">{n}</span> : null; })()}
                   </li>
                 ))}
               </ul>

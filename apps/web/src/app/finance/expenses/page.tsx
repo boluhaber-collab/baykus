@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
-import { decodeHtmlEntities } from "@/lib/htmlEntities";
 import StatusFooter from "@/components/StatusFooter";
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 const PERIODS = [
   { key: "30", label: "Son 30 Gün", days: 30 },
@@ -508,7 +508,7 @@ export default function ExpensesPage() {
                       {st}
                     </span>
                   </td>
-                  <td className="text-xs text-baykus-muted max-w-[160px] truncate">{decodeHtmlEntities(e.note) || "—"}</td>
+                  <td className="text-xs text-baykus-muted max-w-[160px] truncate">{sanitizeDisplayNote(e.note) || "—"}</td>
                   <td className="text-right text-xs whitespace-nowrap space-x-2">
                     {!e.is_posted && (
                       <>

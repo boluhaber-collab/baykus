@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, downloadReportCsv, formatMoney, getApiBase, getToken } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { ReportHeader } from "@/components/reports/ReportChrome";
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 type CustomerOpt = { id: number; name: string; company: string | null; balance: number };
 type Move = { id: number; date: string | null; type: string; debit: number; credit: number; balance: number; note: string | null };
@@ -190,7 +191,7 @@ export default function CariStatementsPage() {
                 <td className="text-right tabular-nums">{formatMoney(r.debit)}</td>
                 <td className="text-right tabular-nums">{formatMoney(r.credit)}</td>
                 <td className="text-right tabular-nums font-medium">{formatMoney(r.balance)}</td>
-                <td className="text-xs text-baykus-muted">{r.note || "—"}</td>
+                <td className="text-xs text-baykus-muted">{sanitizeDisplayNote(r.note) || "—"}</td>
               </tr>
             ))}
             {rows.length === 0 && (

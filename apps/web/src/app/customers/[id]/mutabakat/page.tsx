@@ -12,7 +12,8 @@ import {
   getApiBase,
   getToken,
 } from "@/lib/api";
-import { decodeHtmlEntities } from "@/lib/htmlEntities";
+
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 export default function MutabakatPage() {
   const params = useParams();
@@ -187,7 +188,7 @@ export default function MutabakatPage() {
                   <td className="text-right tabular-nums font-medium">
                     {m.running_balance != null ? formatMoney(Number(m.running_balance)) : "—"}
                   </td>
-                  <td className="text-slate-500">{decodeHtmlEntities(m.note) || "—"}</td>
+                  <td className="text-slate-500">{sanitizeDisplayNote(m.note) || "—"}</td>
                 </tr>
               ))}
               {(statement?.movements || []).length === 0 && (

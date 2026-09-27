@@ -23,9 +23,7 @@ import SplitPaymentRows, {
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
 import {
-  belgeFromNote,
-  detailFromBhNote,
-  hareketLabel,
+  belgeFromNote, detailFromBhNote, hareketLabel, sanitizeDisplayNote,
 } from "@/lib/bhNote";
 import type {
   PurchaseDetail,
@@ -844,7 +842,7 @@ export default function SupplierDetailPage() {
                     key: "note",
                     header: "Not",
                     className: "text-slate-500",
-                    render: (m) => detailFromBhNote(m.note).note || decodeHtmlEntities(m.note) || "—",
+                    render: (m) => sanitizeDisplayNote(m.note) || "—",
                   },
                   {
                     key: "debit",

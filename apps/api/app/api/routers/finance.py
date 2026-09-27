@@ -45,6 +45,8 @@ from app.schemas.finance import (
     TransferOut,
 )
 
+from app.utils.bh_note import sanitize_display_note
+
 router = APIRouter(prefix="/finance", tags=["finance"])
 
 READ_ROLES = ("admin", "muhasebe", "satış")
@@ -656,7 +658,7 @@ def cash_daily_panel(
                 "source": "Kasa",
                 "account": "Ana Kasa",
                 "movement_type": m.movement_type,
-                "note": m.note or m.category,
+                "note": sanitize_display_note(m.note) or m.category,
                 "in_amount": amt if direction == "in" else 0,
                 "out_amount": amt if direction == "out" else 0,
                 "payment_type": m.category or m.movement_type,
@@ -672,7 +674,7 @@ def cash_daily_panel(
                 "source": "Banka",
                 "account": acc_name,
                 "movement_type": m.movement_type,
-                "note": m.note or m.category,
+                "note": sanitize_display_note(m.note) or m.category,
                 "in_amount": amt if direction == "in" else 0,
                 "out_amount": amt if direction == "out" else 0,
                 "payment_type": m.category or m.movement_type,

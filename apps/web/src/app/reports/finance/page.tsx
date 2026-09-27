@@ -20,6 +20,8 @@ import {
   formatMoney,
 } from "@/lib/api";
 
+import { sanitizeDisplayNote } from "@/lib/bhNote";
+
 type Row = {
   source: string;
   id: number;
@@ -160,7 +162,7 @@ export default function FinanceReportPage() {
             <td className="px-4 py-3 text-slate-500">{r.movement_date || "—"}</td>
             <td className="px-4 py-3">{r.category || "—"}</td>
             <td className="px-4 py-3">{r.party_name || "—"}</td>
-            <td className="px-4 py-3 text-slate-500 max-w-[12rem] truncate">{r.note || "—"}</td>
+            <td className="px-4 py-3 text-slate-500 max-w-[12rem] truncate">{sanitizeDisplayNote(r.note) || "—"}</td>
           </tr>
         ))}
       </ReportTable>

@@ -20,6 +20,8 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdf_canvas
 
+from app.utils.bh_note import sanitize_display_note
+
 API_ROOT = Path(__file__).resolve().parents[2]
 UPLOADS_ROOT = API_ROOT / "uploads"
 STATIC_ROOT = Path(__file__).resolve().parents[1] / "static"
@@ -37,6 +39,18 @@ def _money(v: Any) -> str:
     if abs(sayi - round(sayi)) < 1e-7:
         return f"{int(round(sayi)):,} TL".replace(",", ".")
     return f"{sayi:,.2f} TL".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+
+def _display_note(note: Any, type_fallback: Any = None) -> str:
+    """Açıklama for PDFs — never BH_IMPORT / BH: GUID markers.
+
+    Prefers human free-text / Belge / Ödeme / Hareket from BH pipe notes.
+    Bare sync markers → empty (İşlem column already shows type).
+    *type_fallback* kept for call-site compat; unused on purpose.
+    """
+    _ = type_fallback
+    return sanitize_display_note(note, fallback="")
 
 
 def _qty(v: Any) -> str:
@@ -739,7 +753,7 @@ def build_cari_statement_pdf(
                     _money(r.get("debit")),
                     _money(r.get("credit")),
                     _money(r.get("balance")),
-                    _s(r.get("note"))[:40],
+                    _display_note(r.get("note"))[:40],
                 ]
             )
     else:

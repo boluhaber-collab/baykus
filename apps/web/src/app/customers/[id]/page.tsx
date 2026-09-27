@@ -23,9 +23,7 @@ import ExpandableMovementTable, {
 } from "@/components/ExpandableMovementTable";
 import PartyCardLayout, { partySmsHref } from "@/components/PartyCardLayout";
 import {
-  belgeFromNote,
-  detailFromBhNote,
-  hareketLabel,
+  belgeFromNote, detailFromBhNote, hareketLabel, sanitizeDisplayNote,
 } from "@/lib/bhNote";
 import type { CariMovement, CustomerOrderBrief, OrderDetail } from "@/lib/api";
 
@@ -924,7 +922,7 @@ export default function CustomerDetailPage() {
                         className: "text-slate-600",
                         render: (m) => (
                           <>
-                            {detailFromBhNote(m.note).note || decodeHtmlEntities(m.note) || "—"}
+                            {sanitizeDisplayNote(m.note) || "—"}
                             {m.order_number && (
                               <>
                                 {" "}

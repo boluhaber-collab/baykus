@@ -30,6 +30,8 @@ from app.schemas.product import (
     VariantUpdate,
 )
 
+from app.utils.bh_note import sanitize_display_note
+
 router = APIRouter(prefix="/products", tags=["products"])
 
 READ_ROLES = ("admin", "satış", "üretim", "muhasebe")
@@ -1363,7 +1365,7 @@ def product_history(
                 "qty_before": m.qty_before,
                 "qty_after": m.qty_after,
                 "reason": m.reason,
-                "note": m.note,
+                "note": sanitize_display_note(m.note) or None,
                 "warehouse": m.warehouse,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
                 "variant_id": m.variant_id,

@@ -32,6 +32,8 @@ from app.schemas.customer import (
     StatementOut,
 )
 
+from app.utils.bh_note import sanitize_display_note
+
 router = APIRouter(prefix="/customers", tags=["customers"])
 
 READ_ROLES = ("admin", "satış", "muhasebe")
@@ -616,7 +618,7 @@ def get_customer_detail(
                 "kind": "movement",
                 "date": m.movement_date.isoformat(),
                 "label": m.movement_type,
-                "note": m.note,
+                "note": sanitize_display_note(m.note) or None,
                 "debit": float(m.debit),
                 "credit": float(m.credit),
                 "ref_id": m.id,
