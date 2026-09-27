@@ -11,6 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import { productOptionLabel } from "@/lib/productLabel";
 
 type LineForm = {
   description: string;
@@ -466,7 +467,7 @@ function NewPurchaseForm() {
                         <option value="">— Manuel açıklama —</option>
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.sku} — {p.name}
+                            {productOptionLabel(p.sku, p.name)}
                           </option>
                         ))}
                       </select>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { ProductDetail, ProductVariant } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import {
   ProductMeta,
   SALES_UNITS,
@@ -212,7 +213,7 @@ export default function TabbedProductForm({
           ← Geri Dön
         </button>
         <span className="text-xs text-baykus-muted ml-2">
-          {mode === "create" ? "Yeni ürün / hizmet" : `Düzenle · ${initial?.sku || ""}`}
+          {mode === "create" ? "Yeni ürün / hizmet" : `Düzenle${displaySku(initial?.sku) ? ` · ${displaySku(initial?.sku)}` : ""}`}
         </span>
       </div>
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, AppSettings, Customer, Product, ProductPricingInfo, QUOTE_STATUSES, formatMoney } from "@/lib/api";
+import { productOptionLabel } from "@/lib/productLabel";
 
 type Line = {
   key: string;
@@ -215,7 +216,7 @@ export default function NewQuotePage() {
                   <option value="">— Manuel —</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.sku} — {p.name}
+                      {productOptionLabel(p.sku, p.name)}
                     </option>
                   ))}
                 </select>

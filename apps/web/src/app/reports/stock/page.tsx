@@ -17,6 +17,7 @@ import {
   downloadReportCsv,
   formatMoney,
 } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 
 type StockRow = {
   product_id: number;
@@ -135,7 +136,7 @@ export default function StockReportPage() {
       >
         {(data?.rows || []).map((r) => (
           <tr key={`${r.product_id}-${r.variant_id ?? 0}-${r.sku}`} className="border-t border-slate-100 hover:bg-slate-50">
-            <td className="px-4 py-3 font-mono text-xs">{r.sku}</td>
+            <td className="px-4 py-3 font-mono text-xs">{displaySku(r.sku) || "—"}</td>
             <td className="px-4 py-3 font-medium">{r.name}</td>
             <td className="px-4 py-3 text-slate-600">{r.variant_name || "—"}</td>
             <td className="px-4 py-3">{r.category || "—"}</td>

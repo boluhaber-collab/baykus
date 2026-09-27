@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Product, apiFetch } from "@/lib/api";
+import { displaySku, isImportSku } from "@/lib/productLabel";
 import { code128Svg } from "@/lib/code128";
 
 type Row = { id: number; name: string; sku: string; barcode: string; selected: boolean };
@@ -61,8 +62,11 @@ export default function ProductLabelsPage() {
     }
     const cards = list
       .map((r) => {
-        const svg = code128Svg(r.barcode || r.sku, { height: 48, moduleWidth: 1.4 });
-        return `<div class="label"><div class="name">${escape(r.name)}</div><div class="sku">${escape(r.sku)}</div>${svg}</div>`;
+        const humanSku = displaySku(r.sku) || "";
+        const code = (!isImportSku(r.barcode) && r.barcode) || humanSku || "";
+        const svg = code ? code128Svg(code, { height: 48, moduleWidth: 1.4 }) : "";
+        const skuLine = humanSku ? `<div class="sku">${escape(humanSku)}</div>` : "";
+        return `<div class="label"><div class="name">${escape(r.name)}</div>${skuLine}${svg}</div>`;
       })
       .join("");
     const w = window.open("", "_blank", "width=900,height=700");
@@ -138,13 +142,19 @@ body{font-family:Segoe UI,system-ui,sans-serif;margin:12px;color:#0f172a}
               <input type="checkbox" checked={r.selected} onChange={() => toggle(r.id)} className="mt-1" />
               <div className="min-w-0">
                 <div className="text-sm font-semibold truncate">{r.name}</div>
-                <div className="text-[11px] font-mono text-slate-500">{r.sku}</div>
+                {displaySku(r.sku) && (
+                  <div className="text-[11px] font-mono text-slate-500">{displaySku(r.sku)}</div>
+                )}
               </div>
             </div>
             <div
               className="overflow-x-auto"
               dangerouslySetInnerHTML={{
-                __html: code128Svg(r.barcode || r.sku, { height: 40, moduleWidth: 1.3 }),
+                __html: (() => {
+                  const human = displaySku(r.sku) || "";
+                  const code = (!isImportSku(r.barcode) && r.barcode) || human || "";
+                  return code ? code128Svg(code, { height: 40, moduleWidth: 1.3 }) : "";
+                })(),
               }}
             />
           </label>

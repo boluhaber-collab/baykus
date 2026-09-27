@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 
 type Row = {
@@ -132,7 +133,7 @@ export default function LastPurchasePricesPage() {
             {visible.map((r, i) => (
               <tr key={i} className={r.source === "product_card" ? "bg-slate-50/80" : undefined}>
                 <td className="font-medium">
-                  {r.sku && <span className="text-[10px] text-baykus-muted mr-1">{r.sku}</span>}
+                  {displaySku(r.sku) && <span className="text-[10px] text-baykus-muted mr-1">{displaySku(r.sku)}</span>}
                   {r.description || r.product_name || (r.product_id ? `#${r.product_id}` : "—")}
                   {r.source === "product_card" && (
                     <span className="ml-1 text-[10px] text-violet-600">kart</span>

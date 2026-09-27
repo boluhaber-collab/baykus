@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Product, ProductDetail, apiFetch, formatMoney } from "@/lib/api";
+import { productOptionLabel } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 
 type Warehouse = {
@@ -208,7 +209,7 @@ function StockEntryPageInner() {
               <option value="">— ürün seçin —</option>
               {filtered.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.sku} · {p.name} (stok {p.total_stock ?? p.stock_qty})
+                  {productOptionLabel(p.sku, p.name, { sep: " · ", suffix: ` (stok ${p.total_stock ?? p.stock_qty})` })}
                 </option>
               ))}
             </select>
@@ -225,9 +226,11 @@ function StockEntryPageInner() {
               >
                 {detail.variants.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.sku} · {v.name}
-                    {v.size ? ` · ${v.size}` : ""}
-                    {v.color ? ` · ${v.color}` : ""} (stok {v.stock_qty})
+                    {productOptionLabel(
+                      v.sku,
+                      [v.name, v.size, v.color].filter(Boolean).join(" · ") || v.name,
+                      { sep: " · ", suffix: ` (stok ${v.stock_qty})` },
+                    )}
                   </option>
                 ))}
               </select>

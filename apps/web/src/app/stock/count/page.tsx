@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 
 type Warehouse = {
@@ -227,7 +228,9 @@ function StockCountPageInner() {
                   <tr key={k} className={diff ? "bg-amber-50/60" : undefined}>
                     <td>
                       <div className="font-medium">{r.name}</div>
-                      <div className="text-xs text-baykus-muted font-mono">{r.sku}</div>
+                      {displaySku(r.sku) && (
+                        <div className="text-xs text-baykus-muted font-mono">{displaySku(r.sku)}</div>
+                      )}
                     </td>
                     <td className="text-right tabular-nums text-baykus-muted">{r.system_qty}</td>
                     <td className="text-right">

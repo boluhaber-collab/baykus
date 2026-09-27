@@ -11,6 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import { productOptionLabel } from "@/lib/productLabel";
 import PreviousPricesModal from "@/components/PreviousPricesModal";
 import SplitPaymentRows, {
   SplitPaymentRow,
@@ -614,7 +615,7 @@ function CreateSaleInner() {
                           <option value="">— Manuel —</option>
                           {filteredProducts.map((p) => (
                             <option key={p.id} value={p.id}>
-                              {p.sku} — {p.name}
+                              {productOptionLabel(p.sku, p.name)}
                             </option>
                           ))}
                         </select>

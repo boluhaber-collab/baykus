@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CriticalStockItem, apiFetch, formatMoney } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 
 export default function CriticalStockPage() {
@@ -141,12 +142,14 @@ export default function CriticalStockPage() {
                   >
                     {row.product_name}
                   </Link>
-                  <div className="font-mono text-xs text-slate-400">{row.product_sku}</div>
+                  {displaySku(row.product_sku) && (
+                    <div className="font-mono text-xs text-slate-400">{displaySku(row.product_sku)}</div>
+                  )}
                 </td>
                 <td className="">
                   {row.variant_name || "—"}
-                  {row.variant_sku && (
-                    <div className="font-mono text-xs text-slate-400">{row.variant_sku}</div>
+                  {displaySku(row.variant_sku) && (
+                    <div className="font-mono text-xs text-slate-400">{displaySku(row.variant_sku)}</div>
                   )}
                 </td>
                 <td className="text-xs">{row.supplier_name || "—"}</td>

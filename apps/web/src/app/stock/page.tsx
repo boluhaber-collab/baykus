@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, downloadAuthFile } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 
 type StockSummary = {
@@ -156,11 +157,19 @@ export default function StockPage() {
                 {summary.low_stock.map((r) => (
                   <tr key={r.product_id}>
                     <td className="font-mono text-xs">
+                      {displaySku(r.sku) ? (
+                        <Link href={`/products/${r.product_id}`} className="text-baykus-primary hover:underline">
+                          {displaySku(r.sku)}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td>
                       <Link href={`/products/${r.product_id}`} className="text-baykus-primary hover:underline">
-                        {r.sku}
+                        {r.name}
                       </Link>
                     </td>
-                    <td>{r.name}</td>
                     <td className="text-right tabular-nums text-red-600">{r.qty}</td>
                     <td className="text-right tabular-nums">{r.threshold}</td>
                   </tr>

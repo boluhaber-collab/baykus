@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 
 type Warehouse = {
@@ -376,7 +377,7 @@ export default function WarehousesPage() {
               <tbody>
                 {stock.map((s) => (
                   <tr key={`${s.product_id}-${s.variant_id}`}>
-                    <td className="font-mono text-xs">{s.sku}</td>
+                    <td className="font-mono text-xs">{displaySku(s.sku) || "—"}</td>
                     <td>{s.name}</td>
                     <td className="text-right tabular-nums">{s.stock_qty}</td>
                     <td className="text-right">

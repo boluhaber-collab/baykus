@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DashboardSummary, Product, apiFetch, formatMoney, stockBadgeClass } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import { HubActionsBar, HubSection, HubTabs } from "@/components/hub/HubChrome";
 import StatusFooter from "@/components/StatusFooter";
 
@@ -401,7 +402,9 @@ function ProductsHubPageInner() {
                           {isService && <span className="bk-product-chip bk-product-chip--svc">HİZMET</span>}
                           {p.brand && <span className="bk-product-chip bk-product-chip--brand">{p.brand}</span>}
                           {!p.is_active && <span className="bk-product-chip bk-product-chip--off">PASİF</span>}
-                          <span className="bk-product-chip bk-product-chip--sku font-mono">{p.sku}</span>
+                          {displaySku(p.sku) && (
+                            <span className="bk-product-chip bk-product-chip--sku font-mono">{displaySku(p.sku)}</span>
+                          )}
                         </div>
                       </td>
                       <td className="text-right tabular-nums whitespace-nowrap">

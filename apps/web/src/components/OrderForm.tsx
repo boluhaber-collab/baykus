@@ -14,6 +14,7 @@ import {
   ProductPricingInfo,
   formatMoney,
 } from "@/lib/api";
+import { productOptionLabel } from "@/lib/productLabel";
 
 export type OrderFormPayload = {
   customer_id: number | null;
@@ -384,7 +385,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
                   <option value="">— Manuel —</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.sku} — {p.name}
+                      {productOptionLabel(p.sku, p.name)}
                     </option>
                   ))}
                 </select>
