@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Row = {
   id: number;
@@ -149,6 +150,8 @@ export default function ExpenseReportsPage() {
           </tbody>
         </table>
       </div>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

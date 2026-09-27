@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ReportCatalogItem, apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 /** Masaüstü Raporlar menü renkleri birebir */
 const DESKTOP_REPORTS: {
@@ -93,37 +94,41 @@ export default function ReportsHubPage() {
   const buttons = [...DESKTOP_REPORTS, ...EXTRA];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-900 mb-1">Raporlar</h1>
-      <p className="text-slate-500 text-sm mb-6">
-        Masaüstü Raporlar menüsü — büyük düğmeler. Satış / kâr / finans raporlarında filtre + CSV vardır.
-      </p>
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header">
+        <h1 className="text-lg font-bold text-baykus-text leading-tight">Raporlar</h1>
+        <p className="text-baykus-muted text-[11px]">
+          Masaüstü Raporlar menüsü — büyük düğmeler. Satış / kâr / finans raporlarında filtre + CSV vardır.
+        </p>
+      </div>
       {error && (
-        <div className="mb-4 rounded-lg bg-amber-50 text-amber-800 px-4 py-2 text-sm">
+        <div className="rounded bg-amber-50 text-amber-800 px-3 py-2 text-sm">
           Katalog API: {error}
         </div>
       )}
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {buttons.map((r) => (
           <Link
             key={r.key}
             href={r.href}
-            className="rounded-xl px-5 py-6 text-white shadow-md hover:brightness-110 transition min-h-[7.5rem] flex flex-col justify-between"
+            className="rounded-md px-4 py-5 text-white shadow-sm hover:brightness-110 transition min-h-[6.5rem] flex flex-col justify-between"
             style={{ backgroundColor: r.color }}
           >
-            <div className="text-lg font-bold tracking-wide">{r.title}</div>
-            <p className="text-sm opacity-90 mt-2">{r.description}</p>
-            <div className="mt-3 text-xs font-semibold opacity-80">Raporu aç →</div>
+            <div className="text-base font-bold tracking-wide">{r.title}</div>
+            <p className="text-xs opacity-90 mt-1.5">{r.description}</p>
+            <div className="mt-2 text-[11px] font-semibold opacity-80">Raporu aç →</div>
           </Link>
         ))}
       </div>
 
       {apiItems.length > 0 && (
-        <div className="text-xs text-slate-400">
+        <div className="text-[11px] text-baykus-muted">
           API katalog: {apiItems.map((i) => i.title).join(" · ")}
         </div>
       )}
+
+      <StatusFooter />
     </div>
   );
 }

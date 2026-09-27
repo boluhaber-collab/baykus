@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DashboardSummary, Product, apiFetch, formatMoney, stockBadgeClass } from "@/lib/api";
-import { HubActionsBar, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
+import { HubActionsBar, HubSection, HubTabs } from "@/components/hub/HubChrome";
+import StatusFooter from "@/components/StatusFooter";
 
 type Tab = "urunler" | "kritik" | "rapor";
 
@@ -99,12 +100,42 @@ function ProductsHubPageInner() {
 
   return (
     <HubSection title="Ürün & Stok Merkezi" onRefresh={load}>
-      <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
-        <HubSummaryCard label="Ürün" value={stats.products} color="#2563eb" />
-        <HubSummaryCard label="Varyant" value={stats.variants} color="#0f766e" />
-        <HubSummaryCard label="Stok Adedi" value={stats.qty} color="#16a34a" />
-        <HubSummaryCard label="Kritik" value={stats.critical} color="#dc2626" href="/stock/critical" />
-        <HubSummaryCard label="Stok Değeri" value={formatMoney(Number(stats.value))} color="#7c3aed" href="/reports/stock" />
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#2563eb" }}>
+          <span className="bk-kpi-icon">▣</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Ürün</div>
+            <div className="bk-kpi-value">{stats.products}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+          <span className="bk-kpi-icon">⧉</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Varyant</div>
+            <div className="bk-kpi-value">{stats.variants}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#16a34a" }}>
+          <span className="bk-kpi-icon">☰</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Stok Adedi</div>
+            <div className="bk-kpi-value">{stats.qty}</div>
+          </div>
+        </div>
+        <Link href="/stock/critical" className="bk-kpi-card" style={{ backgroundColor: "#dc2626" }}>
+          <span className="bk-kpi-icon">⚠</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Kritik</div>
+            <div className="bk-kpi-value">{stats.critical}</div>
+          </div>
+        </Link>
+        <Link href="/reports/stock" className="bk-kpi-card" style={{ backgroundColor: "#7c3aed" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Stok Değeri</div>
+            <div className="bk-kpi-value truncate">{formatMoney(Number(stats.value))}</div>
+          </div>
+        </Link>
       </div>
 
       <HubActionsBar
@@ -267,6 +298,7 @@ function ProductsHubPageInner() {
           />
         </div>
       )}
+      <StatusFooter onRefresh={load} />
     </HubSection>
   );
 }

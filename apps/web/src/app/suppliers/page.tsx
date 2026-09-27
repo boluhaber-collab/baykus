@@ -9,7 +9,8 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
-import { HubActionButton, HubActionsBar, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
+import { HubActionButton, HubActionsBar, HubSection, HubTabs } from "@/components/hub/HubChrome";
+import StatusFooter from "@/components/StatusFooter";
 
 type Tab = "tedarikciler" | "borc" | "alislar" | "satinalma";
 
@@ -88,12 +89,42 @@ export default function SuppliersHubPage() {
 
   return (
     <HubSection title="Tedarik Merkezi" onRefresh={load}>
-      <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
-        <HubSummaryCard label="Tedarikçi" value={stats.suppliers} color="#0f766e" />
-        <HubSummaryCard label="Toplam Alış" value={formatMoney(stats.totalPurchase)} color="#2563eb" />
-        <HubSummaryCard label="Toplam Ödeme" value={formatMoney(Math.max(0, stats.totalPurchase - stats.openBal))} color="#16a34a" />
-        <HubSummaryCard label="Açık Bakiye" value={formatMoney(stats.openBal)} color="#dc2626" href="/suppliers/payables" />
-        <HubSummaryCard label="Satın Alma" value={stats.purchaseCount} color="#7c3aed" href="/purchases" />
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+          <span className="bk-kpi-icon">🏭</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Tedarikçi</div>
+            <div className="bk-kpi-value">{stats.suppliers}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#2563eb" }}>
+          <span className="bk-kpi-icon">↓</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam Alış</div>
+            <div className="bk-kpi-value truncate">{formatMoney(stats.totalPurchase)}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#16a34a" }}>
+          <span className="bk-kpi-icon">✓</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam Ödeme</div>
+            <div className="bk-kpi-value truncate">{formatMoney(Math.max(0, stats.totalPurchase - stats.openBal))}</div>
+          </div>
+        </div>
+        <Link href="/suppliers/payables" className="bk-kpi-card" style={{ backgroundColor: "#dc2626" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Açık Bakiye</div>
+            <div className="bk-kpi-value truncate">{formatMoney(stats.openBal)}</div>
+          </div>
+        </Link>
+        <Link href="/purchases" className="bk-kpi-card" style={{ backgroundColor: "#7c3aed" }}>
+          <span className="bk-kpi-icon">☰</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Satın Alma</div>
+            <div className="bk-kpi-value">{stats.purchaseCount}</div>
+          </div>
+        </Link>
       </div>
 
       <HubActionsBar
@@ -266,6 +297,7 @@ export default function SuppliersHubPage() {
           </div>
         </>
       )}
+      <StatusFooter onRefresh={load} />
     </HubSection>
   );
 }

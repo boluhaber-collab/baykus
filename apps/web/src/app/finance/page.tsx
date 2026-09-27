@@ -9,6 +9,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function FinanceOverviewPage() {
   const [data, setData] = useState<FinanceSummary | null>(null);
@@ -38,49 +39,19 @@ export default function FinanceOverviewPage() {
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-baykus-text">Finans</h1>
-          <p className="text-baykus-muted text-sm">Kasa + banka özeti · bugünkü hareketler</p>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Finans</h1>
+          <p className="text-baykus-muted text-[11px]">Kasa + banka özeti · bugünkü hareketler</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href="/finance/cash"
-            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
-          >
-            Kasa
-          </Link>
-          <Link
-            href="/finance/banks"
-            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
-          >
-            Banka
-          </Link>
-          <Link
-            href="/finance/expenses"
-            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
-          >
-            Giderler
-          </Link>
-          <Link
-            href="/finance/assets"
-            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
-          >
-            Sabit kıymetler
-          </Link>
-          <Link
-            href="/finance/loans"
-            className="rounded-lg border border-baykus-line px-4 py-2 text-sm hover:bg-baykus-bg"
-          >
-            Kredi / Taksit
-          </Link>
-          <button
-            onClick={load}
-            className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm"
-          >
-            Yenile
-          </button>
+          <Link href="/finance/cash" className="bk-btn bk-btn-ghost text-xs">Kasa</Link>
+          <Link href="/finance/banks" className="bk-btn bk-btn-ghost text-xs">Banka</Link>
+          <Link href="/finance/expenses" className="bk-btn bk-btn-ghost text-xs">Giderler</Link>
+          <Link href="/finance/assets" className="bk-btn bk-btn-ghost text-xs">Sabit kıymetler</Link>
+          <Link href="/finance/loans" className="bk-btn bk-btn-ghost text-xs">Kredi / Taksit</Link>
+          <button type="button" onClick={load} className="bk-btn bk-btn-primary text-xs">Yenile</button>
         </div>
       </div>
 
@@ -91,33 +62,37 @@ export default function FinanceOverviewPage() {
 
       {data && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-              <div className="text-xs text-emerald-800">Toplam kasa</div>
-              <div className="text-xl font-bold text-emerald-900 tabular-nums">
-                {formatMoney(Number(data.total_cash))}
+          <div className="bk-kpi-strip">
+            <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+              <span className="bk-kpi-icon">💵</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Toplam kasa</div>
+                <div className="bk-kpi-value truncate">{formatMoney(Number(data.total_cash))}</div>
               </div>
             </div>
-            <div className="rounded-xl border border-sky-200 bg-sky-50 px-5 py-4">
-              <div className="text-xs text-sky-800">Toplam banka</div>
-              <div className="text-xl font-bold text-sky-900 tabular-nums">
-                {formatMoney(Number(data.total_bank))}
+            <div className="bk-kpi-card" style={{ backgroundColor: "#2563eb" }}>
+              <span className="bk-kpi-icon">🏦</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Toplam banka</div>
+                <div className="bk-kpi-value truncate">{formatMoney(Number(data.total_bank))}</div>
               </div>
             </div>
-            <div className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-4">
-              <div className="text-xs text-violet-800">Likidite</div>
-              <div className="text-xl font-bold text-violet-900 tabular-nums">
-                {formatMoney(Number(data.total_liquidity))}
+            <div className="bk-kpi-card" style={{ backgroundColor: "#7c3aed" }}>
+              <span className="bk-kpi-icon">Σ</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Likidite</div>
+                <div className="bk-kpi-value truncate">{formatMoney(Number(data.total_liquidity))}</div>
               </div>
             </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
-              <div className="text-xs text-amber-800">Bugün hareket</div>
-              <div className="text-xl font-bold text-amber-900">{data.today_movements_count}</div>
-              {data.receivables != null && (
-                <div className="text-xs text-amber-700 mt-1">
-                  Açık alacak: {formatMoney(Number(data.receivables))}
-                </div>
-              )}
+            <div className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+              <span className="bk-kpi-icon">↻</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Bugün hareket</div>
+                <div className="bk-kpi-value">{data.today_movements_count}</div>
+                {data.receivables != null && (
+                  <div className="text-[10px] opacity-90">Alacak {formatMoney(Number(data.receivables))}</div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -176,38 +151,38 @@ export default function FinanceOverviewPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-baykus-line font-semibold text-baykus-text">
+          <div className="bk-table-wrap">
+            <div className="px-3 py-2 border-b border-baykus-line bg-[#151b26] text-white text-xs font-bold">
               Son hareketler
             </div>
-            <table className="min-w-full text-sm">
-              <thead className="bg-baykus-bg text-left text-baykus-muted">
+            <table className="bk-table">
+              <thead>
                 <tr>
-                  <th className="px-3 py-2">Tarih</th>
-                  <th className="px-3 py-2">Kaynak</th>
-                  <th className="px-3 py-2">Hesap</th>
-                  <th className="px-3 py-2">Tip</th>
-                  <th className="px-3 py-2">Not</th>
-                  <th className="px-3 py-2 text-right">Tutar</th>
+                  <th>Tarih</th>
+                  <th>Kaynak</th>
+                  <th>Hesap</th>
+                  <th>Tip</th>
+                  <th>Not</th>
+                  <th className="text-right">Tutar</th>
                 </tr>
               </thead>
               <tbody>
                 {data.recent_movements.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                    <td colSpan={6} className="text-center text-slate-400 py-6">
                       Hareket yok
                     </td>
                   </tr>
                 )}
                 {data.recent_movements.map((m) => (
-                  <tr key={`${m.source}-${m.id}`} className="border-t border-baykus-line">
-                    <td className="px-3 py-1.5 whitespace-nowrap">{m.movement_date}</td>
-                    <td className="px-3 py-1.5">{m.source === "cash" ? "Kasa" : "Banka"}</td>
-                    <td className="px-3 py-1.5">{m.account_name || "—"}</td>
-                    <td className="px-3 py-1.5">{typeLabel(m.source, m.movement_type)}</td>
-                    <td className="px-3 py-1.5 text-baykus-muted max-w-xs truncate">{m.note || "—"}</td>
+                  <tr key={`${m.source}-${m.id}`}>
+                    <td className="whitespace-nowrap">{m.movement_date}</td>
+                    <td>{m.source === "cash" ? "Kasa" : "Banka"}</td>
+                    <td>{m.account_name || "—"}</td>
+                    <td>{typeLabel(m.source, m.movement_type)}</td>
+                    <td className="text-baykus-muted max-w-xs truncate">{m.note || "—"}</td>
                     <td
-                      className={`px-3 py-1.5 text-right tabular-nums font-medium ${
+                      className={`text-right tabular-nums font-medium ${
                         m.direction === "in" ? "text-emerald-700" : "text-red-700"
                       }`}
                     >
@@ -221,6 +196,8 @@ export default function FinanceOverviewPage() {
           </div>
         </>
       )}
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

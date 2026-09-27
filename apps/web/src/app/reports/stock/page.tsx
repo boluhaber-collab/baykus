@@ -11,6 +11,7 @@ import {
   inputCls,
 } from "@/components/reports/ReportChrome";
 import {
+import StatusFooter from "@/components/StatusFooter";
   ReportResponse,
   apiFetch,
   downloadReportCsv,
@@ -157,6 +158,8 @@ export default function StockReportPage() {
           </tr>
         ))}
       </ReportTable>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

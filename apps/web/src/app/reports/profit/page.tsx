@@ -11,6 +11,7 @@ import {
   inputCls,
 } from "@/components/reports/ReportChrome";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Row = {
   section?: string;
@@ -144,6 +145,8 @@ export default function ProfitReportPage() {
           </tr>
         ))}
       </ReportTable>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

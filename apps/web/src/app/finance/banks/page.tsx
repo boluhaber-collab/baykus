@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BANK_ACCOUNT_TYPES, BankAccount, CashRegister, apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const TYPE_COLORS: Record<string, string> = {
   Banka: "#1d4ed8",
@@ -181,18 +182,32 @@ export default function BanksPage() {
         </form>
       </fieldset>
 
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#1d4ed8" }}>
+          <span className="bk-kpi-icon">🏦</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Banka Toplam</div>
+            <div className="bk-kpi-value truncate">{formatMoney(bankTotal)}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">Σ</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Tüm hesaplar</div>
+            <div className="bk-kpi-value truncate">{formatMoney(allTotal)}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">💵</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Kasa Toplam</div>
+            <div className="bk-kpi-value truncate">{formatMoney(cashTotal)}</div>
+          </div>
+        </div>
+      </div>
       <fieldset className="rounded border bg-white px-3 py-2">
-        <legend className="px-1 text-xs font-semibold">Finans Özeti</legend>
-        <div className="flex flex-wrap items-center gap-4 text-sm">
-          <div>
-            Banka Toplam: <strong className="tabular-nums text-blue-800">{formatMoney(bankTotal)}</strong>
-          </div>
-          <div>
-            Tüm hesaplar: <strong className="tabular-nums">{formatMoney(allTotal)}</strong>
-          </div>
-          <div>
-            Kasa Toplam: <strong className="tabular-nums text-emerald-800">{formatMoney(cashTotal)}</strong>
-          </div>
+        <legend className="px-1 text-xs font-semibold">Kasa Devir</legend>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
           <label className="flex items-center gap-2 text-xs">
             Kasa Devir Bakiye
             <input
@@ -287,6 +302,8 @@ export default function BanksPage() {
           </tbody>
         </table>
       </div>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

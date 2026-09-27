@@ -11,6 +11,7 @@ import {
   inputCls,
 } from "@/components/reports/ReportChrome";
 import {
+import StatusFooter from "@/components/StatusFooter";
   BANK_TYPE_LABELS,
   CASH_TYPE_LABELS,
   ReportResponse,
@@ -163,6 +164,8 @@ export default function FinanceReportPage() {
           </tr>
         ))}
       </ReportTable>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

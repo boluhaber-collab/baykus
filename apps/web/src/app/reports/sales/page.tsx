@@ -10,6 +10,7 @@ import {
   inputCls,
 } from "@/components/reports/ReportChrome";
 import {
+import StatusFooter from "@/components/StatusFooter";
   ORDER_STATUSES,
   ReportResponse,
   apiFetch,
@@ -188,6 +189,8 @@ export default function SalesReportPage() {
           </tr>
         ))}
       </ReportTable>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

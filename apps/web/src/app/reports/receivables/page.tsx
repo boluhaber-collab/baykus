@@ -11,6 +11,7 @@ import {
   inputCls,
 } from "@/components/reports/ReportChrome";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Row = {
   customer_id: number;
@@ -170,6 +171,8 @@ export default function ReceivablesReportPage() {
           </tr>
         ))}
       </ReportTable>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

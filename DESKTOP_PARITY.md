@@ -435,8 +435,33 @@ Batch 19 sonrası kalan görsel boşluklar (Sipariş Merkezi / Atölye / E-Ticar
 
 Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password / ReportLab twin stiller.
 
-### Kalan (dürüst)
+### Kalan (dürüst) → Batch 21’de kapatılanlar: hub StatusFooter + densite.
 
-- Çoğu liste sayfasında StatusFooter henüz yok (müşteri/ürün/finans/rapor hub’ları) — densite tutarlılığı devam edebilir
 - Masaüstü ReportLab twin PDF stilleri — web polish’li basit PDF
 - Merkezi DB canlı şifre / VPS kullanıcı senkron
+
+
+## Batch 21 — Hub StatusFooter + densite (müşteri/ürün/stok/finans/rapor/tedarik) (2026-09-27)
+
+Batch 20 sonrası kalan StatusFooter / densite boşlukları (hub listeleri).
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Müşteri Merkezi | `/customers` — `bk-kpi-strip` (5 KPI) · `StatusFooter` | done |
+| Ürün & Stok | `/products` — KPI şerit · StatusFooter; `/stock` sticky + KPI + navy tablo · StatusFooter | done |
+| Finans hub | `/finance` — sticky · `bk-kpi-strip` · `bk-table` hareketler · StatusFooter | done |
+| Günlük Kasa / Hesaplarım / Masraflar | `/finance/cash|banks|expenses` — KPI densite + StatusFooter | done |
+| Raporlar hub | `/reports` — sticky densite + StatusFooter | done |
+| Ana rapor sayfaları | sales/profit/finance/stock/receivables/payables/purchases/expenses — StatusFooter | done |
+| ReportChrome densite | sticky header · `bk-kpi-strip` özet · `bk-table` navy thead | done |
+| Tedarik Merkezi | `/suppliers` — KPI şerit · StatusFooter | done |
+| Smoke | `/health` · login · `/api/auth/me` · `/api/dashboard/summary` · Direkt Satışlar `channels=perakende,…` 200 | done |
+| Zip | `/workspace/baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
+
+Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI, live postgres password / ReportLab twin stiller.
+
+### Kalan (dürüst)
+
+- Masaüstü ReportLab twin PDF stilleri — web polish’li basit PDF
+- Merkezi DB canlı şifre / VPS kullanıcı senkron
+- İnce alt sayfa densite (stok/critical, warehouses, archive vb.) isteğe bağlı devam

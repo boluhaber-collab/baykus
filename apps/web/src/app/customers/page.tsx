@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Customer, apiFetch, formatMoney } from "@/lib/api";
-import { HubActionButton, HubActionsBar, HubSection, HubSummaryCard, HubTabs } from "@/components/hub/HubChrome";
+import { HubActionButton, HubActionsBar, HubSection, HubTabs } from "@/components/hub/HubChrome";
+import StatusFooter from "@/components/StatusFooter";
 
 type Tab = "musteriler" | "alacaklar" | "whatsapp" | "ozel";
 
@@ -93,17 +94,42 @@ function CustomersHubPageInner() {
 
   return (
     <HubSection title="Müşteri Merkezi" onRefresh={load}>
-      <div className="grid gap-2 grid-cols-2 md:grid-cols-5">
-        <HubSummaryCard label="Müşteri" value={stats.total || "—"} color="#198754" href="/customers?tab=musteriler" />
-        <HubSummaryCard
-          label="Açık Alacak"
-          value={formatMoney(stats.recv)}
-          color="#be123c"
-          href="/customers?tab=alacaklar"
-        />
-        <HubSummaryCard label="WhatsApp" value={waCount} color="#15803d" href="/whatsapp" />
-        <HubSummaryCard label="Özel Gün" value={specialCount} color="#f59e0b" href="/crm/special-days" />
-        <HubSummaryCard label="Kampanya" value={campaignCount} color="#2563eb" href="/crm/campaigns" />
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        <Link href="/customers?tab=musteriler" className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">👤</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Müşteri</div>
+            <div className="bk-kpi-value">{stats.total || "—"}</div>
+          </div>
+        </Link>
+        <Link href="/customers?tab=alacaklar" className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Açık Alacak</div>
+            <div className="bk-kpi-value truncate">{formatMoney(stats.recv)}</div>
+          </div>
+        </Link>
+        <Link href="/whatsapp" className="bk-kpi-card" style={{ backgroundColor: "#15803d" }}>
+          <span className="bk-kpi-icon">✆</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">WhatsApp</div>
+            <div className="bk-kpi-value">{waCount}</div>
+          </div>
+        </Link>
+        <Link href="/crm/special-days" className="bk-kpi-card" style={{ backgroundColor: "#f59e0b" }}>
+          <span className="bk-kpi-icon">★</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Özel Gün</div>
+            <div className="bk-kpi-value">{specialCount}</div>
+          </div>
+        </Link>
+        <Link href="/crm/campaigns" className="bk-kpi-card" style={{ backgroundColor: "#2563eb" }}>
+          <span className="bk-kpi-icon">📣</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Kampanya</div>
+            <div className="bk-kpi-value">{campaignCount}</div>
+          </div>
+        </Link>
       </div>
 
       <HubActionsBar
@@ -266,6 +292,7 @@ function CustomersHubPageInner() {
           </div>
         </div>
       )}
+      <StatusFooter onRefresh={load} />
     </HubSection>
   );
 }

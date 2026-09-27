@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import StatusFooter from "@/components/StatusFooter";
 import {
   CASH_TYPE_LABELS,
   CashDailyPanel,
@@ -144,10 +145,24 @@ export default function CashPage() {
         )}
       </div>
 
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+        {cards.slice(0, 5).map((c, i) => (
+          <div
+            key={c.label}
+            className="bk-kpi-card"
+            style={{ backgroundColor: ["#198754", "#c2185b", "#0f766e", "#f59e0b", "#334155"][i % 5] }}
+          >
+            <div className="min-w-0 flex-1 text-right">
+              <div className="bk-kpi-label">{c.label}</div>
+              <div className="bk-kpi-value truncate text-base">{c.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
       <fieldset className="rounded border border-slate-200 bg-white px-3 py-2">
-        <legend className="px-1 text-xs font-semibold text-slate-600">Kasa Özeti</legend>
+        <legend className="px-1 text-xs font-semibold text-slate-600">Kasa Özeti (detay)</legend>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          {cards.map((c) => (
+          {cards.slice(5).map((c) => (
             <div key={c.label} className="rounded bg-slate-50 px-2.5 py-1.5">
               <div className="text-[10px] text-baykus-muted">{c.label}</div>
               <div className="text-sm font-bold tabular-nums">{c.value}</div>
@@ -312,6 +327,8 @@ export default function CashPage() {
           </fieldset>
         </div>
       </div>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

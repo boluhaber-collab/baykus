@@ -11,6 +11,7 @@ import {
   inputCls,
 } from "@/components/reports/ReportChrome";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Row = {
   supplier_id: number;
@@ -172,6 +173,8 @@ export default function PayablesReportPage() {
           </tr>
         ))}
       </ReportTable>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

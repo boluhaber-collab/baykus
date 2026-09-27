@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const PERIODS = [
   { key: "30", label: "Son 30 Gün", days: 30 },
@@ -444,8 +445,21 @@ export default function ExpensesPage() {
         />
       </div>
 
-      <div className="text-xs font-semibold text-slate-700">
-        Listelenen: {items.length} masraf | Toplam: {formatMoney(total)}
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">☰</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Listelenen</div>
+            <div className="bk-kpi-value">{items.length}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam</div>
+            <div className="bk-kpi-value truncate">{formatMoney(total)}</div>
+          </div>
+        </div>
       </div>
 
       <div className="bk-table-wrap">
@@ -522,6 +536,8 @@ export default function ExpensesPage() {
           </tbody>
         </table>
       </div>
+
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }
