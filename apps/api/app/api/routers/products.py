@@ -180,6 +180,7 @@ def list_products(
     _: User = Depends(require_roles(*READ_ROLES)),
     q: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    brand: str | None = Query(default=None),
     product_type: str | None = Query(default=None, alias="type"),
     critical_only: bool = Query(default=False),
     active_only: bool = Query(default=False),
@@ -197,6 +198,8 @@ def list_products(
         )
     if category:
         query = query.filter(Product.category == category)
+    if brand:
+        query = query.filter(Product.brand == brand)
     if product_type:
         query = query.filter(Product.product_type == product_type)
     if active_only:
@@ -218,6 +221,21 @@ def list_categories(
         .filter(Product.category.isnot(None), Product.category != "")
         .distinct()
         .order_by(Product.category)
+        .all()
+    )
+    return [r[0] for r in rows if r[0]]
+
+
+@router.get("/brands", response_model=list[str])
+def list_brands(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+) -> list[str]:
+    rows = (
+        db.query(Product.brand)
+        .filter(Product.brand.isnot(None), Product.brand != "")
+        .distinct()
+        .order_by(Product.brand)
         .all()
     )
     return [r[0] for r in rows if r[0]]
@@ -1012,6 +1030,17 @@ def adjust_stock(
     _sync_product_stock(product)
     product.updated_at = datetime.utcnow()
 
+    note = payload.note
+    if payload.unit_cost is not None and payload.direction == "increase":
+        # Stok girişi: birim maliyeti ürün alış/maliyet alanına yansıt + nota yaz
+        try:
+            product.purchase_price = payload.unit_cost
+            product.cost = payload.unit_cost
+        except Exception:
+            pass
+        cost_txt = f"Birim maliyet: {payload.unit_cost}"
+        note = f"{note} · {cost_txt}" if note else cost_txt
+
     movement = StockMovement(
         product_id=product.id,
         variant_id=variant.id if variant else None,
@@ -1019,11 +1048,13 @@ def adjust_stock(
         quantity=payload.quantity,
         qty_before=qty_before,
         qty_after=qty_after,
-        reason=payload.reason,
-        note=payload.note,
+        reason=payload.reason or ("Stok girişi" if payload.direction == "increase" else None),
+        note=note,
         warehouse=payload.warehouse or product.warehouse or DEFAULT_WAREHOUSE,
         created_by_user_id=user.id,
     )
+    if payload.movement_date is not None:
+        movement.created_at = payload.movement_date
     db.add(movement)
     db.commit()
     db.refresh(movement)

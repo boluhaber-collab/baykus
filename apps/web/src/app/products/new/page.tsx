@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import ProductForm, { ProductFormPayload } from "@/components/ProductForm";
+import { ProductFormPayload } from "@/components/ProductForm";
+import TabbedProductForm from "@/components/TabbedProductForm";
 import { ProductDetail, apiFetch } from "@/lib/api";
 
-/** Masaüstü ürün kartı alanları — ProductForm (SKU, fiyat, stok, depo, beden/renk/baskı varyantları). */
+/** BizimHesap-parity sekmeli ürün ekleme formu. */
 export default function NewProductPage() {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -28,40 +29,35 @@ export default function NewProductPage() {
   }
 
   return (
-    <div className="max-w-4xl">
-      <div className="mb-6">
+    <div className="max-w-5xl space-y-3 pb-4">
+      <div>
         <div className="text-xs text-baykus-muted mb-1">
           <Link href="/products" className="text-baykus-primary hover:underline">
-            Ürün & Stok Merkezi
+            Ürün / Hizmet Tanımları
           </Link>
           <span className="mx-1">/</span>
-          <span className="font-medium text-baykus-text">Yeni Ürün / Hızlı Varyant</span>
+          <span className="font-medium text-baykus-text">Yeni</span>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 mt-1">Yeni Ürün</h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Masaüstü ürün kartı: SKU · kategori · alış/satış · depo · kritik eşik · beden/renk/baskı
-          varyantları. Toplu aktarım için{" "}
+        <h1 className="text-lg font-bold text-slate-900">Yeni Ürün / Hizmet</h1>
+        <p className="text-slate-500 text-xs mt-0.5">
+          Tanım · Fiyatlandırma · Diğer · Resimler · Varyant · Bağlı ürünler. Toplu aktarım:{" "}
           <Link href="/tools/import" className="text-baykus-primary hover:underline">
-            Excel içe aktarma
+            Excel
           </Link>
           .
         </p>
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
-      )}
-      {busy && (
-        <div className="mb-3 text-sm text-baykus-muted">Kaydediliyor…</div>
+        <div className="rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="bk-card p-5">
-        <ProductForm
-          submitLabel="Ürünü Oluştur"
-          onSubmit={handleSubmit}
-          onCancel={() => router.push("/products")}
-        />
-      </div>
+      <TabbedProductForm
+        mode="create"
+        busy={busy}
+        onSubmit={handleSubmit}
+        onCancel={() => router.push("/products")}
+      />
     </div>
   );
 }

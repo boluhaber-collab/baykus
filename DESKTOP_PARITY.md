@@ -552,3 +552,24 @@ Kaynak: `docs/parity-shots/party-card-first-view.png` (+ expand-row-*.png).
 | Zip | `baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
 
 Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI, çek/senet/iade canlı modülleri.
+
+## Batch 26 — Ürün listesi + sekmeli ürün formu + stok girişi (2026-09-27)
+
+Kaynak: `docs/parity-shots/product-list-*.png` · `product-definition.png` · `product-pricing.png` (BizimHesap UX parity; canlı sync yok).
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Ürün listesi CTA şeridi | `/products` — +Yeni · Excel · Toplu güncelle · Toplu resim (stub) · Toplu sil (soft-disable) · Stok Girişi | done |
+| Filtreler | Aktif/Tümü · kategori · marka (`GET /api/products/brands`) · tür · ara | done |
+| Navy tablo | Ürün adı + chip (kategori/HİZMET/marka/SKU) · Satış fiyatı · Stok (veya «Hizmet») | done |
+| Sekmeli form | `/products/new` · `/products/[id]/edit` — Tanım · Fiyatlandırma · Diğer · Resimler · Varyant · Bağlı | done |
+| Kaydet / Geri Dön | Yeşil / mavi üst bar (screenshot parity) | done |
+| KDV / ÖTV / birim / e-ticaret | Schema kolonu yok → `description` içi `<!--baykus-product-meta:…-->` JSON (dürüst) | done |
+| Stok girişi | `/stock/entry` → `POST /api/products/{id}/stock/adjust` direction=increase · unit_cost · movement_date | done |
+| Nav / hub linkleri | Ürün & Stok menü + stock hub + ürün detay CTA | done |
+| API | `GET /brands` · list `brand=` · StockAdjustIn `unit_cost`/`movement_date` — Alembic yok | done |
+| Smoke | `tsc --noEmit` clean | done |
+| Zip | `baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
+
+Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA, DPAPI, çoklu dosya resim upload API, ilişkisel bağlı-ürün tablosu.
+

@@ -31,11 +31,18 @@ function ProductsHubPageInner() {
   const [items, setItems] = useState<Product[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
+  const [brand, setBrand] = useState("");
   const [productType, setProductType] = useState("");
+  const [activeFilter, setActiveFilter] = useState<"active" | "all">("active");
+  const [selected, setSelected] = useState<Record<number, boolean>>({});
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showBulkImageStub, setShowBulkImageStub] = useState(false);
 
   const criticalOnly = tab === "kritik";
 
@@ -46,23 +53,28 @@ function ProductsHubPageInner() {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       if (category) params.set("category", category);
+      if (brand) params.set("brand", brand);
       if (productType) params.set("type", productType);
       if (criticalOnly) params.set("critical_only", "true");
+      if (activeFilter === "active") params.set("active_only", "true");
       const qs = params.toString();
-      const [data, cats, dash] = await Promise.all([
+      const [data, cats, brs, dash] = await Promise.all([
         apiFetch<Product[]>(`/api/products${qs ? `?${qs}` : ""}`),
         apiFetch<string[]>("/api/products/categories"),
+        apiFetch<string[]>("/api/products/brands").catch(() => [] as string[]),
         apiFetch<DashboardSummary>("/api/dashboard/summary").catch(() => null),
       ]);
       setItems(data);
       setCategories(cats);
+      setBrands(brs);
       setSummary(dash);
+      setSelected({});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     } finally {
       setLoading(false);
     }
-  }, [q, category, productType, criticalOnly]);
+  }, [q, category, brand, productType, criticalOnly, activeFilter]);
 
   useEffect(() => {
     load();
@@ -88,6 +100,11 @@ function ProductsHubPageInner() {
     };
   }, [items, summary]);
 
+  const selectedIds = useMemo(
+    () => Object.entries(selected).filter(([, v]) => v).map(([k]) => Number(k)),
+    [selected],
+  );
+
   async function onDelete(id: number) {
     if (!confirm("Bu ürünü silmek istediğinize emin misiniz?")) return;
     try {
@@ -96,6 +113,45 @@ function ProductsHubPageInner() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Silme hatası");
     }
+  }
+
+  async function bulkSoftDisable() {
+    if (selectedIds.length === 0) {
+      setError("Toplu silme için ürün seçin (satır kutuları)");
+      return;
+    }
+    if (
+      !confirm(
+        `${selectedIds.length} ürün pasife alınacak (soft-disable). Devam?`,
+      )
+    ) {
+      return;
+    }
+    setBulkBusy(true);
+    setError("");
+    setMsg("");
+    try {
+      let ok = 0;
+      for (const id of selectedIds) {
+        await apiFetch(`/api/products/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({ is_active: false }),
+        });
+        ok += 1;
+      }
+      setMsg(`${ok} ürün pasife alındı`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Toplu pasifleştirme hatası");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function toggleAll(on: boolean) {
+    const next: Record<number, boolean> = {};
+    if (on) for (const p of items) next[p.id] = true;
+    setSelected(next);
   }
 
   return (
@@ -138,12 +194,72 @@ function ProductsHubPageInner() {
         </Link>
       </div>
 
+      {/* BizimHesap-style colorful CTA strip */}
+      <div className="bk-product-cta-bar">
+        <Link href="/products/new" className="bk-product-cta" style={{ backgroundColor: "#22a447" }}>
+          + Yeni Ürün/Hizmet
+        </Link>
+        <Link href="/tools/import" className="bk-product-cta" style={{ backgroundColor: "#e2b44d" }}>
+          Excel&apos;den yükle
+        </Link>
+        <Link
+          href="/tools/import?type=bulk-price"
+          className="bk-product-cta"
+          style={{ backgroundColor: "#22d3ee", color: "#0f172a" }}
+        >
+          Toplu güncelle
+        </Link>
+        <button
+          type="button"
+          onClick={() => setShowBulkImageStub(true)}
+          className="bk-product-cta"
+          style={{ backgroundColor: "#7c3aed" }}
+        >
+          Toplu resim
+        </button>
+        <button
+          type="button"
+          onClick={() => void bulkSoftDisable()}
+          disabled={bulkBusy}
+          className="bk-product-cta"
+          style={{ backgroundColor: "#facc15", color: "#0f172a" }}
+        >
+          Toplu sil {selectedIds.length ? `(${selectedIds.length})` : ""}
+        </button>
+        <Link href="/stock/entry" className="bk-product-cta" style={{ backgroundColor: "#0369a1" }}>
+          Stok Girişi
+        </Link>
+      </div>
+      <div className="flex flex-wrap gap-3 text-xs mb-2">
+        <Link href="/products/new" className="text-baykus-primary hover:underline font-medium">
+          + Yeni ürün kaydı yap
+        </Link>
+        <span className="text-slate-300">|</span>
+        <Link href="/products?tab=urunler" className="text-baykus-primary hover:underline">
+          Mevcut bir üründen kopyala (listeden Aç → Düzenle)
+        </Link>
+      </div>
+
+      {showBulkImageStub && (
+        <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+          <div className="font-semibold mb-1">Toplu resim yükleme</div>
+          <p className="text-xs mb-2">
+            Çoklu dosya yükleme API&apos;si henüz yok — ürün kartında Fotoğraf URL alanını kullanın
+            veya Excel ile <code>photo_url</code> güncelleyin.
+          </p>
+          <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => setShowBulkImageStub(false)}>
+            Kapat
+          </button>
+        </div>
+      )}
+
       <HubActionsBar
         columns={6}
         actions={[
           { href: "/products?tab=urunler", label: "Ürün Yönetimi", color: "#0ea5e9" },
           { href: "/products?tab=variants", label: "Kartlar / Varyantlar", color: "#0284c7" },
           { href: "/stock", label: "Stok Yönetimi", color: "#0369a1" },
+          { href: "/stock/entry", label: "Stok Girişi", color: "#0f766e" },
           { href: "/stock/critical", label: "Kritik Stok", color: "#be123c" },
           { href: "/reports/stock", label: "Stok Raporu", color: "#2563eb" },
           { href: "/products/new", label: "Hızlı Varyant", color: "#f59e0b" },
@@ -158,16 +274,27 @@ function ProductsHubPageInner() {
       <HubTabs tabs={TABS} active={tab} onChange={(id) => setTab(id as Tab)} />
 
       {error && <div className="mb-3 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
+      {msg && <div className="mb-3 rounded-lg bg-emerald-50 text-emerald-800 px-4 py-2 text-sm">{msg}</div>}
 
       {(tab === "urunler" || tab === "kritik") && (
         <>
           <div className="bk-filter-bar">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Ad / SKU / marka ara…"
-              className="bk-input max-w-[220px]"
-            />
+            <div className="flex rounded border border-baykus-line overflow-hidden text-xs font-semibold">
+              <button
+                type="button"
+                className={`px-3 py-1.5 ${activeFilter === "active" ? "bg-[#0ea5e9] text-white" : "bg-white text-slate-600"}`}
+                onClick={() => setActiveFilter("active")}
+              >
+                Aktif Ürünler
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-1.5 ${activeFilter === "all" ? "bg-[#0ea5e9] text-white" : "bg-white text-slate-600"}`}
+                onClick={() => setActiveFilter("all")}
+              >
+                Tüm Ürünler
+              </button>
+            </div>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
@@ -181,6 +308,18 @@ function ProductsHubPageInner() {
               ))}
             </select>
             <select
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              className="bk-input max-w-[160px]"
+            >
+              <option value="">Tüm markalar</option>
+              {brands.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+            <select
               value={productType}
               onChange={(e) => setProductType(e.target.value)}
               className="bk-input max-w-[140px]"
@@ -190,11 +329,21 @@ function ProductsHubPageInner() {
               <option value="hizmet">Hizmet</option>
             </select>
             <div className="flex-1" />
+            <label className="text-xs text-slate-500 flex items-center gap-1">
+              Ara:
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Ad / SKU / marka…"
+                className="bk-input max-w-[200px]"
+              />
+            </label>
             <button
               type="button"
               onClick={() => {
                 setQ("");
                 setCategory("");
+                setBrand("");
                 setProductType("");
               }}
               className="bk-btn bk-btn-ghost"
@@ -207,16 +356,20 @@ function ProductsHubPageInner() {
           </div>
 
           <div className="bk-table-wrap">
-            <table className="bk-table">
+            <table className="bk-table bk-product-list-table">
               <thead>
                 <tr>
-                  <th>SKU</th>
-                  <th>Ad</th>
-                  <th>Kategori</th>
-                  <th>Tür</th>
-                  <th>Satış</th>
-                  <th>Stok</th>
-                  <th>Varyant</th>
+                  <th className="w-8">
+                    <input
+                      type="checkbox"
+                      checked={items.length > 0 && selectedIds.length === items.length}
+                      onChange={(e) => toggleAll(e.target.checked)}
+                      aria-label="Tümünü seç"
+                    />
+                  </th>
+                  <th>Ürün Hizmet Adı</th>
+                  <th className="text-right">Satış Fiyatı</th>
+                  <th className="text-right">Stok Miktarı</th>
                   <th></th>
                 </tr>
               </thead>
@@ -225,40 +378,63 @@ function ProductsHubPageInner() {
                   const total = p.total_stock ?? p.stock_qty;
                   const thr = p.critical_stock_threshold ?? 10;
                   const critical = p.is_critical || (p.product_type !== "hizmet" && total < thr);
+                  const isService = p.product_type === "hizmet";
                   return (
                     <tr key={p.id} className={critical ? "bg-red-50/40" : undefined}>
-                      <td className="font-mono text-xs">{p.sku}</td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={!!selected[p.id]}
+                          onChange={(e) =>
+                            setSelected((s) => ({ ...s, [p.id]: e.target.checked }))
+                          }
+                          aria-label={`Seç ${p.name}`}
+                        />
+                      </td>
                       <td className="font-medium">
-                        <Link href={`/products/${p.id}`} className="text-baykus-primary hover:underline">
+                        <Link
+                          href={`/products/${p.id}`}
+                          className="text-baykus-text hover:text-baykus-primary uppercase tracking-tight"
+                        >
                           {p.name}
                         </Link>
-                        {p.brand && <span className="block text-xs text-slate-400">{p.brand}</span>}
+                        <div className="bk-product-chips mt-1">
+                          {p.category && <span className="bk-product-chip bk-product-chip--cat">{p.category}</span>}
+                          {isService && <span className="bk-product-chip bk-product-chip--svc">HİZMET</span>}
+                          {p.brand && <span className="bk-product-chip bk-product-chip--brand">{p.brand}</span>}
+                          {!p.is_active && <span className="bk-product-chip bk-product-chip--off">PASİF</span>}
+                          <span className="bk-product-chip bk-product-chip--sku font-mono">{p.sku}</span>
+                        </div>
                       </td>
-                      <td>{p.category || "—"}</td>
-                      <td>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">
-                          {p.product_type === "hizmet" ? "Hizmet" : "Stoklu"}
-                        </span>
+                      <td className="text-right tabular-nums whitespace-nowrap">
+                        {formatMoney(Number(p.base_price))}
                       </td>
-                      <td>{formatMoney(Number(p.base_price))}</td>
-                      <td>
-                        {p.product_type === "hizmet" ? (
-                          <span className="text-slate-400">—</span>
+                      <td className="text-right">
+                        {isService ? (
+                          <span className="text-slate-500 font-medium">Hizmet</span>
                         ) : (
                           <span
                             className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${stockBadgeClass(total, thr, critical)}`}
                           >
-                            {total}
+                            {total} ad
                             {critical ? " kritik" : ""}
                           </span>
                         )}
                       </td>
-                      <td className="text-baykus-muted">{p.variants_count ?? 0}</td>
                       <td className="text-right whitespace-nowrap space-x-2">
-                        <Link href={`/products/${p.id}`} className="text-baykus-primary hover:underline">
+                        <Link
+                          href={`/products/${p.id}/edit`}
+                          className="text-baykus-primary hover:underline text-xs"
+                        >
+                          Düzenle
+                        </Link>
+                        <Link href={`/products/${p.id}`} className="text-slate-600 hover:underline text-xs">
                           Aç
                         </Link>
-                        <button onClick={() => onDelete(p.id)} className="text-red-600 hover:underline">
+                        <button
+                          onClick={() => onDelete(p.id)}
+                          className="text-red-600 hover:underline text-xs"
+                        >
                           Sil
                         </button>
                       </td>
@@ -267,7 +443,7 @@ function ProductsHubPageInner() {
                 })}
                 {!loading && items.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center text-baykus-muted py-8">
+                    <td colSpan={5} className="text-center text-baykus-muted py-8">
                       Ürün yok
                     </td>
                   </tr>
@@ -289,11 +465,11 @@ function ProductsHubPageInner() {
             actions={[
               { href: "/reports/stock", label: "Stok Durumu Raporu", color: "#2563eb" },
               { href: "/stock/critical", label: "Kritik Stok Listesini Göster", color: "#be123c" },
+              { href: "/stock/entry", label: "Stok Girişi", color: "#0f766e" },
               { href: "/tools/import", label: "Toplu Ürün / Stok Aktarımı", color: "#0ea5e9" },
               { href: "/stock", label: "Stok Yönetimi", color: "#0369a1" },
               { href: "/stock/warehouses", label: "Depolar", color: "#14b8a6" },
               { href: "/stock/count", label: "Stok Sayımı", color: "#22a447" },
-              { href: "/tools/import", label: "Toplu Ürün / Stok Aktarımı", color: "#0ea5e9" },
             ]}
           />
         </div>
@@ -302,7 +478,6 @@ function ProductsHubPageInner() {
     </HubSection>
   );
 }
-
 
 export default function ProductsHubPage() {
   return (

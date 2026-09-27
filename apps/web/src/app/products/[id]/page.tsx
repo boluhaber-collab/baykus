@@ -143,13 +143,27 @@ export default function ProductDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/products/${id}/edit`}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ background: "#22a447" }}
+          >
+            Düzenle
+          </Link>
           <button
             type="button"
             onClick={() => setEditing((v) => !v)}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
           >
-            {editing ? "Formu Kapat" : "Düzenle"}
+            {editing ? "Hızlı formu kapat" : "Hızlı düzenle"}
           </button>
+          <Link
+            href="/stock/entry"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ background: "#0369a1" }}
+          >
+            Stok Girişi
+          </Link>
           <Link
             href={`/products/labels?product_id=${id}`}
             className="rounded-lg px-4 py-2 text-sm font-medium text-white"

@@ -140,6 +140,9 @@ class StockAdjustIn(BaseModel):
     reason: str | None = Field(default=None, max_length=255)
     note: str | None = None
     warehouse: str | None = None
+    # Stok girişi formu: isteğe bağlı birim maliyet + hareket tarihi (Alembic yok)
+    unit_cost: Decimal | None = None
+    movement_date: datetime | None = None
 
 
 class StockAdjustOut(BaseModel):

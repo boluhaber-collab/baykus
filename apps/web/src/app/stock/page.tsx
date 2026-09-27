@@ -67,6 +67,9 @@ export default function StockPage() {
           <p className="text-baykus-muted text-[11px]">Özet, kritik kalemler, Excel/CSV içe-dışa aktarma</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/stock/entry" className="bk-btn text-xs font-semibold text-white" style={{ backgroundColor: "#0369a1" }}>
+            Stok Girişi
+          </Link>
           <Link href="/stock/count" className="bk-btn text-xs font-semibold text-white" style={{ backgroundColor: "#22a447" }}>
             Stok Sayımı
           </Link>
