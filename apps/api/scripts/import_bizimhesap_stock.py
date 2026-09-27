@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot BizimHesap → Baykuş import: products, variants, warehouses, stock.
+"""One-shot BizimHesap -> Baykuş import: products, variants, warehouses, stock.
 
 Usage (from apps/api, with venv + SQLite):
   export DATABASE_URL=sqlite:///./baykus.db
@@ -184,7 +184,7 @@ def backup_db(db_path: Path, backups_dir: Path) -> Path | None:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = backups_dir / f"baykus_pre_bh_import_{stamp}.db"
     shutil.copy2(db_path, dest)
-    print(f"  Backup → {dest} ({dest.stat().st_size} bytes)")
+    print(f"  Backup -> {dest} ({dest.stat().st_size} bytes)")
     return dest
 
 
@@ -218,7 +218,7 @@ def wipe_stock_catalog(db) -> dict[str, int]:
             for col in cols:
                 res = db.execute(text(f"UPDATE {table} SET {col} = NULL WHERE {col} IS NOT NULL"))
                 counts[f"null_{table}_{col}"] = res.rowcount or 0
-        except Exception as exc:  # noqa: BLE001 — table may not exist on fresh DB
+        except Exception as exc:  # noqa: BLE001 - table may not exist on fresh DB
             counts[f"null_{table}_err"] = str(exc)  # type: ignore[assignment]
 
     for table in (
@@ -256,20 +256,20 @@ def fetch_live(token: str, public_key: str, cache_dir: Path | None) -> tuple[lis
     from app.integrations.bizimhesap_b2b import BizimHesapB2BClient
 
     client = BizimHesapB2BClient(token=token, public_key=public_key)
-    print("  GET /warehouses …")
+    print("  GET /warehouses ...")
     whs = client.fetch_warehouses()
-    print(f"  → {len(whs)} warehouses")
-    print("  GET /products …")
+    print(f"  -> {len(whs)} warehouses")
+    print("  GET /products ...")
     prods = client.fetch_products()
-    print(f"  → {len(prods)} product rows")
+    print(f"  -> {len(prods)} product rows")
     inventories: dict[str, list] = {}
     for wh in whs:
         wid = wh["id"]
         time.sleep(0.8)  # Cloudflare rate-limit courtesy
-        print(f"  GET /inventory/{wid} ({wh.get('title')}) …")
+        print(f"  GET /inventory/{wid} ({wh.get('title')}) ...")
         items = client.fetch_inventory(wid)
         inventories[wid] = items
-        print(f"  → {len(items)} inventory lines")
+        print(f"  -> {len(items)} inventory lines")
 
     if cache_dir:
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -432,7 +432,7 @@ def import_all(
     db.flush()
 
     # --- Apply inventory per warehouse ---
-    # In-memory upsert: query() won't see unflushed pending rows → UNIQUE collisions.
+    # In-memory upsert: query() won't see unflushed pending rows -> UNIQUE collisions.
     ws_index: dict[tuple[int, int, str], WarehouseStock] = {}
 
     def upsert_ws(prod: Product, variant: ProductVariant | None, wname: str, qty: int) -> WarehouseStock:
@@ -552,7 +552,7 @@ def import_all(
         if v:
             v.stock_qty = total
 
-    # Products with no warehouse_stocks but BH quantity — seed Ana Depo from product.quantity
+    # Products with no warehouse_stocks but BH quantity - seed Ana Depo from product.quantity
     for bh_id, rows in by_id.items():
         prod = product_map.get(bh_id)
         if not prod:
@@ -585,7 +585,7 @@ def import_all(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="BizimHesap → Baykuş ürün/depo/stok import")
+    parser = argparse.ArgumentParser(description="BizimHesap -> Baykuş ürün/depo/stok import")
     parser.add_argument("--token-file", help="Token plain text or JSON (card.BIZIMHESAP_TOKEN)")
     parser.add_argument("--public-key", default=DEFAULT_PUBLIC_KEY)
     parser.add_argument(
@@ -614,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
 
-    print("=== BizimHesap → Baykuş stock import ===")
+    print("=== BizimHesap -> Baykus stock import ===")
     print(f"  cwd={Path.cwd()}")
     print(f"  DATABASE_URL={os.environ.get('DATABASE_URL')}")
 
@@ -634,7 +634,7 @@ def main(argv: list[str] | None = None) -> int:
         bh_products, bh_warehouses, inventories = load_from_cache(cache_dir)
     else:
         assert token is not None
-        print("  Fetching live from bizimhesap.com …")
+        print("  Fetching live from bizimhesap.com ...")
         bh_products, bh_warehouses, inventories = fetch_live(token, args.public_key, write_cache)
 
     print(
@@ -645,7 +645,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.dry_run:
-        print("  Dry-run — DB untouched.")
+        print("  Dry-run - DB untouched.")
         return 0
 
     # Ensure SQLite schema exists without re-seeding demo catalog
@@ -653,7 +653,7 @@ def main(argv: list[str] | None = None) -> int:
     from app.bootstrap_sqlite import is_sqlite
 
     if is_sqlite():
-        import app.models  # noqa: F401 — register metadata
+        import app.models  # noqa: F401 - register metadata
         from app.db.base import Base
         from app.db.session import engine
 
@@ -668,19 +668,19 @@ def main(argv: list[str] | None = None) -> int:
 
     db_path = resolve_db_path()
     if not args.skip_backup:
-        print("  Backing up SQLite …")
+        print("  Backing up SQLite ...")
         backup_db(db_path, API_ROOT / "backups")
 
     from app.db.session import SessionLocal
 
     db = SessionLocal()
     try:
-        print("  Wiping demo product/warehouse/stock data …")
+        print("  Wiping demo product/warehouse/stock data ...")
         wipe_counts = wipe_stock_catalog(db)
         for k, v in wipe_counts.items():
             print(f"    {k}: {v}")
 
-        print("  Importing …")
+        print("  Importing ...")
         stats = import_all(db, bh_products, bh_warehouses, inventories)
         print("  Done:")
         for k, v in stats.items():
