@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PayableItem, apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 import SupplierFisPanel from "@/components/SupplierFisPanel";
 
 function SupplierPayablesInner() {
@@ -61,10 +62,10 @@ function SupplierPayablesInner() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold">Açık Borçlar</h2>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Açık Borçlar</h2>
           <p className="text-xs text-baykus-muted">
             Tedarik Merkezi › Borç / Alacak · fiş + ödeme kaydı
           </p>
@@ -192,6 +193,7 @@ function SupplierPayablesInner() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

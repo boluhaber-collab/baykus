@@ -12,6 +12,7 @@ import {
   orderRowTagClass,
   statusBadgeClass,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const OPEN = ORDER_STATUSES.filter((s) => s !== "Teslim Edildi" && s !== "Sipariş İptali");
 const FLOW = ["Sipariş Alındı", "Hazırlanıyor", "Baskıda", "Hazır"] as const;
@@ -108,11 +109,11 @@ export default function WorkOrdersPage() {
   }, [items]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold">İş Emirleri</h2>
-          <p className="text-xs text-baykus-muted">Üretim › İş Emirleri · PDF · durum ilerlet · filtre</p>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">İş Emirleri</h2>
+          <p className="text-[11px] text-baykus-muted">Üretim › İş Emirleri · PDF · durum ilerlet · filtre</p>
         </div>
         <div className="flex gap-2">
           <Link href="/production" className="bk-btn bk-btn-ghost text-xs">
@@ -237,6 +238,7 @@ export default function WorkOrdersPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

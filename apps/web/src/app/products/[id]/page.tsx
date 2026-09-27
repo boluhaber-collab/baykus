@@ -12,6 +12,7 @@ import {
   stockBadgeClass,
   ProductPriceListRef,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -126,16 +127,16 @@ export default function ProductDetailPage() {
   const movements: StockMovement[] = product.recent_movements || [];
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs text-baykus-muted mb-1">
-            <Link href="/products" className="text-baykus-primary hover:underline">Ürünler</Link>
+          <div className="text-[11px] text-baykus-muted mb-0.5">
+            <Link href="/products" className="text-baykus-primary hover:underline">Ürün & Stok</Link>
             <span className="mx-1">/</span>
             <span className="font-medium text-baykus-text">{product.sku}</span>
           </div>
-          <h1 className="text-2xl font-bold text-baykus-text mt-1">{product.name}</h1>
-          <p className="text-slate-500 text-sm font-mono">
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">{product.name}</h1>
+          <p className="text-baykus-muted text-[11px] font-mono">
             {product.sku}
             {product.brand ? ` · ${product.brand}` : ""}
             {product.category ? ` · ${product.category}` : ""}
@@ -191,38 +192,38 @@ export default function ProductDetailPage() {
       )}
 
       {!editing && (
-        <div className="space-y-6">
-          <div className="grid md:grid-cols-4 gap-4">
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Satış</div>
-              <div className="text-lg font-semibold">{formatMoney(Number(product.base_price))}</div>
-            </div>
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Alış / Maliyet</div>
-              <div className="text-lg font-semibold">
-                {formatMoney(Number(product.purchase_price || 0))} /{" "}
-                {formatMoney(Number(product.cost || 0))}
+        <div className="space-y-3">
+          <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+            <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+              <span className="bk-kpi-icon">₺</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Satış</div>
+                <div className="bk-kpi-value truncate">{formatMoney(Number(product.base_price))}</div>
               </div>
             </div>
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Toplam stok</div>
-              <div className="text-lg font-semibold">
-                {product.product_type === "hizmet" ? (
-                  "—"
-                ) : (
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-0.5 text-sm font-medium ${stockBadgeClass(total, thr, product.is_critical)}`}
-                  >
-                    {total}
-                    {product.is_critical ? " kritik" : ""}
-                  </span>
-                )}
+            <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+              <span className="bk-kpi-icon">↓</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Alış / Maliyet</div>
+                <div className="bk-kpi-value truncate text-sm">
+                  {formatMoney(Number(product.purchase_price || 0))} / {formatMoney(Number(product.cost || 0))}
+                </div>
               </div>
             </div>
-            <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <div className="text-xs text-slate-500">Depo / Eşik</div>
-              <div className="text-lg font-semibold">
-                {product.warehouse || "Ana Depo"} · {thr}
+            <div className="bk-kpi-card" style={{ backgroundColor: product.is_critical || (product.product_type !== "hizmet" && total < thr) ? "#be123c" : "#334155" }}>
+              <span className="bk-kpi-icon">📦</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Toplam stok</div>
+                <div className="bk-kpi-value">
+                  {product.product_type === "hizmet" ? "—" : <>{total}{product.is_critical ? " !" : ""}</>}
+                </div>
+              </div>
+            </div>
+            <div className="bk-kpi-card" style={{ backgroundColor: "#64748b" }}>
+              <span className="bk-kpi-icon">🏷</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Depo / Eşik</div>
+                <div className="bk-kpi-value truncate text-sm">{product.warehouse || "Ana Depo"} · {thr}</div>
               </div>
             </div>
           </div>
@@ -278,17 +279,18 @@ export default function ProductDetailPage() {
               </div>
             </div>
             {product.variants?.length > 0 ? (
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-slate-600">
+              <div className="bk-table-wrap">
+              <table className="bk-table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-3">BEDEN</th>
-                    <th className="px-4 py-3">RENK</th>
-                    <th className="px-4 py-3">Baskı</th>
-                    <th className="px-4 py-3">Varyant / SKU</th>
-                    <th className="px-4 py-3">Barkod</th>
-                    <th className="px-4 py-3 text-right">Satış Fiyatı</th>
-                    <th className="px-4 py-3 text-right">Alış Fiyatı</th>
-                    <th className="px-4 py-3 text-right">Stok</th>
+                    <th>BEDEN</th>
+                    <th>RENK</th>
+                    <th>Baskı</th>
+                    <th>Varyant / SKU</th>
+                    <th>Barkod</th>
+                    <th className="text-right">Satış Fiyatı</th>
+                    <th className="text-right">Alış Fiyatı</th>
+                    <th className="text-right">Stok</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -320,6 +322,7 @@ export default function ProductDetailPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : (
               <p className="px-4 py-4 text-sm text-slate-500">
                 Varyant yok — ana stok: {total} ({product.warehouse || "Ana Depo"})
@@ -328,19 +331,20 @@ export default function ProductDetailPage() {
           </div>
 
           {/* Stok by warehouse */}
-          <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
+          <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 flex justify-between">
               <h2 className="font-semibold text-sm">Depo Bazlı Stok</h2>
               <Link href="/stock/warehouses" className="text-xs text-baykus-primary hover:underline">
                 Depo yönetimi
               </Link>
             </div>
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-600">
+            <div className="bk-table-wrap">
+            <table className="bk-table">
+              <thead>
                 <tr>
-                  <th className="px-4 py-2">Depo</th>
-                  <th className="px-4 py-2">Varyant</th>
-                  <th className="px-4 py-2 text-right">Miktar</th>
+                  <th>Depo</th>
+                  <th>Varyant</th>
+                  <th className="text-right">Miktar</th>
                 </tr>
               </thead>
               <tbody>
@@ -356,13 +360,14 @@ export default function ProductDetailPage() {
                 ))}
                 {warehouseStocks.length === 0 && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-4 text-center text-slate-400">
+                    <td colSpan={3} className="text-center text-baykus-muted py-4">
                       Depo stok satırı yok
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+            </div>
           </div>
 
           {product.product_type !== "hizmet" && (
@@ -478,6 +483,7 @@ export default function ProductDetailPage() {
           onCancel={() => setEditing(false)}
         />
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReceivableItem, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function CariReceivablesPage() {
   const [items, setItems] = useState<ReceivableItem[]>([]);
@@ -58,11 +59,11 @@ export default function CariReceivablesPage() {
   }
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Cari / Açık Alacaklar</h1>
-          <p className="text-slate-500 text-sm">Bakiyesi 0&apos;dan büyük müşteriler · filtre + CSV</p>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Cari / Açık Alacaklar</h1>
+          <p className="text-[11px] text-baykus-muted">Bakiyesi 0&apos;dan büyük müşteriler · filtre + CSV</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/customers" className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50">
@@ -157,6 +158,7 @@ export default function CariReceivablesPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

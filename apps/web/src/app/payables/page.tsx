@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PayableItem, apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 import SupplierFisPanel from "@/components/SupplierFisPanel";
 
 export default function PayablesPage() {
@@ -40,11 +41,11 @@ export default function PayablesPage() {
   const total = filtered.reduce((s, i) => s + Number(i.balance || 0), 0);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Borçlar</h1>
-          <p className="text-slate-500 text-sm">Tedarik Merkezi › Borç-Alacak · fiş kaydı + yazdır/PDF</p>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Borçlar</h1>
+          <p className="text-[11px] text-baykus-muted">Tedarik Merkezi › Borç-Alacak · fiş kaydı + yazdır/PDF</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/suppliers" className="bk-btn text-xs text-white" style={{ background: "#0f766e" }}>
@@ -157,6 +158,7 @@ export default function PayablesPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type PlanEvent = {
   tur: string;
@@ -106,8 +107,8 @@ export default function WeeklyPlanPage() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-base font-bold">Haftalık Plan</h2>
           <p className="text-xs text-baykus-muted">Operasyon › Haftalık Plan · teslim / kredi / not / masraf</p>
@@ -200,6 +201,7 @@ export default function WeeklyPlanPage() {
           </div>
         ))}
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

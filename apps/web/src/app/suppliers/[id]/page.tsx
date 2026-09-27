@@ -11,6 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function SupplierDetailPage() {
   const params = useParams();
@@ -175,8 +176,8 @@ export default function SupplierDetailPage() {
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-baykus-500";
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-xs text-baykus-muted mb-1">
             <Link href="/suppliers" className="text-baykus-primary hover:underline">Tedarik Merkezi</Link>
@@ -202,21 +203,30 @@ export default function SupplierDetailPage() {
         <div className="rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="grid sm:grid-cols-3 gap-3">
-        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#e68778" }}>
-          <div className="text-[11px] font-bold text-center">Açık Bakiye</div>
-          <div className="text-xl font-bold tabular-nums text-center">{formatMoney(bal)}</div>
-          <div className="text-[10px] text-center opacity-90">
-            {bal > 0 ? "tedarikçiye borç" : bal < 0 ? "tedarikçiden alacak" : "hesap kapalı"}
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#e68778" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Açık Bakiye</div>
+            <div className="bk-kpi-value truncate">{formatMoney(bal)}</div>
+            <div className="text-[10px] opacity-90">
+              {bal > 0 ? "tedarikçiye borç" : bal < 0 ? "tedarikçiden alacak" : "hesap kapalı"}
+            </div>
           </div>
         </div>
-        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#7fb5df" }}>
-          <div className="text-[11px] font-bold text-center">Toplam Borç</div>
-          <div className="text-xl font-bold tabular-nums text-center">{formatMoney(toplamBorc)}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#7fb5df" }}>
+          <span className="bk-kpi-icon">↓</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam Borç</div>
+            <div className="bk-kpi-value truncate">{formatMoney(toplamBorc)}</div>
+          </div>
         </div>
-        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#8bd0a7" }}>
-          <div className="text-[11px] font-bold text-center">Toplam Ödeme / Mahsup</div>
-          <div className="text-xl font-bold tabular-nums text-center">{formatMoney(toplamOdeme)}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#8bd0a7" }}>
+          <span className="bk-kpi-icon">↑</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam Ödeme / Mahsup</div>
+            <div className="bk-kpi-value truncate">{formatMoney(toplamOdeme)}</div>
+          </div>
         </div>
       </div>
 
@@ -468,16 +478,17 @@ export default function SupplierDetailPage() {
             </div>
           )}
         </div>
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+        <div className="bk-table-wrap">
+        <table className="bk-table">
+          <thead>
             <tr>
-              <th className="px-4 py-2">Tarih</th>
-              <th className="px-4 py-2">Tip</th>
-              <th className="px-4 py-2">Belge</th>
-              <th className="px-4 py-2">Not</th>
-              <th className="px-4 py-2 text-right">Borç</th>
-              <th className="px-4 py-2 text-right">Alacak</th>
-              <th className="px-4 py-2 text-right">Bakiye</th>
+              <th>Tarih</th>
+              <th>Tip</th>
+              <th>Belge</th>
+              <th>Not</th>
+              <th className="text-right">Borç</th>
+              <th className="text-right">Alacak</th>
+              <th className="text-right">Bakiye</th>
             </tr>
           </thead>
           <tbody>
@@ -508,14 +519,16 @@ export default function SupplierDetailPage() {
             ))}
             {(statement?.movements || []).length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={7} className="text-center text-baykus-muted py-6">
                   Hareket yok
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        </div>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Row = {
   product_id: number | null;
@@ -79,8 +80,8 @@ export default function LastPurchasePricesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-base font-bold">Son Alış Fiyatları</h2>
           <p className="text-xs text-baykus-muted">
@@ -165,6 +166,7 @@ export default function LastPurchasePricesPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

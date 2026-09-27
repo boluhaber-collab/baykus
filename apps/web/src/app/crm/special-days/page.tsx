@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Customer, SpecialDay, apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const TYPES = ["doğum günü", "yıldönümü", "kampanya", "diğer"];
 
@@ -84,8 +85,8 @@ export default function SpecialDaysPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-base font-bold">Özel Günler</h2>
           <p className="text-xs text-baykus-muted">Doğum günü, yıldönümü, kampanya — müşteriye bağlı</p>
@@ -242,6 +243,7 @@ export default function SpecialDaysPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

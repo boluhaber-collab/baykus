@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PriceList, apiFetch, downloadAuthFile } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function PriceListsPage() {
   const [items, setItems] = useState<PriceList[]>([]);
@@ -60,11 +61,11 @@ export default function PriceListsPage() {
   const itemSum = items.reduce((s, p) => s + Number(p.item_count ?? p.items?.length ?? 0), 0);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold">Fiyat Listesi</h2>
-          <p className="text-xs text-baykus-muted">Fiyat / Maliyet › Fiyat Listesi · toplu %/mutlak · Excel şablon · yazdır/CSV/PDF</p>
+          <h2 className="text-lg font-bold text-baykus-text leading-tight">Fiyat Listesi</h2>
+          <p className="text-[11px] text-baykus-muted">Fiyat / Maliyet › Fiyat Listesi · toplu %/mutlak · Excel şablon · yazdır/CSV/PDF</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -85,18 +86,27 @@ export default function PriceListsPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="grid sm:grid-cols-3 gap-2">
-        <div className="bk-card px-3 py-2">
-          <div className="text-[11px] text-baykus-muted">Liste</div>
-          <div className="text-xl font-bold">{items.length}</div>
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">☰</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Liste</div>
+            <div className="bk-kpi-value">{items.length}</div>
+          </div>
         </div>
-        <div className="bk-card px-3 py-2">
-          <div className="text-[11px] text-baykus-muted">Aktif</div>
-          <div className="text-xl font-bold text-emerald-700">{activeCount}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">✓</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Aktif</div>
+            <div className="bk-kpi-value">{activeCount}</div>
+          </div>
         </div>
-        <div className="bk-card px-3 py-2">
-          <div className="text-[11px] text-baykus-muted">Toplam kalem</div>
-          <div className="text-xl font-bold">{itemSum}</div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+          <span className="bk-kpi-icon">¤</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam kalem</div>
+            <div className="bk-kpi-value">{itemSum}</div>
+          </div>
         </div>
       </div>
 
@@ -196,6 +206,7 @@ export default function PriceListsPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

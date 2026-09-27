@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 type Task = {
   id: number;
@@ -139,8 +140,8 @@ export default function TasksPage() {
   }
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-xs text-baykus-muted mb-1">
             <Link href="/dashboard" className="text-baykus-primary hover:underline">
@@ -149,8 +150,8 @@ export default function TasksPage() {
             <span className="mx-1">/</span>
             <span className="font-medium text-baykus-text">Görevler</span>
           </div>
-          <h1 className="text-xl font-bold">Görev / Hatırlatma Sistemi</h1>
-          <p className="text-sm text-baykus-muted">Açık görevler · bugün · tamamlananlar</p>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Görev / Hatırlatma Sistemi</h1>
+          <p className="text-[11px] text-baykus-muted">Açık görevler · bugün · tamamlananlar</p>
         </div>
         <Link href="/dashboard" className="bk-btn bk-btn-ghost text-sm">
           Ana Sayfa
@@ -351,6 +352,7 @@ export default function TasksPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

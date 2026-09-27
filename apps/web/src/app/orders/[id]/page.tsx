@@ -18,6 +18,7 @@ import {
   designStatusBadgeClass,
   BankAccount,
 } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -313,18 +314,18 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-2 pb-2">
+      {/* Sticky header + toolbar */}
+      <div className="bk-sticky-header flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs text-baykus-muted mb-1">
+          <div className="text-[11px] text-baykus-muted mb-0.5">
             <Link href="/orders" className="text-baykus-primary hover:underline">
               Sipariş Merkezi
             </Link>
             <span className="mx-1">/</span>
             <span className="font-medium text-baykus-text">{order.order_number}</span>
           </div>
-          <h1 className="text-xl font-bold text-baykus-text mt-1">
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">
             {order.order_number}
             {order.customer_name ? ` | ${order.customer_name}` : ""}
           </h1>
@@ -439,26 +440,38 @@ export default function OrderDetailPage() {
       {!editing && (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-xl bg-[#2563eb] text-white p-3 shadow-sm">
-              <div className="text-[11px] font-semibold opacity-90">Toplam</div>
-              <div className="text-lg font-bold tabular-nums">{formatMoney(Number(order.total_amount))}</div>
+          <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+            <div className="bk-kpi-card" style={{ backgroundColor: "#2563eb" }}>
+              <span className="bk-kpi-icon">₺</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Toplam</div>
+                <div className="bk-kpi-value truncate">{formatMoney(Number(order.total_amount))}</div>
+              </div>
             </div>
-            <div className="rounded-xl bg-[#16a34a] text-white p-3 shadow-sm">
-              <div className="text-[11px] font-semibold opacity-90">Kapora / Ödenen</div>
-              <div className="text-lg font-bold tabular-nums">{formatMoney(Number(order.paid_amount))}</div>
+            <div className="bk-kpi-card" style={{ backgroundColor: "#16a34a" }}>
+              <span className="bk-kpi-icon">✓</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Kapora / Ödenen</div>
+                <div className="bk-kpi-value truncate">{formatMoney(Number(order.paid_amount))}</div>
+              </div>
             </div>
             <div
-              className="rounded-xl text-white p-3 shadow-sm"
+              className="bk-kpi-card"
               style={{ backgroundColor: Number(order.remaining_amount) > 0 ? "#dc2626" : "#64748b" }}
             >
-              <div className="text-[11px] font-semibold opacity-90">Kalan</div>
-              <div className="text-lg font-bold tabular-nums">{formatMoney(Number(order.remaining_amount))}</div>
+              <span className="bk-kpi-icon">!</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Kalan</div>
+                <div className="bk-kpi-value truncate">{formatMoney(Number(order.remaining_amount))}</div>
+              </div>
             </div>
-            <div className="rounded-xl border bg-white p-3 shadow-sm">
-              <div className="text-[11px] text-slate-500 font-semibold">Teslim Tarihi</div>
-              <div className="text-lg font-bold text-baykus-text">
-                {order.due_date ? String(order.due_date).slice(0, 10) : "—"}
+            <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+              <span className="bk-kpi-icon">📅</span>
+              <div className="min-w-0 flex-1 text-right">
+                <div className="bk-kpi-label">Teslim Tarihi</div>
+                <div className="bk-kpi-value truncate text-sm">
+                  {order.due_date ? String(order.due_date).slice(0, 10) : "—"}
+                </div>
               </div>
             </div>
           </div>
@@ -693,39 +706,44 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-600">
+          <div className="rounded-xl border border-baykus-line bg-white shadow-sm overflow-hidden">
+            <div className="px-3 py-2 border-b border-baykus-line text-xs font-semibold text-baykus-text">
+              Sipariş kalemleri
+            </div>
+            <div className="bk-table-wrap">
+            <table className="bk-table">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3">Ürün</th>
-                  <th className="px-4 py-3">Adet</th>
-                  <th className="px-4 py-3">Beden</th>
-                  <th className="px-4 py-3">Renk</th>
-                  <th className="px-4 py-3">Baskı</th>
-                  <th className="px-4 py-3">Birim</th>
-                  <th className="px-4 py-3">İskonto</th>
-                  <th className="px-4 py-3">Satır</th>
+                  <th>Ürün</th>
+                  <th className="text-right">Adet</th>
+                  <th>Beden</th>
+                  <th>Renk</th>
+                  <th>Baskı</th>
+                  <th className="text-right">Birim</th>
+                  <th className="text-right">İskonto</th>
+                  <th className="text-right">Satır</th>
                 </tr>
               </thead>
               <tbody>
                 {order.lines.map((l) => (
-                  <tr key={l.id ?? `${l.description}-${l.quantity}`} className="border-t border-slate-100">
-                    <td className="px-4 py-3 font-medium">{l.description}</td>
-                    <td className="px-4 py-3">{l.quantity}</td>
-                    <td className="px-4 py-3">{l.size || "—"}</td>
-                    <td className="px-4 py-3">{l.color || "—"}</td>
-                    <td className="px-4 py-3">{l.print_type || "—"}</td>
-                    <td className="px-4 py-3">{formatMoney(Number(l.unit_price))}</td>
-                    <td className="px-4 py-3">
+                  <tr key={l.id ?? `${l.description}-${l.quantity}`}>
+                    <td className="font-medium">{l.description}</td>
+                    <td className="text-right tabular-nums">{l.quantity}</td>
+                    <td>{l.size || "—"}</td>
+                    <td>{l.color || "—"}</td>
+                    <td>{l.print_type || "—"}</td>
+                    <td className="text-right tabular-nums">{formatMoney(Number(l.unit_price))}</td>
+                    <td className="text-right tabular-nums">
                       {Number(l.discount_rate)
                         ? `%${l.discount_rate}`
                         : formatMoney(Number(l.discount_amount || 0))}
                     </td>
-                    <td className="px-4 py-3">{formatMoney(Number(l.line_total || 0))}</td>
+                    <td className="text-right tabular-nums font-medium">{formatMoney(Number(l.line_total || 0))}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {order.status_history?.length > 0 && (
@@ -763,6 +781,7 @@ export default function OrderDetailPage() {
           onCancel={() => setEditing(false)}
         />
       )}
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -483,9 +483,32 @@ Batch 21 hub’larından sonra kalan ince alt sayfalar + web PDF görünüm iyil
 
 Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI / live postgres password / VPS kullanıcı senkron, masaüstü ReportLab birebir twin PDF.
 
-### Kalan (dürüst)
+### Kalan (dürüst) → Batch 23’te kapatılanlar: detay densite + transfer CTA + kalan list StatusFooter.
 
-- Masaüstü ReportLab **birebir twin** PDF (web polish’li; imza/totals/header iyileşti, twin değil)
+---
+
+## Batch 23 — Detay densite + Depo Transfer UX + kalan list StatusFooter (2026-09-27)
+
+Batch 22 ince alt sayfalarından sonra kalan detay kartları ve StatusFooter’sız listeler.
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| Müşteri detay | `/customers/[id]` — sticky · `bk-kpi-strip` (açık/borç/tahsilat) · `bk-table` ekstre · StatusFooter | done |
+| Tedarikçi detay | `/suppliers/[id]` — sticky · KPI · `bk-table` ekstre · StatusFooter | done |
+| Ürün detay | `/products/[id]` — sticky · KPI (satış/alış/stok/depo) · `bk-table` varyant+depo · StatusFooter | done |
+| Sipariş detay | `/orders/[id]` — sticky toolbar · KPI (toplam/ödenen/kalan/teslim) · `bk-table` kalemler · StatusFooter | done |
+| Depolar transfer UX | `/stock/warehouses` — her zaman görünür «Depolar Arası Transfer» CTA · KPI şerit (depo/aktif/stok/transfer) · seçili depo banner CTA · modal (ayrı `/stock/transfer` yok) | done |
+| Kalan list StatusFooter | `/purchases` · `/price-lists` · `/payables` · `/cari` · `/tasks` · `/suppliers/payables` · `/production/work-orders` · `/orders/weekly-plan` · `/tools/last-purchase-prices` · `/crm/special-days` · `/crm/campaigns` — sticky + StatusFooter (+ purchases/price-lists KPI) | done |
+| Hotkey / print | Zaten `useBaykusHotkeys` + detay Yazdır; drive-by yok | skip |
+| Smoke | `/health` · login · `/api/auth/me` · `/api/dashboard/summary` · Direkt Satışlar channels 200 · `tsc --noEmit` | done |
+| Zip | `/workspace/baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
+
+Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI / live postgres password / VPS kullanıcı senkron, masaüstü ReportLab birebir twin PDF.
+
+### Kalan (dürüst) — çoğunlukla OOS
+
+- Masaüstü ReportLab **birebir twin** PDF (web polish’li; twin değil)
 - Merkezi DB canlı şifre / VPS kullanıcı senkron
 - BizimHesap live · Selenium WhatsApp Desktop
-- `/stock/transfer` ayrı sayfa yok (depolar sayfasında transfer modalı yeterli)
+- `/stock/transfer` ayrı rota yok (warehouses transfer modalı + CTA yeterli)
+- Saf ayar formları / new form sayfaları (zaten yeterli; hub-like değil)

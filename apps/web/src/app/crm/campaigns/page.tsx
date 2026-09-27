@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Campaign, Customer, apiFetch } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 const DEFAULT_TEMPLATES: Record<string, string> = {
   "Doğum günü mesajı":
@@ -160,8 +161,8 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-2">
         <div>
           <h2 className="text-base font-bold">Özel Gün / Kampanya</h2>
           <p className="text-xs text-baykus-muted">
@@ -357,6 +358,7 @@ export default function CampaignsPage() {
           </div>
         )}
       </fieldset>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { PURCHASE_STATUS_LABELS, PurchaseListItem, apiFetch, formatMoney } from "@/lib/api";
+import StatusFooter from "@/components/StatusFooter";
 
 export default function PurchasesPage() {
   const [items, setItems] = useState<PurchaseListItem[]>([]);
@@ -33,11 +34,11 @@ export default function PurchasesPage() {
   }, [load]);
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <div className="space-y-2 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Satın Alma</h1>
-          <p className="text-slate-500 text-sm">Tedarikçi alımları · stok girişi · borç</p>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Satın Alma</h1>
+          <p className="text-[11px] text-baykus-muted">Tedarikçi alımları · stok girişi · borç</p>
         </div>
         <Link
           href="/purchases/new"
@@ -45,6 +46,30 @@ export default function PurchasesPage() {
         >
           + Yeni Satın Alma
         </Link>
+      </div>
+
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">☰</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Kayıt</div>
+            <div className="bk-kpi-value">{items.length}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">✓</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Onaylı</div>
+            <div className="bk-kpi-value">{items.filter((p) => p.status === "confirmed").length}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#be123c" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam</div>
+            <div className="bk-kpi-value truncate">{formatMoney(items.reduce((s, p) => s + Number(p.total_amount || 0), 0))}</div>
+          </div>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-3 items-end">
@@ -79,16 +104,16 @@ export default function PurchasesPage() {
         <div className="mb-4 rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+      <div className="bk-table-wrap">
+        <table className="bk-table">
+          <thead>
             <tr>
-              <th className="px-4 py-3">No</th>
-              <th className="px-4 py-3">Tedarikçi</th>
-              <th className="px-4 py-3">Tarih</th>
-              <th className="px-4 py-3">Durum</th>
-              <th className="px-4 py-3 text-right">Toplam</th>
-              <th className="px-4 py-3"></th>
+              <th>No</th>
+              <th>Tedarikçi</th>
+              <th>Tarih</th>
+              <th>Durum</th>
+              <th className="text-right">Toplam</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -138,6 +163,7 @@ export default function PurchasesPage() {
           </tbody>
         </table>
       </div>
+      <StatusFooter onRefresh={load} />
     </div>
   );
 }

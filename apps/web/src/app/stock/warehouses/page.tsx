@@ -175,9 +175,14 @@ export default function WarehousesPage() {
     <div className="space-y-2 pb-2">
       <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
+          <div className="text-[11px] text-baykus-muted mb-0.5">
+            <Link href="/stock" className="hover:underline text-baykus-primary">Stok</Link>
+            <span className="mx-1">/</span>
+            <span>Depolar</span>
+          </div>
           <h2 className="text-lg font-bold text-baykus-text leading-tight">Depolar</h2>
-          <p className="text-xs text-baykus-muted">
-            Depo Tanımı · stok görünümü · Depolar Arası Transfer
+          <p className="text-[11px] text-baykus-muted">
+            Depo Tanımı · stok görünümü · Depolar Arası Transfer (ayrı /stock/transfer yok)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -188,17 +193,70 @@ export default function WarehousesPage() {
           >
             Stok Sayımı Yap
           </Link>
-          {selected && (
-            <button
-              type="button"
-              className="rounded-lg bg-[#ef4444] text-white px-4 py-2 text-sm font-bold shadow-sm"
-              onClick={() => openTransfer()}
-            >
-              Depolar Arası Transfer
-            </button>
-          )}
+          <button
+            type="button"
+            className="rounded-lg bg-[#ef4444] text-white px-4 py-2 text-sm font-bold shadow-sm disabled:opacity-50"
+            disabled={!selected}
+            title={selected ? "Seçili depodan transfer" : "Önce depo seçin (Stok)"}
+            onClick={() => {
+              if (!selected) {
+                setError("Transfer için önce listeden bir deponun «Stok» düğmesine tıklayın.");
+                return;
+              }
+              openTransfer();
+            }}
+          >
+            ↗ Depolar Arası Transfer
+          </button>
         </div>
       </div>
+
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
+          <span className="bk-kpi-icon">🏷</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Depo</div>
+            <div className="bk-kpi-value">{items.length}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
+          <span className="bk-kpi-icon">✓</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Aktif</div>
+            <div className="bk-kpi-value">{items.filter((w) => w.is_active).length}</div>
+          </div>
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#0f766e" }}>
+          <span className="bk-kpi-icon">📦</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam stok</div>
+            <div className="bk-kpi-value">
+              {items.reduce((s, w) => s + Number(w.stock_qty_total || 0), 0)}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="bk-kpi-card text-left"
+          style={{ backgroundColor: "#ef4444", cursor: "pointer" }}
+          onClick={() => {
+            if (!selected) {
+              setError("Transfer için önce listeden bir deponun «Stok» düğmesine tıklayın.");
+              return;
+            }
+            openTransfer();
+          }}
+        >
+          <span className="bk-kpi-icon">↗</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Transfer</div>
+            <div className="bk-kpi-value truncate text-sm">
+              {selected ? selected.name : "Depo seç"}
+            </div>
+          </div>
+        </button>
+      </div>
+
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
       {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
@@ -295,7 +353,16 @@ export default function WarehousesPage() {
 
       {selected && (
         <div className="space-y-2 pb-2">
-          <h3 className="text-sm font-semibold">{selected.name} — stok</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">{selected.name} — stok</h3>
+            <button
+              type="button"
+              className="rounded-lg bg-[#ef4444] text-white px-3 py-1.5 text-xs font-bold shadow-sm"
+              onClick={() => openTransfer()}
+            >
+              ↗ Depolar Arası Transfer
+            </button>
+          </div>
           <div className="bk-table-wrap">
             <table className="bk-table">
               <thead>

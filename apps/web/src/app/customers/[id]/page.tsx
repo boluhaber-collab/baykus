@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import CustomerTahsilatModal from "@/components/CustomerTahsilatModal";
 import CustomerDevirModal from "@/components/CustomerDevirModal";
+import StatusFooter from "@/components/StatusFooter";
 
 type TabKey = "bilgi" | "hareketler" | "siparisler" | "notlar" | "whatsapp";
 
@@ -248,9 +249,9 @@ export default function CustomerDetailPage() {
   ];
 
   return (
-    <div className="space-y-4">
-      {/* Breadcrumb + identity */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-2 pb-2">
+      {/* Sticky header + identity */}
+      <div className="bk-sticky-header flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-xs text-baykus-muted mb-1">
             <Link href="/customers" className="text-baykus-primary hover:underline">
@@ -280,33 +281,38 @@ export default function CustomerDetailPage() {
       {okMsg && <div className="rounded-lg bg-emerald-50 text-emerald-800 px-4 py-2 text-sm">{okMsg}</div>}
 
       {/* Özet kartlar — musteri_kart_ozeti */}
-      <div className="grid sm:grid-cols-3 gap-3">
-        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#e68778" }}>
-          <div className="text-[11px] font-bold opacity-95 text-center">Açık Bakiye</div>
-          <div className="text-xl font-bold tabular-nums text-center">{formatMoney(ozet.acik)}</div>
-          <div className="text-[10px] text-center opacity-90">
-            {ozet.acik > 0 ? "müşteri borcu" : "borç yok"}
+      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#e68778" }}>
+          <span className="bk-kpi-icon">₺</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Açık Bakiye</div>
+            <div className="bk-kpi-value truncate">{formatMoney(ozet.acik)}</div>
+            <div className="text-[10px] opacity-90">{ozet.acik > 0 ? "müşteri borcu" : "borç yok"}</div>
           </div>
         </div>
-        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#7fb5df" }}>
-          <div className="text-[11px] font-bold opacity-95 text-center">Toplam Borç</div>
-          <div className="text-xl font-bold tabular-nums text-center">{formatMoney(ozet.toplamBorc)}</div>
-          <div className="text-[10px] text-center opacity-90">{ozet.siparisSayisi} sipariş</div>
-        </div>
-        <div className="rounded-xl text-white p-3 shadow-sm" style={{ background: "#8bd0a7" }}>
-          <div className="text-[11px] font-bold opacity-95 text-center">Toplam Tahsilat</div>
-          <div className="text-xl font-bold tabular-nums text-center">
-            {formatMoney(ozet.toplamTahsilat)}
+        <div className="bk-kpi-card" style={{ backgroundColor: "#7fb5df" }}>
+          <span className="bk-kpi-icon">↓</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam Borç</div>
+            <div className="bk-kpi-value truncate">{formatMoney(ozet.toplamBorc)}</div>
+            <div className="text-[10px] opacity-90">{ozet.siparisSayisi} sipariş</div>
           </div>
-          <div className="text-[10px] text-center opacity-90">
-            Son satış:{" "}
-            {ozet.sonSatisId ? (
-              <Link href={`/orders/${ozet.sonSatisId}`} className="underline text-white">
-                {ozet.sonSatis}
-              </Link>
-            ) : (
-              "—"
-            )}
+        </div>
+        <div className="bk-kpi-card" style={{ backgroundColor: "#8bd0a7" }}>
+          <span className="bk-kpi-icon">↑</span>
+          <div className="min-w-0 flex-1 text-right">
+            <div className="bk-kpi-label">Toplam Tahsilat</div>
+            <div className="bk-kpi-value truncate">{formatMoney(ozet.toplamTahsilat)}</div>
+            <div className="text-[10px] opacity-90">
+              Son:{" "}
+              {ozet.sonSatisId ? (
+                <Link href={`/orders/${ozet.sonSatisId}`} className="underline text-white">
+                  {ozet.sonSatis}
+                </Link>
+              ) : (
+                "—"
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -643,16 +649,16 @@ export default function CustomerDetailPage() {
                 </span>
               )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left text-slate-600">
+            <div className="bk-table-wrap">
+              <table className="bk-table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-2">Tarih</th>
-                    <th className="px-4 py-2">Tip</th>
-                    <th className="px-4 py-2">Not / Sipariş</th>
-                    <th className="px-4 py-2 text-right">Borç</th>
-                    <th className="px-4 py-2 text-right">Alacak</th>
-                    <th className="px-4 py-2 text-right">Bakiye</th>
+                    <th>Tarih</th>
+                    <th>Tip</th>
+                    <th>Not / Sipariş</th>
+                    <th className="text-right">Borç</th>
+                    <th className="text-right">Alacak</th>
+                    <th className="text-right">Bakiye</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -851,6 +857,8 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       )}
+
+      <StatusFooter onRefresh={load} />
 
       <CustomerTahsilatModal
         customerId={id}
