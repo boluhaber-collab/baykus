@@ -143,9 +143,11 @@ def resolve_db_path() -> Path:
 
 def pdftotext_layout(pdf: Path) -> str:
     try:
+        # Force UTF-8: Windows default console encoding (cp1254/cp1252) otherwise
+        # mangling Turkish hareket labels (Alış/Ödeme/Satış) from Poppler output.
         return subprocess.check_output(
-            ["pdftotext", "-layout", str(pdf), "-"],
-            text=True,
+            ["pdftotext", "-enc", "UTF-8", "-layout", str(pdf), "-"],
+            encoding="utf-8",
             errors="replace",
         )
     except FileNotFoundError as exc:
