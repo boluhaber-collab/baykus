@@ -533,3 +533,22 @@ BizimHesap-style satır genişletme (+/−) — canlı BizimHesap sync değil; y
 - Hareketlerde `created_by` kullanıcı adı şemada yok → panelde kullanıcı satırı çoğu kayıtta boş
 - Ödeme satırında Yazdır/Resim/Değiştir/Sil aksiyon şeridi (BizimHesap) bilinçli olarak eklenmedi — sadece detay + mevcut rota CTA
 
+
+## Batch 25 — Müşteri/Tedarikçi kart ilk görünüm (BizimHesap layout) (2026-09-27)
+
+Kaynak: `docs/parity-shots/party-card-first-view.png` (+ expand-row-*.png).
+
+| Özellik | Web | Durum |
+|---------|-----|-------|
+| PartyCardLayout | `apps/web/src/components/PartyCardLayout.tsx` — header (avatar·ünvan·iletişim·not balonu) · KPI · action chips · navy collapsible paneller | done |
+| Tedarikçi `/suppliers/[id]` | İlk görünüm dashboard: Alışlar \| Ödemeler + Verdiğiniz İadeler; CTA Alış/Ödeme/Ekstre/SMS/Döküman/Diğer | done |
+| Müşteri `/customers/[id]` | İlk görünüm: Satışlar/Siparişler \| Tahsilatlar + İadeler; CTA Satış/Tahsilat/Ekstre/SMS/Döküman/Diğer | done |
+| ExpandableMovementTable | Batch 24 bileşeni panellerde yeniden kullanıldı (+/− expand) | done |
+| KPI Çek/Senet | Veri yok → `0,00 TL` + «çek/senet modülü yok» etiketi (sahte sync yok) | done |
+| İadeler | İade modülü yok → boş tablo + dürüst note | done |
+| Derin sekmeler | Müşteri tab'ları / tedarikçi edit+ekstre «Diğer» veya CTA ile secondary | done |
+| CSS | `globals.css` `.bk-party-*` (navy panel head, soft KPI, chip butonlar) | done |
+| Smoke | `tsc --noEmit` clean | done |
+| Zip | `baykus-web.zip` + `baykus-web-uiux.zip` yenilendi | done |
+
+Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync, Selenium WA Desktop, DPAPI, çek/senet/iade canlı modülleri.

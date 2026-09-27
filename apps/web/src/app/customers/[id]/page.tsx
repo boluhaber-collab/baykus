@@ -20,6 +20,7 @@ import StatusFooter from "@/components/StatusFooter";
 import ExpandableMovementTable, {
   linesFromOrder,
 } from "@/components/ExpandableMovementTable";
+import PartyCardLayout, { partySmsHref } from "@/components/PartyCardLayout";
 import type { CariMovement, CustomerOrderBrief, OrderDetail } from "@/lib/api";
 
 type TabKey = "bilgi" | "hareketler" | "siparisler" | "notlar" | "whatsapp";
@@ -35,7 +36,7 @@ export default function CustomerDetailPage() {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<TabKey>("bilgi");
-  const [showPay, setShowPay] = useState(false);
+  const [showSecondary, setShowSecondary] = useState(false);
   const [showTahsilat, setShowTahsilat] = useState(false);
   const [showDevir, setShowDevir] = useState(false);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
@@ -126,6 +127,16 @@ export default function CustomerDetailPage() {
     };
   }, [customer, statement]);
 
+  const collections = useMemo(() => {
+    const moves = statement?.movements || [];
+    return moves.filter(
+      (m) =>
+        m.movement_type === "payment" ||
+        m.movement_type === "deposit" ||
+        (Number(m.credit) > 0 && m.movement_type !== "sale"),
+    );
+  }, [statement]);
+
   async function saveEdit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -178,7 +189,6 @@ export default function CustomerDetailPage() {
       });
       setPayAmount("");
       setPayNote("");
-      setShowPay(false);
       setOkMsg("Tahsilat / hareket kaydedildi");
       await load();
     } catch (err) {
@@ -198,6 +208,7 @@ export default function CustomerDetailPage() {
     const phone = (customer?.phone || "").replace(/\D/g, "");
     if (!phone) {
       setError("Telefon yok — WhatsApp açılamaz");
+      setShowSecondary(true);
       setTab("whatsapp");
       return;
     }
@@ -244,6 +255,14 @@ export default function CustomerDetailPage() {
   const input =
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-baykus-500";
 
+  const displayTitle = (customer.company || "").trim() || customer.name;
+  const contactPerson =
+    (customer.company || "").trim() && customer.name !== displayTitle
+      ? customer.name
+      : customer.email || null;
+  const addressLine = [customer.address, customer.city].filter(Boolean).join(" · ");
+  const smsHref = partySmsHref(customer.phone);
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: "bilgi", label: "Bilgi" },
     { key: "hareketler", label: "Hareketler" },
@@ -252,306 +271,693 @@ export default function CustomerDetailPage() {
     { key: "whatsapp", label: "WhatsApp" },
   ];
 
-  return (
-    <div className="space-y-2 pb-2">
-      {/* Sticky header + identity */}
-      <div className="bk-sticky-header flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-xs text-baykus-muted mb-1">
-            <Link href="/customers" className="text-baykus-primary hover:underline">
-              Müşteri Merkezi
+  function openSecondary(nextTab?: TabKey) {
+    setShowSecondary(true);
+    if (nextTab) setTab(nextTab);
+  }
+
+  const salesPanel = (
+    <ExpandableMovementTable<CustomerOrderBrief>
+      rows={(customer.recent_orders || []).slice(0, 12)}
+      emptyText="Satış / sipariş yok"
+      getCta={(o) => ({ href: `/orders/${o.id}`, label: "Satış ekranına git" })}
+      loadDetail={async (o) => {
+        const order = await apiFetch<OrderDetail>(`/api/orders/${o.id}`);
+        return linesFromOrder(order);
+      }}
+      columns={[
+        {
+          key: "date",
+          header: "Tarih",
+          render: (o) => (
+            <span className="whitespace-nowrap">{o.created_at?.slice(0, 10) || "—"}</span>
+          ),
+        },
+        {
+          key: "no",
+          header: "No",
+          render: (o) => (
+            <Link href={`/orders/${o.id}`} className="font-medium text-baykus-700 hover:underline">
+              {o.order_number}
             </Link>
-            <span className="mx-1">›</span>
-            <span className="font-medium text-baykus-text">{customer.name}</span>
-          </div>
-          <div className="rounded-xl border border-[#bfdbfe] bg-[#e8f1ff] px-4 py-3 mt-1">
-            <h1 className="text-xl font-bold text-slate-800">{customer.name}</h1>
-            <p className="text-sm text-slate-600 mt-0.5">
-              {[customer.code, customer.company, customer.phone, customer.city]
-                .filter(Boolean)
-                .join("  |  ") || "Müşteri özel bilgisi kaydedilmemiş."}
-              {customer.is_active === false ? " · Pasif" : ""}
-            </p>
-          </div>
-        </div>
-        <div
-          className="rounded-xl border-4 border-slate-500 bg-[#fffde7] px-4 py-3 max-w-md text-sm text-emerald-700 min-w-[220px]"
-        >
-          {(customer.notes || "").trim() || "Bu müşteri için özel not bulunmuyor."}
-        </div>
-      </div>
+          ),
+        },
+        {
+          key: "status",
+          header: "Durum",
+          render: (o) => (
+            <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(o.status)}`}>
+              {o.status}
+            </span>
+          ),
+        },
+        {
+          key: "tutar",
+          header: "Tutar",
+          align: "right",
+          render: (o) => formatMoney(Number(o.total_amount)),
+        },
+      ]}
+    />
+  );
 
-      {error && <div className="rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm">{error}</div>}
-      {okMsg && <div className="rounded-lg bg-emerald-50 text-emerald-800 px-4 py-2 text-sm">{okMsg}</div>}
+  const collectionsPanel = (
+    <ExpandableMovementTable<CariMovement>
+      rows={collections.slice(0, 12)}
+      emptyText="Tahsilat yok"
+      getNote={(m) => m.note}
+      getCta={(m) =>
+        m.order_id ? { href: `/orders/${m.order_id}`, label: "Sipariş ekranına git" } : null
+      }
+      loadDetail={async (m) => {
+        if (!m.order_id) return { lines: [], note: m.note || null };
+        const order = await apiFetch<OrderDetail>(`/api/orders/${m.order_id}`);
+        const detail = linesFromOrder(order);
+        return { lines: detail.lines, note: m.note || detail.note || null };
+      }}
+      columns={[
+        {
+          key: "date",
+          header: "Tarih",
+          render: (m) => <span className="whitespace-nowrap">{m.movement_date}</span>,
+        },
+        {
+          key: "tutar",
+          header: "Tutar",
+          align: "right",
+          render: (m) =>
+            formatMoney(Number(m.credit) > 0 ? Number(m.credit) : Number(m.debit)),
+        },
+        {
+          key: "sekli",
+          header: "Şekli",
+          render: (m) => CARI_TYPE_LABELS[m.movement_type] || m.movement_type,
+        },
+      ]}
+    />
+  );
 
-      {/* Özet kartlar — musteri_kart_ozeti */}
-      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-        <div className="bk-kpi-card" style={{ backgroundColor: "#e68778" }}>
-          <span className="bk-kpi-icon">₺</span>
-          <div className="min-w-0 flex-1 text-right">
-            <div className="bk-kpi-label">Açık Bakiye</div>
-            <div className="bk-kpi-value truncate">{formatMoney(ozet.acik)}</div>
-            <div className="text-[10px] opacity-90">{ozet.acik > 0 ? "müşteri borcu" : "borç yok"}</div>
-          </div>
-        </div>
-        <div className="bk-kpi-card" style={{ backgroundColor: "#7fb5df" }}>
-          <span className="bk-kpi-icon">↓</span>
-          <div className="min-w-0 flex-1 text-right">
-            <div className="bk-kpi-label">Toplam Borç</div>
-            <div className="bk-kpi-value truncate">{formatMoney(ozet.toplamBorc)}</div>
-            <div className="text-[10px] opacity-90">{ozet.siparisSayisi} sipariş</div>
-          </div>
-        </div>
-        <div className="bk-kpi-card" style={{ backgroundColor: "#8bd0a7" }}>
-          <span className="bk-kpi-icon">↑</span>
-          <div className="min-w-0 flex-1 text-right">
-            <div className="bk-kpi-label">Toplam Tahsilat</div>
-            <div className="bk-kpi-value truncate">{formatMoney(ozet.toplamTahsilat)}</div>
-            <div className="text-[10px] opacity-90">
-              Son:{" "}
-              {ozet.sonSatisId ? (
-                <Link href={`/orders/${ozet.sonSatisId}`} className="underline text-white">
-                  {ozet.sonSatis}
-                </Link>
-              ) : (
-                "—"
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+  const returnsPanel = (
+    <ExpandableMovementTable<{ id: number }>
+      rows={[]}
+      emptyText="İade kaydı yok"
+      columns={[
+        { key: "date", header: "Tarih", render: () => "—" },
+        { key: "no", header: "No", render: () => "—" },
+        { key: "status", header: "Durum", render: () => "—" },
+        { key: "tutar", header: "Tutar", align: "right", render: () => "—" },
+      ]}
+    />
+  );
 
-      {/* İşlemler — desktop buttons */}
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={`/sales/create?type=kayitli&customer_id=${id}`}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ background: "#334155" }}
-        >
-          🛒 Satış Yap
-        </Link>
-        <Link
-          href={`/quotes/new?customer_id=${id}`}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ background: "#1f6feb" }}
-        >
-          Yeni Teklif
-        </Link>
-        <button
-          type="button"
-          onClick={() => setShowTahsilat(true)}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ background: "#198754" }}
-        >
-          Tahsilat Al
-        </button>
-        <button
-          type="button"
-          onClick={() => openWa()}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ background: "#15803d" }}
-        >
-          WhatsApp Gönder
-        </button>
-        <button
-          type="button"
-          onClick={() => void downloadCariPdf()}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
-        >
-          Cari Döküm PDF
-        </button>
-        <Link
-          href={`/customers/${id}/mutabakat`}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ background: "#7c3aed" }}
-        >
-          Mutabakat Mektubu
-        </Link>
-        <Link
-          href={`/customers/track?customer_id=${id}`}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ background: "#64748b" }}
-        >
-          Müşteri Takibi
-        </Link>
-        <button
-          type="button"
-          onClick={() => setShowDevir(true)}
-          className="rounded-lg px-3 py-2 text-sm font-medium text-white"
-          style={{ background: "#0f766e" }}
-        >
-          Devir Bakiye
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(true);
-            setTab("bilgi");
-          }}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
-        >
-          Kartı Düzenle
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded-lg border border-red-200 text-red-700 px-3 py-2 text-sm"
-        >
-          Sil
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-1 border-b border-slate-200">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              tab === t.key
-                ? "border-baykus-600 text-baykus-700"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "bilgi" && (
-        <div className="space-y-4">
-          {!editing ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex justify-between mb-3">
-                <h2 className="font-semibold text-slate-800">Kart bilgileri</h2>
+  return (
+    <>
+      <PartyCardLayout
+        role="customer"
+        breadcrumbHref="/customers"
+        breadcrumbLabel="Müşteri Merkezi"
+        title={displayTitle}
+        contactPerson={contactPerson}
+        phone={customer.phone}
+        address={addressLine || null}
+        notes={customer.notes}
+        openBalance={ozet.acik}
+        openBalanceSub={ozet.acik > 0 ? "müşteri borcu" : ozet.acik < 0 ? "alacaklı" : "borç yok"}
+        error={error}
+        okMsg={okMsg}
+        actions={[
+          {
+            key: "satis",
+            label: "Satış/Sipariş",
+            icon: "🛒",
+            variant: "navy",
+            menu: [
+              {
+                label: "Kayıtlı satış",
+                href: `/sales/create?type=kayitli&customer_id=${id}`,
+              },
+              { label: "Yeni teklif", href: `/quotes/new?customer_id=${id}` },
+              { label: "Sipariş listesi", href: "/orders" },
+            ],
+          },
+          {
+            key: "tahsilat",
+            label: "Tahsilat",
+            icon: "💵",
+            variant: "green",
+            onClick: () => setShowTahsilat(true),
+            menu: [
+              { label: "Tahsilat Al (modal)", onClick: () => setShowTahsilat(true) },
+              {
+                label: "Manuel cari hareket",
+                onClick: () => openSecondary("hareketler"),
+              },
+              { label: "Devir bakiye", onClick: () => setShowDevir(true) },
+            ],
+          },
+          {
+            key: "ekstre",
+            label: "Hesap Ekstresi",
+            icon: "📑",
+            variant: "white",
+            menu: [
+              {
+                label: "Hareketler sekmesi",
+                onClick: () => openSecondary("hareketler"),
+              },
+              {
+                label: "Cari döküm PDF",
+                onClick: () => void downloadCariPdf(),
+              },
+              { label: "Mutabakat mektubu", href: `/customers/${id}/mutabakat` },
+              { label: "Cari raporlar", href: "/reports/cari-statements" },
+            ],
+          },
+          {
+            key: "sms",
+            label: "SMS",
+            icon: "💬",
+            variant: "purple",
+            href: smsHref || undefined,
+            onClick: smsHref
+              ? undefined
+              : () => {
+                  setError("Telefon yok — SMS/WhatsApp açılamaz");
+                  openSecondary("whatsapp");
+                },
+          },
+          {
+            key: "docs",
+            label: "Dökümanlar",
+            icon: "📁",
+            variant: "cyan",
+            href: "/documents",
+          },
+          {
+            key: "diger",
+            label: "Diğer",
+            icon: "⚙️",
+            variant: "yellow",
+            menu: [
+              {
+                label: "Kartı düzenle",
+                onClick: () => {
+                  setEditing(true);
+                  openSecondary("bilgi");
+                },
+              },
+              {
+                label: showSecondary ? "Detay sekmelerini gizle" : "Detay sekmeleri",
+                onClick: () => setShowSecondary((v) => !v),
+              },
+              { label: "Müşteri takibi", href: `/customers/track?customer_id=${id}` },
+              { label: "Alacaklar", href: "/customers/receivables" },
+              { label: "Sil", onClick: () => void onDelete() },
+            ],
+          },
+        ]}
+        leftPanels={[
+          {
+            key: "satislar",
+            title: "Önceki Satışlar/Siparişler",
+            footerHref: "/orders",
+            footerLabel: "tamamı için tıklayın...",
+            children: salesPanel,
+          },
+        ]}
+        rightPanels={[
+          {
+            key: "tahsilatlar",
+            title: "Önceki Tahsilatlar",
+            footerLabel: "tamamı için tıklayın...",
+            footerOnClick: () => openSecondary("hareketler"),
+            children: collectionsPanel,
+          },
+          {
+            key: "iadeler",
+            title: "İadeler",
+            note: "İade modülü henüz yok — panel boş durum gösterir (sahte veri yok).",
+            children: returnsPanel,
+          },
+        ]}
+      >
+        {showSecondary && (
+          <div className="space-y-3 mt-2">
+            <div className="flex flex-wrap gap-1 border-b border-slate-200">
+              {tabs.map((t) => (
                 <button
+                  key={t.key}
                   type="button"
-                  onClick={() => setEditing(true)}
-                  className="text-sm text-baykus-600 hover:underline"
+                  onClick={() => setTab(t.key)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+                    tab === t.key
+                      ? "border-baykus-600 text-baykus-700"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
                 >
-                  Düzenle
+                  {t.label}
                 </button>
-              </div>
-              <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <div>
-                  <dt className="text-slate-500 text-xs">Telefon</dt>
-                  <dd>{customer.phone || "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-500 text-xs">E-posta</dt>
-                  <dd>{customer.email || "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-500 text-xs">Şehir</dt>
-                  <dd>{customer.city || "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-500 text-xs">Vergi</dt>
-                  <dd>
-                    {customer.tax_number || "—"}
-                    {customer.tax_office ? ` / ${customer.tax_office}` : ""}
-                  </dd>
-                </div>
-                <div className="sm:col-span-2">
-                  <dt className="text-slate-500 text-xs">Adres</dt>
-                  <dd>{customer.address || "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-500 text-xs">Açılış / Devir bakiyesi</dt>
-                  <dd className="tabular-nums font-medium">
-                    {formatMoney(Number(customer.opening_balance ?? 0))}
-                  </dd>
-                </div>
-                {(customer.special_day_note || customer.special_day_date) && (
-                  <div>
-                    <dt className="text-slate-500 text-xs">Özel gün</dt>
-                    <dd>
-                      {customer.special_day_note || ""}
-                      {customer.special_day_date ? ` (${customer.special_day_date})` : ""}
-                    </dd>
-                  </div>
-                )}
-              </dl>
+              ))}
             </div>
-          ) : (
-            <form
-              onSubmit={saveEdit}
-              data-baykus-save
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3"
-            >
-              <h2 className="font-semibold text-slate-800">Kartı düzenle / Devir bakiye</h2>
-              <div className="grid sm:grid-cols-3 gap-3">
-                {(
-                  [
-                    ["code", "Kod"],
-                    ["name", "Ad *"],
-                    ["company", "Firma"],
-                    ["email", "E-posta"],
-                    ["phone", "Telefon"],
-                    ["city", "Şehir"],
-                    ["tax_number", "Vergi No"],
-                    ["tax_office", "Vergi Dairesi"],
-                    ["special_day_note", "Özel gün notu"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <div key={key}>
-                    <label className="block text-xs text-slate-500 mb-1">{label}</label>
-                    <input
+
+            {tab === "bilgi" && (
+              <div className="space-y-4">
+                {!editing ? (
+                  <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex justify-between mb-3">
+                      <h2 className="font-semibold text-slate-800">Kart bilgileri</h2>
+                      <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        className="text-sm text-baykus-600 hover:underline"
+                      >
+                        Düzenle
+                      </button>
+                    </div>
+                    <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                      <div>
+                        <dt className="text-slate-500 text-xs">Telefon</dt>
+                        <dd>{customer.phone || "—"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500 text-xs">E-posta</dt>
+                        <dd>{customer.email || "—"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500 text-xs">Şehir</dt>
+                        <dd>{customer.city || "—"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500 text-xs">Vergi</dt>
+                        <dd>
+                          {customer.tax_number || "—"}
+                          {customer.tax_office ? ` / ${customer.tax_office}` : ""}
+                        </dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="text-slate-500 text-xs">Adres</dt>
+                        <dd>{customer.address || "—"}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500 text-xs">Açılış / Devir bakiyesi</dt>
+                        <dd className="tabular-nums font-medium">
+                          {formatMoney(Number(customer.opening_balance ?? 0))}
+                        </dd>
+                      </div>
+                      {(customer.special_day_note || customer.special_day_date) && (
+                        <div>
+                          <dt className="text-slate-500 text-xs">Özel gün</dt>
+                          <dd>
+                            {customer.special_day_note || ""}
+                            {customer.special_day_date ? ` (${customer.special_day_date})` : ""}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={saveEdit}
+                    data-baykus-save
+                    className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3"
+                  >
+                    <h2 className="font-semibold text-slate-800">Kartı düzenle / Devir bakiye</h2>
+                    <div className="grid sm:grid-cols-3 gap-3">
+                      {(
+                        [
+                          ["code", "Kod"],
+                          ["name", "Ad *"],
+                          ["company", "Firma"],
+                          ["email", "E-posta"],
+                          ["phone", "Telefon"],
+                          ["city", "Şehir"],
+                          ["tax_number", "Vergi No"],
+                          ["tax_office", "Vergi Dairesi"],
+                          ["special_day_note", "Özel gün notu"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <div key={key}>
+                          <label className="block text-xs text-slate-500 mb-1">{label}</label>
+                          <input
+                            className={input}
+                            required={key === "name"}
+                            value={editForm[key]}
+                            onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
+                          />
+                        </div>
+                      ))}
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Özel gün tarihi</label>
+                        <input
+                          type="date"
+                          className={input}
+                          value={editForm.special_day_date}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, special_day_date: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">
+                          Devir / açılış bakiyesi
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className={input}
+                          value={editForm.opening_balance}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, opening_balance: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 pt-6">
+                        <input
+                          type="checkbox"
+                          checked={editForm.is_active}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, is_active: e.target.checked })
+                          }
+                        />
+                        <span className="text-sm">Aktif</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Adres</label>
+                      <textarea
+                        rows={2}
+                        className={input}
+                        value={editForm.address}
+                        onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Notlar</label>
+                      <textarea
+                        rows={2}
+                        className={input}
+                        value={editForm.notes}
+                        onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        data-baykus-save
+                        disabled={busy}
+                        className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm disabled:opacity-60"
+                      >
+                        Kaydet
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditing(false)}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+                      >
+                        Vazgeç
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {tab === "hareketler" && (
+              <div className="grid lg:grid-cols-3 gap-6">
+                <form
+                  onSubmit={addMovement}
+                  data-baykus-save
+                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3"
+                >
+                  <h2 className="font-semibold text-slate-800">Tahsilat / cari hareket</h2>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Tip</label>
+                    <select
                       className={input}
-                      required={key === "name"}
-                      value={editForm[key]}
-                      onChange={(e) => setEditForm({ ...editForm, [key]: e.target.value })}
+                      value={payType}
+                      onChange={(e) => setPayType(e.target.value as typeof payType)}
+                    >
+                      <option value="payment">Ödeme / Tahsilat</option>
+                      <option value="deposit">Kapora / Depozito</option>
+                      <option value="sale">Satış (borç)</option>
+                      <option value="adjustment">Düzeltme</option>
+                    </select>
+                  </div>
+                  {payType === "adjustment" && (
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Yön</label>
+                      <select
+                        className={input}
+                        value={paySide}
+                        onChange={(e) => setPaySide(e.target.value as "debit" | "credit")}
+                      >
+                        <option value="debit">Borç (+)</option>
+                        <option value="credit">Alacak (−)</option>
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Tutar (₺)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      className={input}
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(e.target.value)}
                     />
                   </div>
-                ))}
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Özel gün tarihi</label>
-                  <input
-                    type="date"
-                    className={input}
-                    value={editForm.special_day_date}
-                    onChange={(e) => setEditForm({ ...editForm, special_day_date: e.target.value })}
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Tarih</label>
+                    <input
+                      type="date"
+                      className={input}
+                      value={payDate}
+                      onChange={(e) => setPayDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Not</label>
+                    <input
+                      className={input}
+                      value={payNote}
+                      onChange={(e) => setPayNote(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    data-baykus-save
+                    disabled={busy}
+                    className="w-full rounded-lg bg-[#198754] text-white py-2 text-sm font-medium disabled:opacity-60"
+                  >
+                    Kaydet
+                  </button>
+                </form>
+
+                <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center">
+                    <h2 className="font-semibold text-slate-800">Ekstre / Hareketler</h2>
+                    {statement && (
+                      <span className="text-xs text-slate-500">
+                        Kapanış: {formatMoney(Number(statement.closing_balance))}
+                      </span>
+                    )}
+                  </div>
+                  <ExpandableMovementTable<CariMovement>
+                    rows={statement?.movements || []}
+                    emptyText="Hareket yok"
+                    getNote={(m) => m.note}
+                    getCta={(m) =>
+                      m.order_id
+                        ? {
+                            href: `/orders/${m.order_id}`,
+                            label:
+                              m.movement_type === "sale"
+                                ? "Satış ekranına git"
+                                : "Sipariş ekranına git",
+                          }
+                        : null
+                    }
+                    loadDetail={async (m) => {
+                      if (!m.order_id) return { lines: [], note: m.note || null };
+                      const order = await apiFetch<OrderDetail>(`/api/orders/${m.order_id}`);
+                      const detail = linesFromOrder(order);
+                      return { lines: detail.lines, note: m.note || detail.note || null };
+                    }}
+                    leadingRows={
+                      statement ? (
+                        <tr className="border-t border-slate-100 bg-slate-50/50">
+                          <td className="bk-expand-td" />
+                          <td className="text-slate-500" colSpan={5}>
+                            Açılış bakiyesi
+                          </td>
+                          <td className="text-right tabular-nums font-medium">
+                            {formatMoney(Number(statement.opening_balance))}
+                          </td>
+                        </tr>
+                      ) : null
+                    }
+                    columns={[
+                      {
+                        key: "date",
+                        header: "Tarih",
+                        render: (m) => (
+                          <span className="whitespace-nowrap">{m.movement_date}</span>
+                        ),
+                      },
+                      {
+                        key: "type",
+                        header: "Tip",
+                        render: (m) => CARI_TYPE_LABELS[m.movement_type] || m.movement_type,
+                      },
+                      {
+                        key: "note",
+                        header: "Not / Sipariş",
+                        className: "text-slate-600",
+                        render: (m) => (
+                          <>
+                            {m.note || "—"}
+                            {m.order_number && (
+                              <>
+                                {" "}
+                                <Link
+                                  href={`/orders/${m.order_id}`}
+                                  className="text-baykus-600 hover:underline"
+                                >
+                                  {m.order_number}
+                                </Link>
+                              </>
+                            )}
+                          </>
+                        ),
+                      },
+                      {
+                        key: "debit",
+                        header: "Borç",
+                        align: "right",
+                        render: (m) =>
+                          Number(m.debit) > 0 ? formatMoney(Number(m.debit)) : "—",
+                      },
+                      {
+                        key: "credit",
+                        header: "Alacak",
+                        align: "right",
+                        render: (m) =>
+                          Number(m.credit) > 0 ? formatMoney(Number(m.credit)) : "—",
+                      },
+                      {
+                        key: "bal",
+                        header: "Bakiye",
+                        align: "right",
+                        className: "font-medium",
+                        render: (m) =>
+                          m.running_balance != null
+                            ? formatMoney(Number(m.running_balance))
+                            : "—",
+                      },
+                    ]}
                   />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Devir / açılış bakiyesi</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className={input}
-                    value={editForm.opening_balance}
-                    onChange={(e) => setEditForm({ ...editForm, opening_balance: e.target.value })}
-                  />
-                </div>
-                <div className="flex items-center gap-2 pt-6">
-                  <input
-                    type="checkbox"
-                    checked={editForm.is_active}
-                    onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
-                  />
-                  <span className="text-sm">Aktif</span>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Adres</label>
-                <textarea
-                  rows={2}
-                  className={input}
-                  value={editForm.address}
-                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                />
+            )}
+
+            {tab === "siparisler" && (
+              <div className="grid lg:grid-cols-2 gap-6">
+                <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b flex justify-between">
+                    <h2 className="font-semibold">Son siparişler / satışlar</h2>
+                    <Link
+                      href={`/sales/create?type=kayitli&customer_id=${id}`}
+                      className="text-xs text-baykus-primary hover:underline"
+                    >
+                      + Satış
+                    </Link>
+                  </div>
+                  {salesPanel}
+                </div>
+                <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b flex justify-between">
+                    <h2 className="font-semibold">Son teklifler</h2>
+                    <Link
+                      href={`/quotes/new?customer_id=${id}`}
+                      className="text-xs text-baykus-primary hover:underline"
+                    >
+                      + Teklif
+                    </Link>
+                  </div>
+                  <ul className="divide-y text-sm">
+                    {(customer.recent_quotes || []).map((q) => (
+                      <li key={q.id} className="px-5 py-3 flex justify-between gap-3">
+                        <div>
+                          <Link
+                            href={`/quotes/${q.id}`}
+                            className="font-medium text-baykus-primary hover:underline"
+                          >
+                            {q.quote_number}
+                          </Link>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            {q.created_at?.slice(0, 10)} · {formatMoney(Number(q.total_amount))}
+                          </div>
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs ${quoteStatusBadgeClass(q.status)}`}
+                        >
+                          {q.status}
+                        </span>
+                      </li>
+                    ))}
+                    {(customer.recent_quotes || []).length === 0 && (
+                      <li className="px-5 py-6 text-center text-slate-400">Teklif yok</li>
+                    )}
+                  </ul>
+                </div>
+                <div className="lg:col-span-2 rounded-xl border bg-white shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b">
+                    <h2 className="font-semibold">Zaman çizelgesi</h2>
+                  </div>
+                  <ul className="divide-y text-sm">
+                    {(customer.timeline || []).map((t, i) => (
+                      <li key={i} className="px-5 py-3">
+                        <div className="flex justify-between gap-2">
+                          <span className="font-medium">
+                            {t.kind === "order" ? "🛒 " : t.kind === "movement" ? "📒 " : "📝 "}
+                            {t.kind === "movement"
+                              ? CARI_TYPE_LABELS[t.label] || t.label
+                              : t.label}
+                          </span>
+                          <span className="text-xs text-slate-400 whitespace-nowrap">
+                            {t.date || ""}
+                          </span>
+                        </div>
+                        {t.note && <p className="text-slate-500 text-xs mt-1">{t.note}</p>}
+                        {t.amount != null && (
+                          <p className="text-xs text-slate-500 mt-1">{formatMoney(t.amount)}</p>
+                        )}
+                      </li>
+                    ))}
+                    {(customer.timeline || []).length === 0 && (
+                      <li className="px-5 py-6 text-center text-slate-400">Kayıt yok</li>
+                    )}
+                  </ul>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Notlar</label>
+            )}
+
+            {tab === "notlar" && (
+              <form
+                onSubmit={saveEdit}
+                data-baykus-save
+                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3 max-w-2xl"
+              >
+                <h2 className="font-semibold">Özel not</h2>
                 <textarea
-                  rows={2}
+                  rows={6}
                   className={input}
                   value={editForm.notes}
                   onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  placeholder="Müşteri özel notu…"
                 />
-              </div>
-              <div className="flex gap-2">
                 <button
                   type="submit"
                   data-baykus-save
@@ -560,367 +966,49 @@ export default function CustomerDetailPage() {
                 >
                   Kaydet
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setEditing(false)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
-                >
-                  Vazgeç
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
+              </form>
+            )}
 
-      {tab === "hareketler" && (
-        <div className="grid lg:grid-cols-3 gap-6">
-          {(showPay || true) && (
-            <form
-              onSubmit={addMovement}
-              data-baykus-save
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3"
-            >
-              <h2 className="font-semibold text-slate-800">Tahsilat / cari hareket</h2>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Tip</label>
-                <select
-                  className={input}
-                  value={payType}
-                  onChange={(e) => setPayType(e.target.value as typeof payType)}
-                >
-                  <option value="payment">Ödeme / Tahsilat</option>
-                  <option value="deposit">Kapora / Depozito</option>
-                  <option value="sale">Satış (borç)</option>
-                  <option value="adjustment">Düzeltme</option>
-                </select>
-              </div>
-              {payType === "adjustment" && (
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Yön</label>
-                  <select
-                    className={input}
-                    value={paySide}
-                    onChange={(e) => setPaySide(e.target.value as "debit" | "credit")}
+            {tab === "whatsapp" && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-sm space-y-3">
+                <h2 className="font-semibold text-emerald-950">WhatsApp (wa.me — Selenium yok)</h2>
+                <p className="text-sm text-slate-600">
+                  Telefon: <strong>{customer.phone || "yok"}</strong>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openWa()}
+                    disabled={!customer.phone}
+                    className="rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
+                    style={{ background: "#15803d" }}
                   >
-                    <option value="debit">Borç (+)</option>
-                    <option value="credit">Alacak (−)</option>
-                  </select>
+                    Boş mesaj aç
+                  </button>
+                  {templates.slice(0, 8).map((tpl) => (
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      disabled={!customer.phone}
+                      onClick={() => openWa(tpl)}
+                      className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-900 disabled:opacity-40"
+                      title={tpl.body}
+                    >
+                      {tpl.name.replace(/_/g, " ")}
+                    </button>
+                  ))}
+                  <Link
+                    href="/whatsapp/track"
+                    className="text-sm text-baykus-primary hover:underline self-center ml-auto"
+                  >
+                    WhatsApp Takip →
+                  </Link>
                 </div>
-              )}
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Tutar (₺)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  className={input}
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                />
               </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Tarih</label>
-                <input
-                  type="date"
-                  className={input}
-                  value={payDate}
-                  onChange={(e) => setPayDate(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Not</label>
-                <input className={input} value={payNote} onChange={(e) => setPayNote(e.target.value)} />
-              </div>
-              <button
-                type="submit"
-                data-baykus-save
-                disabled={busy}
-                className="w-full rounded-lg bg-[#198754] text-white py-2 text-sm font-medium disabled:opacity-60"
-              >
-                Kaydet
-              </button>
-            </form>
-          )}
-
-          <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="font-semibold text-slate-800">Ekstre / Hareketler</h2>
-              {statement && (
-                <span className="text-xs text-slate-500">
-                  Kapanış: {formatMoney(Number(statement.closing_balance))}
-                </span>
-              )}
-            </div>
-            <ExpandableMovementTable<CariMovement>
-              rows={statement?.movements || []}
-              emptyText="Hareket yok"
-              getNote={(m) => m.note}
-              getCta={(m) =>
-                m.order_id
-                  ? {
-                      href: `/orders/${m.order_id}`,
-                      label:
-                        m.movement_type === "sale"
-                          ? "Satış ekranına git"
-                          : "Sipariş ekranına git",
-                    }
-                  : null
-              }
-              loadDetail={async (m) => {
-                if (!m.order_id) {
-                  return { lines: [], note: m.note || null };
-                }
-                const order = await apiFetch<OrderDetail>(`/api/orders/${m.order_id}`);
-                const detail = linesFromOrder(order);
-                return {
-                  lines: detail.lines,
-                  note: m.note || detail.note || null,
-                };
-              }}
-              leadingRows={
-                statement ? (
-                  <tr className="border-t border-slate-100 bg-slate-50/50">
-                    <td className="bk-expand-td" />
-                    <td className="text-slate-500" colSpan={5}>
-                      Açılış bakiyesi
-                    </td>
-                    <td className="text-right tabular-nums font-medium">
-                      {formatMoney(Number(statement.opening_balance))}
-                    </td>
-                  </tr>
-                ) : null
-              }
-              columns={[
-                {
-                  key: "date",
-                  header: "Tarih",
-                  render: (m) => <span className="whitespace-nowrap">{m.movement_date}</span>,
-                },
-                {
-                  key: "type",
-                  header: "Tip",
-                  render: (m) => CARI_TYPE_LABELS[m.movement_type] || m.movement_type,
-                },
-                {
-                  key: "note",
-                  header: "Not / Sipariş",
-                  className: "text-slate-600",
-                  render: (m) => (
-                    <>
-                      {m.note || "—"}
-                      {m.order_number && (
-                        <>
-                          {" "}
-                          <Link
-                            href={`/orders/${m.order_id}`}
-                            className="text-baykus-600 hover:underline"
-                          >
-                            {m.order_number}
-                          </Link>
-                        </>
-                      )}
-                    </>
-                  ),
-                },
-                {
-                  key: "debit",
-                  header: "Borç",
-                  align: "right",
-                  render: (m) =>
-                    Number(m.debit) > 0 ? formatMoney(Number(m.debit)) : "—",
-                },
-                {
-                  key: "credit",
-                  header: "Alacak",
-                  align: "right",
-                  render: (m) =>
-                    Number(m.credit) > 0 ? formatMoney(Number(m.credit)) : "—",
-                },
-                {
-                  key: "bal",
-                  header: "Bakiye",
-                  align: "right",
-                  className: "font-medium",
-                  render: (m) =>
-                    m.running_balance != null
-                      ? formatMoney(Number(m.running_balance))
-                      : "—",
-                },
-              ]}
-            />
+            )}
           </div>
-        </div>
-      )}
-
-      {tab === "siparisler" && (
-        <div className="grid lg:grid-cols-2 gap-6">
-          <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b flex justify-between">
-              <h2 className="font-semibold">Son siparişler / satışlar</h2>
-              <Link href={`/sales/create?type=kayitli&customer_id=${id}`} className="text-xs text-baykus-primary hover:underline">
-                + Satış
-              </Link>
-            </div>
-            <ExpandableMovementTable<CustomerOrderBrief>
-              rows={customer.recent_orders || []}
-              emptyText="Sipariş yok"
-              getCta={(o) => ({ href: `/orders/${o.id}`, label: "Satış ekranına git" })}
-              loadDetail={async (o) => {
-                const order = await apiFetch<OrderDetail>(`/api/orders/${o.id}`);
-                return linesFromOrder(order);
-              }}
-              columns={[
-                {
-                  key: "date",
-                  header: "Tarih",
-                  render: (o) => (
-                    <span className="whitespace-nowrap">{o.created_at?.slice(0, 10) || "—"}</span>
-                  ),
-                },
-                {
-                  key: "no",
-                  header: "No",
-                  render: (o) => (
-                    <Link href={`/orders/${o.id}`} className="font-medium text-baykus-700 hover:underline">
-                      {o.order_number}
-                    </Link>
-                  ),
-                },
-                {
-                  key: "status",
-                  header: "Durum",
-                  render: (o) => (
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(o.status)}`}>
-                      {o.status}
-                    </span>
-                  ),
-                },
-                {
-                  key: "tutar",
-                  header: "Tutar",
-                  align: "right",
-                  render: (o) => formatMoney(Number(o.total_amount)),
-                },
-              ]}
-            />
-          </div>
-          <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b flex justify-between">
-              <h2 className="font-semibold">Son teklifler</h2>
-              <Link href={`/quotes/new?customer_id=${id}`} className="text-xs text-baykus-primary hover:underline">
-                + Teklif
-              </Link>
-            </div>
-            <ul className="divide-y text-sm">
-              {(customer.recent_quotes || []).map((q) => (
-                <li key={q.id} className="px-5 py-3 flex justify-between gap-3">
-                  <div>
-                    <Link href={`/quotes/${q.id}`} className="font-medium text-baykus-primary hover:underline">
-                      {q.quote_number}
-                    </Link>
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {q.created_at?.slice(0, 10)} · {formatMoney(Number(q.total_amount))}
-                    </div>
-                  </div>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${quoteStatusBadgeClass(q.status)}`}>
-                    {q.status}
-                  </span>
-                </li>
-              ))}
-              {(customer.recent_quotes || []).length === 0 && (
-                <li className="px-5 py-6 text-center text-slate-400">Teklif yok</li>
-              )}
-            </ul>
-          </div>
-          <div className="lg:col-span-2 rounded-xl border bg-white shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b">
-              <h2 className="font-semibold">Zaman çizelgesi</h2>
-            </div>
-            <ul className="divide-y text-sm">
-              {(customer.timeline || []).map((t, i) => (
-                <li key={i} className="px-5 py-3">
-                  <div className="flex justify-between gap-2">
-                    <span className="font-medium">
-                      {t.kind === "order" ? "🛒 " : t.kind === "movement" ? "📒 " : "📝 "}
-                      {t.kind === "movement" ? CARI_TYPE_LABELS[t.label] || t.label : t.label}
-                    </span>
-                    <span className="text-xs text-slate-400 whitespace-nowrap">{t.date || ""}</span>
-                  </div>
-                  {t.note && <p className="text-slate-500 text-xs mt-1">{t.note}</p>}
-                  {t.amount != null && (
-                    <p className="text-xs text-slate-500 mt-1">{formatMoney(t.amount)}</p>
-                  )}
-                </li>
-              ))}
-              {(customer.timeline || []).length === 0 && (
-                <li className="px-5 py-6 text-center text-slate-400">Kayıt yok</li>
-              )}
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {tab === "notlar" && (
-        <form
-          onSubmit={saveEdit}
-          data-baykus-save
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-3 max-w-2xl"
-        >
-          <h2 className="font-semibold">Özel not</h2>
-          <textarea
-            rows={6}
-            className={input}
-            value={editForm.notes}
-            onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-            placeholder="Müşteri özel notu…"
-          />
-          <button
-            type="submit"
-            data-baykus-save
-            disabled={busy}
-            className="rounded-lg bg-baykus-600 text-white px-4 py-2 text-sm disabled:opacity-60"
-          >
-            Kaydet
-          </button>
-        </form>
-      )}
-
-      {tab === "whatsapp" && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-sm space-y-3">
-          <h2 className="font-semibold text-emerald-950">WhatsApp (wa.me — Selenium yok)</h2>
-          <p className="text-sm text-slate-600">
-            Telefon: <strong>{customer.phone || "yok"}</strong>
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => openWa()}
-              disabled={!customer.phone}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
-              style={{ background: "#15803d" }}
-            >
-              Boş mesaj aç
-            </button>
-            {templates.slice(0, 8).map((tpl) => (
-              <button
-                key={tpl.id}
-                type="button"
-                disabled={!customer.phone}
-                onClick={() => openWa(tpl)}
-                className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-900 disabled:opacity-40"
-                title={tpl.body}
-              >
-                {tpl.name.replace(/_/g, " ")}
-              </button>
-            ))}
-            <Link href="/whatsapp/track" className="text-sm text-baykus-primary hover:underline self-center ml-auto">
-              WhatsApp Takip →
-            </Link>
-          </div>
-        </div>
-      )}
+        )}
+      </PartyCardLayout>
 
       <StatusFooter onRefresh={load} />
 
@@ -946,6 +1034,6 @@ export default function CustomerDetailPage() {
           void load();
         }}
       />
-    </div>
+    </>
   );
 }
