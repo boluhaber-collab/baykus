@@ -2,28 +2,41 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { BANK_ACCOUNT_TYPES, BankAccount, CashRegister, apiFetch, formatMoney } from "@/lib/api";
+import { BankAccount, CashRegister, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import VirmanModal from "@/components/VirmanModal";
 
-const TYPE_COLORS: Record<string, string> = {
-  Banka: "#1d4ed8",
-  POS: "#7c3aed",
-  "Kredi Kartı": "#be123c",
-  "Şirket Ortağı": "#0f766e",
-};
+/** BizimHesap panel-primary-ish cyan/blue */
+const HEADER_BG = "#3b82f6";
+const BODY_BG = "#fffbeb";
+
+type AddKind = "Kasa" | "Banka" | "POS" | "Kredi Kartı" | "Şirket Ortağı" | null;
+
+const CATEGORY_ORDER: { key: string; title: string; kind: "cash" | "bank"; type?: string }[] = [
+  { key: "kasa", title: "Kasa Tanımları", kind: "cash" },
+  { key: "banka", title: "Banka Hesapları", kind: "bank", type: "Banka" },
+  { key: "pos", title: "POS", kind: "bank", type: "POS" },
+  { key: "ortak", title: "Şirket Ortakları", kind: "bank", type: "Şirket Ortağı" },
+  { key: "kart", title: "Kredi Kartları", kind: "bank", type: "Kredi Kartı" },
+  { key: "veresiye", title: "Veresiye", kind: "bank", type: "Veresiye" },
+];
 
 export default function BanksPage() {
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [cash, setCash] = useState<CashRegister[]>([]);
   const [error, setError] = useState("");
+  const [okMsg, setOkMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [accountType, setAccountType] = useState<string>("Banka");
-  const [institution, setInstitution] = useState("");
+  const [showPassive, setShowPassive] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [addKind, setAddKind] = useState<AddKind>(null);
+  const [showVirman, setShowVirman] = useState(false);
+
   const [name, setName] = useState("");
+  const [institution, setInstitution] = useState("");
   const [iban, setIban] = useState("");
   const [opening, setOpening] = useState("0");
   const [notes, setNotes] = useState("");
-  const [cashOpening, setCashOpening] = useState("0");
 
   const load = useCallback(async () => {
     setError("");
@@ -34,7 +47,6 @@ export default function BanksPage() {
       ]);
       setAccounts(banks);
       setCash(regs);
-      if (regs[0]) setCashOpening(String(regs[0].opening_balance ?? 0));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
@@ -44,46 +56,67 @@ export default function BanksPage() {
     void load();
   }, [load]);
 
-  const byType = useMemo(() => {
-    const map: Record<string, BankAccount[]> = {};
-    for (const t of BANK_ACCOUNT_TYPES) map[t] = [];
-    for (const a of accounts) {
-      const t = a.account_type || "Banka";
-      if (!map[t]) map[t] = [];
-      map[t].push(a);
-    }
-    return map;
-  }, [accounts]);
+  const visibleCash = useMemo(
+    () => (showPassive ? cash : cash.filter((r) => r.is_active !== false)),
+    [cash, showPassive],
+  );
+  const visibleBanks = useMemo(
+    () => (showPassive ? accounts : accounts.filter((a) => a.is_active !== false)),
+    [accounts, showPassive],
+  );
 
-  const bankTotal = accounts
-    .filter((a) => (a.account_type || "Banka") === "Banka")
-    .reduce((s, a) => s + Number(a.balance), 0);
-  const allTotal = accounts.reduce((s, a) => s + Number(a.balance), 0);
-  const cashTotal = cash.reduce((s, r) => s + Number(r.balance), 0);
+  function resetAddForm() {
+    setName("");
+    setInstitution("");
+    setIban("");
+    setOpening("0");
+    setNotes("");
+  }
+
+  function openAdd(kind: AddKind) {
+    setShowAddMenu(false);
+    setAddKind(kind);
+    resetAddForm();
+    if (kind === "Şirket Ortağı") setInstitution("Şirket Ortakları");
+    setOkMsg("");
+    setError("");
+  }
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
+    if (!addKind) return;
     setBusy(true);
     setError("");
+    setOkMsg("");
     try {
-      await apiFetch("/api/finance/banks", {
-        method: "POST",
-        body: JSON.stringify({
-          name: name.trim(),
-          account_type: accountType,
-          institution: institution.trim() || null,
-          iban: iban.trim() || null,
-          currency: "TRY",
-          opening_balance: Number(opening || 0),
-          is_active: true,
-          notes: notes.trim() || null,
-        }),
-      });
-      setName("");
-      setInstitution("");
-      setIban("");
-      setOpening("0");
-      setNotes("");
+      if (addKind === "Kasa") {
+        await apiFetch("/api/finance/cash", {
+          method: "POST",
+          body: JSON.stringify({
+            name: name.trim(),
+            opening_balance: Number(opening || 0),
+            currency: "TRY",
+            is_active: true,
+          }),
+        });
+      } else {
+        await apiFetch("/api/finance/banks", {
+          method: "POST",
+          body: JSON.stringify({
+            name: name.trim(),
+            account_type: addKind,
+            institution: institution.trim() || null,
+            iban: iban.trim() || null,
+            currency: "TRY",
+            opening_balance: Number(opening || 0),
+            is_active: true,
+            notes: notes.trim() || null,
+          }),
+        });
+      }
+      setOkMsg(`${addKind} eklendi`);
+      setAddKind(null);
+      resetAddForm();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kayıt hatası");
@@ -92,74 +125,188 @@ export default function BanksPage() {
     }
   }
 
-  async function saveCashOpening() {
-    const reg = cash[0];
-    if (!reg) return;
-    setBusy(true);
-    try {
-      await apiFetch(`/api/finance/cash/${reg.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ opening_balance: Number(cashOpening || 0) }),
-      });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Kasa devir hatası");
-    } finally {
-      setBusy(false);
-    }
+  const isPartner = addKind === "Şirket Ortağı";
+
+  function categoryItems(cat: (typeof CATEGORY_ORDER)[number]) {
+    if (cat.kind === "cash") return visibleCash.map((r) => ({
+      id: r.id,
+      name: r.name,
+      balance: Number(r.balance),
+      href: `/finance/cash/${r.id}`,
+      inactive: r.is_active === false,
+    }));
+    if (cat.type === "Veresiye") return []; // OOS / empty OK
+    return visibleBanks
+      .filter((a) => (a.account_type || "Banka") === cat.type)
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+        balance: Number(a.balance),
+        href: `/finance/banks/${a.id}`,
+        inactive: a.is_active === false,
+      }));
   }
 
-  const isPartner = accountType === "Şirket Ortağı";
+  // 2-col BH layout: left Kasa/POS/Kart · right Banka/Ortak/Veresiye
+  const leftCats = CATEGORY_ORDER.filter((c) => ["kasa", "pos", "kart"].includes(c.key));
+  const rightCats = CATEGORY_ORDER.filter((c) => ["banka", "ortak", "veresiye"].includes(c.key));
+
+  function renderCategory(cat: (typeof CATEGORY_ORDER)[number]) {
+    const items = categoryItems(cat);
+    const sum = items.reduce((s, i) => s + i.balance, 0);
+    return (
+      <section key={cat.key} className="rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-white">
+        <header
+          className="flex items-center justify-between px-3 py-2.5 text-white text-sm font-semibold"
+          style={{ background: HEADER_BG }}
+        >
+          <span>{cat.title}</span>
+          <span className="tabular-nums text-[13px]">{formatMoney(sum)}</span>
+        </header>
+        <div className="p-2.5 min-h-[64px] flex flex-wrap gap-2" style={{ background: BODY_BG }}>
+          {items.map((item) => (
+            <Link
+              key={`${cat.key}-${item.id}`}
+              href={item.href}
+              className={`rounded border bg-white px-3 py-2 shadow-sm hover:ring-1 hover:ring-blue-300 min-w-[148px] ${
+                item.inactive ? "opacity-60" : ""
+              }`}
+            >
+              <div className="text-xs font-semibold text-slate-800 truncate" title={item.name}>
+                {item.name}
+                {item.inactive ? " (Pasif)" : ""}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                <strong className="text-slate-700">TL</strong>{" "}
+                <span className="tabular-nums font-semibold text-slate-900">{formatMoney(item.balance)}</span>
+              </div>
+            </Link>
+          ))}
+          {items.length === 0 && (
+            <div className="text-xs text-baykus-muted px-1 py-2">Hesap yok</div>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <div className="space-y-3 pb-2">
+      <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold">Hesaplarım</h2>
-          <p className="text-xs text-baykus-muted">Finans › Hesaplarım · Banka / POS / Kart / Ortak</p>
+          <h1 className="text-lg font-bold text-baykus-text leading-tight">Hesaplarım</h1>
+          <p className="text-baykus-muted text-[11px]">Finans › Hesaplarım · BizimHesap düzeni</p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/finance" className="bk-btn bk-btn-ghost text-xs">
-            Finans özeti
-          </Link>
+        <div className="flex flex-wrap gap-2">
           <Link href="/finance/cash" className="bk-btn bk-btn-ghost text-xs">
             Günlük Kasa
           </Link>
+          <button
+            type="button"
+            className="bk-btn text-xs text-white"
+            style={{ background: "#1f6feb" }}
+            onClick={() => setShowVirman(true)}
+          >
+            ⇄ Para Transferi / Virman
+          </button>
         </div>
       </div>
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+      {okMsg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{okMsg}</div>}
 
-      <fieldset className="rounded border bg-white px-3 py-3">
-        <legend className="px-1 text-xs font-semibold">Hesap Ekle / Güncelle</legend>
-        <form onSubmit={onCreate} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-          <label>
-            <span className="text-[11px] text-baykus-muted">Hesap Türü</span>
-            <select className="bk-input" value={accountType} onChange={(e) => setAccountType(e.target.value)}>
-              {BANK_ACCOUNT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <button
+            type="button"
+            className="bk-btn text-xs text-white"
+            style={{ background: "#198754" }}
+            onClick={() => setShowAddMenu((v) => !v)}
+          >
+            + Yeni Hesap Ekle
+          </button>
+          {showAddMenu && (
+            <div className="absolute z-20 mt-1 min-w-[200px] rounded border bg-white shadow-lg text-sm py-1">
+              {(
+                [
+                  ["Kasa", "Kasa Ekle"],
+                  ["Banka", "Banka Hesabı Ekle"],
+                  ["POS", "POS Hesabı Ekle"],
+                  ["Şirket Ortağı", "Ortaklar Hesabı Ekle"],
+                  ["Kredi Kartı", "Kredi Kartı Ekle"],
+                ] as const
+              ).map(([kind, label]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  className="block w-full text-left px-3 py-1.5 hover:bg-slate-50"
+                  onClick={() => openAdd(kind)}
+                >
+                  {label}
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          )}
+        </div>
+
+        <span
+          className="inline-flex items-center rounded px-2.5 py-1.5 text-[11px] text-slate-500 border border-dashed border-slate-300 bg-slate-50"
+          title="Banka entegrasyonu bu sürümde OOS"
+        >
+          + Yeni Banka Entegrasyonu (OOS)
+        </span>
+
+        <label className="ml-auto inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+          <span>Pasif hesapları da göster</span>
+          <input
+            type="checkbox"
+            className="rounded border-slate-300"
+            checked={showPassive}
+            onChange={(e) => setShowPassive(e.target.checked)}
+          />
+        </label>
+      </div>
+
+      {addKind && (
+        <form
+          onSubmit={onCreate}
+          className="rounded-lg border border-baykus-line bg-white p-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm shadow-sm"
+        >
+          <div className="sm:col-span-2 lg:col-span-3 font-semibold text-slate-800 flex justify-between">
+            <span>
+              {addKind === "Kasa"
+                ? "Kasa Ekle"
+                : addKind === "Şirket Ortağı"
+                  ? "Ortaklar Hesabı Ekle"
+                  : `${addKind} Ekle`}
+            </span>
+            <button type="button" className="text-xs text-baykus-muted hover:underline" onClick={() => setAddKind(null)}>
+              Kapat
+            </button>
+          </div>
+          {addKind !== "Kasa" && (
+            <label>
+              <span className="text-[11px] text-baykus-muted">{isPartner ? "Hesap Grubu" : "Banka / Kurum"}</span>
+              <input
+                className="bk-input"
+                value={institution}
+                onChange={(e) => setInstitution(e.target.value)}
+                placeholder={isPartner ? "Şirket Ortakları" : "Ziraat / İş Bankası"}
+              />
+            </label>
+          )}
           <label>
-            <span className="text-[11px] text-baykus-muted">{isPartner ? "Hesap Grubu" : "Banka / Kurum"}</span>
-            <input
-              className="bk-input"
-              value={institution}
-              onChange={(e) => setInstitution(e.target.value)}
-              placeholder={isPartner ? "Şirket Ortakları" : "Ziraat / İş Bankası"}
-            />
-          </label>
-          <label>
-            <span className="text-[11px] text-baykus-muted">{isPartner ? "Ortak Adı" : "Hesap Adı"} *</span>
+            <span className="text-[11px] text-baykus-muted">
+              {addKind === "Kasa" ? "Kasa Adı *" : isPartner ? "Ortak Adı *" : "Hesap Adı *"}
+            </span>
             <input required className="bk-input" value={name} onChange={(e) => setName(e.target.value)} />
           </label>
-          <label className="sm:col-span-2">
-            <span className="text-[11px] text-baykus-muted">{isPartner ? "Kimlik / Referans" : "IBAN"}</span>
-            <input className="bk-input" value={iban} onChange={(e) => setIban(e.target.value)} />
-          </label>
+          {addKind !== "Kasa" && (
+            <label className="sm:col-span-2">
+              <span className="text-[11px] text-baykus-muted">{isPartner ? "Kimlik / Referans" : "IBAN"}</span>
+              <input className="bk-input" value={iban} onChange={(e) => setIban(e.target.value)} />
+            </label>
+          )}
           <label>
             <span className="text-[11px] text-baykus-muted">Devir Bakiye</span>
             <input
@@ -170,160 +317,40 @@ export default function BanksPage() {
               onChange={(e) => setOpening(e.target.value)}
             />
           </label>
-          <label className="sm:col-span-2 lg:col-span-2">
-            <span className="text-[11px] text-baykus-muted">Not</span>
-            <input className="bk-input" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </label>
+          {addKind !== "Kasa" && (
+            <label className="sm:col-span-2">
+              <span className="text-[11px] text-baykus-muted">Not</span>
+              <input className="bk-input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </label>
+          )}
           <div className="flex items-end">
-            <button type="submit" disabled={busy} className="bk-btn bk-btn-primary w-full" style={{ background: "#0f766e" }}>
+            <button
+              type="submit"
+              disabled={busy}
+              className="bk-btn bk-btn-primary w-full text-xs"
+              style={{ background: "#0f766e" }}
+            >
               {busy ? "…" : "Kaydet"}
             </button>
           </div>
         </form>
-      </fieldset>
-
-      <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-        <div className="bk-kpi-card" style={{ backgroundColor: "#1d4ed8" }}>
-          <span className="bk-kpi-icon">🏦</span>
-          <div className="min-w-0 flex-1 text-right">
-            <div className="bk-kpi-label">Banka Toplam</div>
-            <div className="bk-kpi-value truncate">{formatMoney(bankTotal)}</div>
-          </div>
-        </div>
-        <div className="bk-kpi-card" style={{ backgroundColor: "#334155" }}>
-          <span className="bk-kpi-icon">Σ</span>
-          <div className="min-w-0 flex-1 text-right">
-            <div className="bk-kpi-label">Tüm hesaplar</div>
-            <div className="bk-kpi-value truncate">{formatMoney(allTotal)}</div>
-          </div>
-        </div>
-        <div className="bk-kpi-card" style={{ backgroundColor: "#198754" }}>
-          <span className="bk-kpi-icon">💵</span>
-          <div className="min-w-0 flex-1 text-right">
-            <div className="bk-kpi-label">Kasa Toplam</div>
-            <div className="bk-kpi-value truncate">{formatMoney(cashTotal)}</div>
-          </div>
-        </div>
-      </div>
-      <fieldset className="rounded border bg-white px-3 py-2">
-        <legend className="px-1 text-xs font-semibold">Kasa Devir</legend>
-        <div className="flex flex-wrap items-center gap-3 text-sm">
-          <label className="flex items-center gap-2 text-xs">
-            Kasa Devir Bakiye
-            <input
-              type="number"
-              step="0.01"
-              className="bk-input w-28"
-              value={cashOpening}
-              onChange={(e) => setCashOpening(e.target.value)}
-            />
-          </label>
-          <button type="button" className="bk-btn text-xs text-white" style={{ background: "#0f766e" }} onClick={saveCashOpening}>
-            Kaydet
-          </button>
-        </div>
-      </fieldset>
-
-      {cash.length > 0 && (
-        <div className="rounded border overflow-hidden bg-[#fffde7]">
-          <div className="flex justify-between px-3 py-2 text-white text-sm font-semibold" style={{ background: "#198754" }}>
-            <span>Kasa</span>
-            <span className="tabular-nums">{formatMoney(cashTotal)}</span>
-          </div>
-          <div className="p-2 flex flex-wrap gap-2">
-            {cash.map((r) => (
-              <Link
-                key={r.id}
-                href={`/finance/cash/${r.id}`}
-                className="rounded border bg-white px-3 py-2 shadow-sm hover:ring-1 hover:ring-emerald-300 min-w-[140px]"
-              >
-                <div className="text-xs font-semibold">{r.name}</div>
-                <div className="text-[10px] text-baykus-muted">Kasa hesabı</div>
-                <div className="text-sm font-bold tabular-nums mt-1">{formatMoney(Number(r.balance))}</div>
-              </Link>
-            ))}
-          </div>
-        </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-3">
-        {BANK_ACCOUNT_TYPES.map((t) => {
-          const list = byType[t] || [];
-          const sum = list.reduce((s, a) => s + Number(a.balance), 0);
-          const color = TYPE_COLORS[t] || "#334155";
-          return (
-            <div key={t} className="rounded border overflow-hidden bg-[#fffde7]">
-              <div className="flex justify-between px-3 py-2 text-white text-sm font-semibold" style={{ background: color }}>
-                <span>{t}</span>
-                <span className="tabular-nums">{formatMoney(sum)}</span>
-              </div>
-              <div className="p-2 flex flex-wrap gap-2 min-h-[72px]">
-                {list.map((a) => (
-                  <Link
-                    key={a.id}
-                    href={`/finance/banks/${a.id}`}
-                    className="rounded border bg-white px-3 py-2 shadow-sm hover:ring-1 hover:ring-blue-300 min-w-[140px]"
-                  >
-                    <div className="text-xs font-semibold">{a.name}</div>
-                    <div className="text-[10px] text-baykus-muted">{a.institution || a.iban || "—"}</div>
-                    <div className="text-sm font-bold tabular-nums mt-1">{formatMoney(Number(a.balance))}</div>
-                  </Link>
-                ))}
-                {list.length === 0 && <div className="text-xs text-baykus-muted px-2 py-3">Hesap yok</div>}
-              </div>
-            </div>
-          );
-        })}
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-3">{leftCats.map(renderCategory)}</div>
+        <div className="space-y-3">{rightCats.map(renderCategory)}</div>
       </div>
 
-      <div className="bk-table-wrap">
-        <table className="bk-table">
-          <thead>
-            <tr>
-              <th>Tür</th>
-              <th>Hesap</th>
-              <th>Kurum</th>
-              <th>IBAN</th>
-              <th className="text-right">Bakiye</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {accounts.map((a) => (
-              <tr key={a.id}>
-                <td>
-                  <span
-                    className="inline-block rounded px-1.5 py-0.5 text-[10px] text-white"
-                    style={{ background: TYPE_COLORS[a.account_type || "Banka"] || "#64748b" }}
-                  >
-                    {a.account_type || "Banka"}
-                  </span>
-                </td>
-                <td className="font-medium">
-                  <Link href={`/finance/banks/${a.id}`} className="text-baykus-primary hover:underline">
-                    {a.name}
-                  </Link>
-                </td>
-                <td className="text-xs">{a.institution || "—"}</td>
-                <td className="font-mono text-[11px]">{a.iban || "—"}</td>
-                <td className="text-right tabular-nums font-semibold">{formatMoney(Number(a.balance))}</td>
-                <td className="text-right text-xs">
-                  <Link href={`/finance/banks/${a.id}`} className="text-baykus-primary hover:underline">
-                    Hareketler
-                  </Link>
-                </td>
-              </tr>
-            ))}
-            {accounts.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center text-baykus-muted py-8">
-                  Hesap yok — yukarıdan ekleyin
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <VirmanModal
+        open={showVirman}
+        onClose={() => setShowVirman(false)}
+        onSaved={(msg) => {
+          setOkMsg(msg);
+          void load();
+        }}
+        cash={cash}
+        banks={accounts}
+      />
 
       <StatusFooter onRefresh={load} />
     </div>

@@ -63,7 +63,7 @@ QUICK_CATALOG: list[QuickActionItem] = [
     QuickActionItem(key="perakende_satislar", label="Perakende Satışlar", href="/sales/retail", color="#f97316", description="Perakende satış listesi."),
     QuickActionItem(key="gider_takibi", label="Gider Takibi", href="/finance/expenses", color="#be123c", description="Masraf kayıtlarını ve ödemeleri takip edin."),
     QuickActionItem(key="acik_bakiyeler", label="Açık Bakiyeler", href="/customers/receivables", color="#be123c", description="Açık cari alacaklar."),
-    QuickActionItem(key="hesaplarim", label="Hesaplarım", href="/finance/banks", color="#334155", description="Banka hesapları."),
+    QuickActionItem(key="hesaplarim", label="Hesaplarım", href="/finance/banks", color="#334155", description="Kasa / banka / POS / ortak · virman."),
     QuickActionItem(key="krediler", label="Krediler", href="/finance/loans", color="#7c3aed", description="Kredi ödemeleri."),
     QuickActionItem(key="urun_stok_merkezi", label="Ürün & Stok Merkezi", href="/products", color="#06b6d4", description="Ürün, varyant ve stok durumunu yönetin."),
     QuickActionItem(key="fiyat_listesi", label="Fiyat Listesi", href="/price-lists", color="#be123c", description="Fiyat listeleri."),

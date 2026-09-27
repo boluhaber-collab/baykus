@@ -36,6 +36,7 @@ from app.schemas.finance import (
     BankMovementOut,
     CashMovementCreate,
     CashMovementOut,
+    CashRegisterCreate,
     CashRegisterOut,
     CashRegisterUpdate,
     FinanceSummary,
@@ -717,6 +718,24 @@ def list_cash_registers(
     return [_register_out(db, r) for r in regs]
 
 
+@router.post("/cash", response_model=CashRegisterOut, status_code=status.HTTP_201_CREATED)
+def create_cash_register(
+    payload: CashRegisterCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*WRITE_ROLES)),
+) -> CashRegisterOut:
+    reg = CashRegister(
+        name=payload.name.strip(),
+        opening_balance=payload.opening_balance,
+        currency=(payload.currency or "TRY").upper(),
+        is_active=payload.is_active,
+    )
+    db.add(reg)
+    db.commit()
+    db.refresh(reg)
+    return _register_out(db, reg)
+
+
 @router.patch("/cash/{register_id}", response_model=CashRegisterOut)
 def update_cash_register(
     register_id: int,
@@ -1128,8 +1147,6 @@ def create_transfer(
             status_code=400,
             detail="Kaynak ve hedef için tam birer seçim yapın (kasa veya banka)",
         )
-    if from_cash and to_cash:
-        raise HTTPException(status_code=400, detail="Kasa → kasa transferi desteklenmiyor")
     if from_bank and to_bank and from_bank == to_bank:
         raise HTTPException(status_code=400, detail="Aynı banka hesabına transfer edilemez")
 
@@ -1137,17 +1154,19 @@ def create_transfer(
     group_id = str(uuid.uuid4())
     cash_outs: list[CashMovementOut] = []
     bank_outs: list[BankMovementOut] = []
-    note = payload.note or "Transfer"
+    note = payload.note or "Transfer / Virman"
 
-    cash_reg = None
-    if from_cash or to_cash:
-        cash_reg = (
-            db.get(CashRegister, payload.cash_register_id)
-            if payload.cash_register_id
-            else _default_cash(db)
-        )
-        if not cash_reg:
+    def _resolve_cash(prefer_id: int | None) -> CashRegister:
+        reg = None
+        if prefer_id:
+            reg = db.get(CashRegister, prefer_id)
+        elif payload.cash_register_id:
+            reg = db.get(CashRegister, payload.cash_register_id)
+        else:
+            reg = _default_cash(db)
+        if not reg or not reg.is_active:
             raise HTTPException(status_code=404, detail="Kasa bulunamadı")
+        return reg
 
     if from_bank:
         src_acc = db.get(BankAccount, from_bank)
@@ -1158,8 +1177,41 @@ def create_transfer(
         if not dst_acc or not dst_acc.is_active:
             raise HTTPException(status_code=404, detail="Hedef banka hesabı bulunamadı")
 
+    # Cash → Cash (multi-kasa virman)
+    if from_cash and to_cash:
+        from_reg = _resolve_cash(payload.from_cash_register_id)
+        to_reg = _resolve_cash(payload.to_cash_register_id)
+        if from_reg.id == to_reg.id:
+            raise HTTPException(status_code=400, detail="Aynı kasaya transfer edilemez")
+        cm_out = CashMovement(
+            cash_register_id=from_reg.id,
+            movement_type="transfer_out",
+            amount=payload.amount,
+            movement_date=mov_date,
+            note=note,
+            transfer_group_id=group_id,
+            created_by_user_id=user.id,
+        )
+        cm_in = CashMovement(
+            cash_register_id=to_reg.id,
+            movement_type="transfer_in",
+            amount=payload.amount,
+            movement_date=mov_date,
+            note=note,
+            transfer_group_id=group_id,
+            created_by_user_id=user.id,
+        )
+        db.add_all([cm_out, cm_in])
+        db.commit()
+        db.refresh(cm_out)
+        db.refresh(cm_in)
+        cash_outs.extend(
+            [_cash_movement_out(cm_out, db=db), _cash_movement_out(cm_in, db=db)]
+        )
+
     # Cash → Bank
-    if from_cash and to_bank:
+    elif from_cash and to_bank:
+        cash_reg = _resolve_cash(payload.from_cash_register_id)
         cm = CashMovement(
             cash_register_id=cash_reg.id,
             movement_type="transfer_out",
@@ -1189,6 +1241,7 @@ def create_transfer(
 
     # Bank → Cash
     elif from_bank and to_cash:
+        cash_reg = _resolve_cash(payload.to_cash_register_id)
         bm = BankMovement(
             bank_account_id=from_bank,
             movement_type="transfer_out",

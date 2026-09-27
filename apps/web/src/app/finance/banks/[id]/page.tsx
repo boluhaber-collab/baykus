@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import AccountDetailLedger from "@/components/AccountDetailLedger";
 import StatusFooter from "@/components/StatusFooter";
+import VirmanModal from "@/components/VirmanModal";
 import {
   BankAccount,
   BankMovement,
@@ -12,18 +13,18 @@ import {
 } from "@/lib/api";
 import { BANK_HAREKET_LABELS } from "@/lib/bhNote";
 
-type Panel = "none" | "update" | "in" | "out" | "transfer";
+type Panel = "none" | "update" | "in" | "out";
 
 export default function BankDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const [account, setAccount] = useState<BankAccount | null>(null);
   const [movements, setMovements] = useState<BankMovement[]>([]);
-  const [allBanks, setAllBanks] = useState<BankAccount[]>([]);
   const [error, setError] = useState("");
   const [okMsg, setOkMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<Panel>("none");
+  const [showVirman, setShowVirman] = useState(false);
 
   // Update form
   const [editName, setEditName] = useState("");
@@ -37,24 +38,16 @@ export default function BankDetailPage() {
   const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [formNote, setFormNote] = useState("");
 
-  // Transfer
-  const [transferAmount, setTransferAmount] = useState("");
-  const [transferToCash, setTransferToCash] = useState(true);
-  const [transferToBankId, setTransferToBankId] = useState("");
-  const [transferNote, setTransferNote] = useState("");
-
   const load = useCallback(async () => {
     if (!Number.isFinite(id)) return;
     setError("");
     try {
-      const [acc, movs, banks] = await Promise.all([
+      const [acc, movs] = await Promise.all([
         apiFetch<BankAccount>(`/api/finance/banks/${id}`),
         apiFetch<BankMovement[]>(`/api/finance/banks/${id}/movements?limit=2000`),
-        apiFetch<BankAccount[]>("/api/finance/banks?active=true"),
       ]);
       setAccount(acc);
       setMovements(movs);
-      setAllBanks(banks.filter((b) => b.id !== id));
       setEditName(acc.name || "");
       setEditInstitution(acc.institution || "");
       setEditIban(acc.iban || "");
@@ -129,34 +122,6 @@ export default function BankDetailPage() {
     }
   }
 
-  async function onTransfer(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    setOkMsg("");
-    try {
-      await apiFetch("/api/finance/transfers", {
-        method: "POST",
-        body: JSON.stringify({
-          amount: Number(transferAmount),
-          from_cash: false,
-          from_bank_account_id: id,
-          to_cash: transferToCash,
-          to_bank_account_id: transferToCash ? null : Number(transferToBankId),
-          note: transferNote.trim() || "Transfer",
-        }),
-      });
-      setTransferAmount("");
-      setTransferNote("");
-      setOkMsg("Transfer kaydedildi");
-      setPanel("none");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Transfer hatası");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (!Number.isFinite(id)) {
     return <p className="text-red-600">Geçersiz hesap</p>;
@@ -243,60 +208,6 @@ export default function BankDetailPage() {
           </button>
         </div>
       </form>
-    ) : panel === "transfer" ? (
-      <form
-        onSubmit={onTransfer}
-        className="rounded border border-amber-200 bg-amber-50 p-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm"
-      >
-        <div className="sm:col-span-2 lg:col-span-4 font-semibold text-amber-900">Bu hesaptan transfer</div>
-        <label className="text-xs">
-          <span className="block mb-0.5 text-amber-800">Tutar *</span>
-          <input
-            required
-            type="number"
-            min="0.01"
-            step="0.01"
-            className="bk-input"
-            value={transferAmount}
-            onChange={(e) => setTransferAmount(e.target.value)}
-          />
-        </label>
-        <label className="text-xs">
-          <span className="block mb-0.5 text-amber-800">Hedef</span>
-          <select
-            className="bk-input"
-            value={transferToCash ? "cash" : transferToBankId}
-            onChange={(e) => {
-              if (e.target.value === "cash") {
-                setTransferToCash(true);
-                setTransferToBankId("");
-              } else {
-                setTransferToCash(false);
-                setTransferToBankId(e.target.value);
-              }
-            }}
-          >
-            <option value="cash">TL Kasa</option>
-            {allBanks.map((b) => (
-              <option key={b.id} value={String(b.id)}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-xs sm:col-span-2">
-          <span className="block mb-0.5 text-amber-800">Açıklama</span>
-          <input className="bk-input" value={transferNote} onChange={(e) => setTransferNote(e.target.value)} />
-        </label>
-        <div className="flex items-end gap-2 lg:col-span-4">
-          <button type="submit" disabled={busy} className="bk-btn text-xs text-white" style={{ background: "#b45309" }}>
-            {busy ? "…" : "Transfer et"}
-          </button>
-          <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => setPanel("none")}>
-            İptal
-          </button>
-        </div>
-      </form>
     ) : null;
 
   return (
@@ -321,8 +232,15 @@ export default function BankDetailPage() {
             <button type="button" className={chip(panel === "out", "orange")} onClick={() => openPanel("out")}>
               Para Çıkışı
             </button>
-            <button type="button" className={chip(panel === "transfer", "purple")} onClick={() => openPanel("transfer")}>
-              Transfer
+            <button
+              type="button"
+              className={chip(showVirman, "purple")}
+              onClick={() => {
+                setPanel("none");
+                setShowVirman(true);
+              }}
+            >
+              Para Transferi / Virman
             </button>
             <Link href="/documents" className="bk-party-chip bk-party-chip--cyan">
               Dökümanlar
@@ -344,6 +262,15 @@ export default function BankDetailPage() {
         onRowOk={(msg) => {
           setError("");
           setOkMsg(msg);
+        }}
+      />
+      <VirmanModal
+        open={showVirman}
+        onClose={() => setShowVirman(false)}
+        defaultFromKey={`bank:${id}`}
+        onSaved={(msg) => {
+          setOkMsg(msg);
+          void load();
         }}
       />
       <StatusFooter onRefresh={load} />

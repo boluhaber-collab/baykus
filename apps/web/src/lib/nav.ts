@@ -130,7 +130,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Finans",
     icon: "💰",
     color: "#facc15",
-    href: "/finance",
+    href: "/finance/banks",
     items: [
       { href: "/finance/cash", label: "Günlük Kasa", color: "#198754" },
       { href: "/finance/open-balances", label: "Açık Bakiyeler", color: "#be123c" },
@@ -396,7 +396,7 @@ export const QUICK_ACTION_CATALOG: {
   { id: "perakende_satislar", label: "Perakende Satışlar", href: "/sales/retail", hex: "#f97316", description: "Perakende satış listesi." },
   { id: "gider_takibi", label: "Gider Takibi", href: "/finance/expenses", hex: "#be123c", description: "Masraf kayıtlarını ve ödemeleri takip edin." },
   { id: "acik_bakiyeler", label: "Açık Bakiyeler", href: "/customers/receivables", hex: "#be123c", description: "Açık cari alacaklar." },
-  { id: "hesaplarim", label: "Hesaplarım", href: "/finance/banks", hex: "#334155", description: "Banka hesapları." },
+  { id: "hesaplarim", label: "Hesaplarım", href: "/finance/banks", hex: "#334155", description: "Kasa / banka / POS / ortak · virman." },
   { id: "krediler", label: "Krediler", href: "/finance/loans", hex: "#7c3aed", description: "Kredi ödemeleri." },
   { id: "urun_stok_merkezi", label: "Ürün & Stok Merkezi", href: "/products", hex: "#06b6d4", description: "Ürün, varyant ve stok durumunu yönetin." },
   { id: "fiyat_listesi", label: "Fiyat Listesi", href: "/price-lists", hex: "#be123c", description: "Fiyat listeleri." },

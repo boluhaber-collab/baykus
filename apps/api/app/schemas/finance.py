@@ -16,6 +16,13 @@ class CashRegisterOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CashRegisterCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    opening_balance: Decimal = Decimal("0")
+    currency: str = Field(default="TRY", max_length=3)
+    is_active: bool = True
+
+
 class CashRegisterUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     opening_balance: Decimal | None = None
@@ -128,7 +135,7 @@ class BankMovementOut(BaseModel):
 
 
 class TransferCreate(BaseModel):
-    """Transfer between cash↔bank or bank↔bank."""
+    """Transfer between cash↔bank, bank↔bank, or cash↔cash (virman)."""
 
     amount: Decimal = Field(gt=0)
     movement_date: date | None = None
@@ -139,7 +146,11 @@ class TransferCreate(BaseModel):
     # Destination
     to_cash: bool = False
     to_bank_account_id: int | None = None
+    # Legacy single cash id (used when only one side is cash)
     cash_register_id: int | None = None
+    # Explicit cash register ids (cash↔cash / multi-kasa)
+    from_cash_register_id: int | None = None
+    to_cash_register_id: int | None = None
 
 
 class TransferOut(BaseModel):

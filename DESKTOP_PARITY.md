@@ -608,3 +608,14 @@ Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync; alış create formunda �
 ### Kalan (dürüst) — tek hesap kalan ekranlar
 - `SupplierFisPanel` borç-alacak fişi (kasa/banka oluşturmaz — bilinçli)
 - Masraf / kredi taksit / kasa transfer formları (split satış/alış kapsamında değil)
+
+## Batch 24 — Hesaplarım BH hub + Para Transferi / Virman (2026-09-27)
+
+| Item | Route / API | Status |
+|------|-------------|--------|
+| Hesaplarım BH layout | `/finance/banks` — + Yeni Hesap Ekle · Pasif toggle · kategori kartları (Kasa/Banka/POS/Ortak/Kart/Veresiye) · cyan header + toplam | done |
+| Finans index | `/finance` → redirect `/finance/banks` | done |
+| Para Transferi / Virman | `VirmanModal` on Hesaplarım + account detail; `POST /api/finance/transfers` (cash↔bank, bank↔bank, **cash↔cash**) | done |
+| Kasa ekle | `POST /api/finance/cash` | done |
+| BH_IMPORT noise | Account detail ledger already uses `accountAciklama`; KPI/recent-tx hub removed via redirect | done |
+
