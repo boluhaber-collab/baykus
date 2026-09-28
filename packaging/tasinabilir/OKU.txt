@@ -1,0 +1,16 @@
+﻿Baykuş — TAŞINABİLİR paket (işyeri, Python/Node kurulumu YOK)
+==============================================================
+Bu pakette gömülü Python + Node vardır. kurulum.bat YOKTUR, gerekmez.
+
+ÜÇ ADIM
+-------
+1) Zip'i Masaüstü'ne çıkarın (örnek: Masaüstü\Baykus_Tasinabilir).
+2) Klasörün içindeki baslat.bat dosyasına çift tıklayın.
+3) Tarayıcıda açın:  http://127.0.0.1:3000
+   Kapatmak için açılan iki siyah pencereyi kapatın.
+
+Yedek:     yedek-al.bat
+Güncelleme: guncelle.bat  (önce yedek; baykus.db ASLA ezilmez)
+Detay:     GUNCELLEME.txt
+
+İnternet ilk açılışta gerekmez. İşyeri defteri: apps\api\baykus.db

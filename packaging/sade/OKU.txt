@@ -1,0 +1,14 @@
+﻿Baykuş — SADE KURULUM paketi (işyeri)
+=====================================
+Bu paket sistemdeki Python + Node.js kullanır. Bir kez internet ister.
+
+ÜÇ ADIM
+-------
+1) Zip'i Masaüstü'ne çıkarın (örnek: Masaüstü\baykus).
+2) Python ve Node yoksa Python_Kurulumu.txt'ye bakın, sonra kurulum.bat.
+   Script eksikleri kontrol eder; yoksa indirme adresini gösterir.
+3) Her gün: baslat.bat  →  http://127.0.0.1:3000
+
+Yedek:      yedek-al.bat
+Güncelleme: guncelle.bat  (baykus.db ASLA ezilmez)
+Detay:      KURULUM.txt ve GUNCELLEME.txt

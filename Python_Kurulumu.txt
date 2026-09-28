@@ -1,0 +1,57 @@
+﻿================================================================================
+  PYTHON ve NODE.js KURULUMU (yalnız sade kurulum paketi için)
+================================================================================
+
+Taşınabilir paket (Baykus_Tasinabilir) kullanıyorsanız bu dosyaya GEREK YOKTUR.
+Python ve Node.zip paketin içinde gelir.
+
+Sade kurulum (Baykus_Kurulum_Sade) bir kez internet + bu iki program ister.
+
+--------------------------------------------------------------------------------
+1) Python 3.11 veya üzeri
+--------------------------------------------------------------------------------
+  Adres: https://www.python.org/downloads/windows/
+
+  • "Windows installer (64-bit)" dosyasını çalıştırın.
+  • İLK ekranda mutlaka işaretleyin:  Add python.exe to PATH
+  • Install Now deyin.
+  • Bitince bu siyah pencereyi KAPATIP yeni bir CMD açın
+    (eski pencere PATH'i görmez).
+
+  Kontrol:
+      python --version
+      py -3 --version
+
+  Hâlâ "python bulunamadı" diyorsa:
+  • Başlat'a yazın: Uygulama yürütme diğer adlarını yönet
+  • python.exe ve python3.exe satırlarını Kapalı yapın
+    (Microsoft Store kısayolu PATH'i bozar).
+  • PATH kutusunu işaretlemediyseniz kurucuyu tekrar çalıştırıp
+    Modify → Add python.exe to PATH seçin.
+
+--------------------------------------------------------------------------------
+2) Node.js LTS + npm
+--------------------------------------------------------------------------------
+  npm ayrı kurulmaz; Node.js ile gelir.
+
+  Adres: https://nodejs.org/
+  • LTS sürümünü indirin (Windows x64 .msi).
+  • Sihirbazda PATH açık kalsın.
+  • Bitince CMD'yi kapatıp yeniden açın.
+
+  Kontrol:
+      node --version
+      npm --version
+
+--------------------------------------------------------------------------------
+3) Hâlâ çalışmıyorsa
+--------------------------------------------------------------------------------
+  Yeni CMD'de:
+      where python
+      where node
+      where npm
+
+  Hiç yol göstermiyorsa program kurulmamış veya PATH'e eklenmemiş demektir.
+  Microsoft Store yolu (WindowsApps) çıkıyorsa Store kısayolunu kapatın.
+
+================================================================================

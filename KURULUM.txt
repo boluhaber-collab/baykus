@@ -1,0 +1,53 @@
+﻿================================================================================
+  BAYKUŞ BASKI — SADE KURULUM (işyeri PC)
+================================================================================
+
+Bu paket işyeri bilgisayarı içindir. Gerçek defter burada çalışır:
+  apps\api\baykus.db   = canlı veri (en değerli dosya)
+  apps\api\uploads     = tasarımlar / belgeler
+
+Güncelleme PC'sindeki deneme db'si işyerine ASLA kopyalanmaz.
+
+--------------------------------------------------------------------------------
+ÜÇ ADIM
+--------------------------------------------------------------------------------
+  1) Bu klasörü Masaüstü'ne çıkarın (örnek: Masaüstü\baykus).
+
+  2) Python 3.11+ ve Node.js LTS yoksa kurun (Python_Kurulumu.txt).
+     Sonra kurulum.bat'a çift tıklayın.
+     • Node / Python eksikse script indirme adresini gösterir ve durur.
+     • Varsa venv + pip + npm yapar (bir kez internet gerekir).
+     • Canlı baykus.db varsa SİLİNMEZ.
+
+  3) Her gün: baslat.bat → tarayıcı http://127.0.0.1:3000
+
+--------------------------------------------------------------------------------
+YEDEK
+--------------------------------------------------------------------------------
+  yedek-al.bat  →  Yedekler\baykus_yedek_YYYYMMDD_HHMM.zip
+  İçinde: baykus.db + uploads
+
+--------------------------------------------------------------------------------
+GÜNCELLEME
+--------------------------------------------------------------------------------
+  guncelle.bat
+    • Önce yedek alır
+    • Git varsa: git pull --ff-only
+    • Git yoksa: yeni zip'i AYRI klasöre çıkarıp yolunu verirsiniz
+    • En sonda yedekteki baykus.db + uploads GERİ YAZILIR
+      (işyeri defteri ezilmez)
+
+  Yapmayın: tüm klasörü silip USB'den yapıştırmak; "hepsini değiştir".
+
+--------------------------------------------------------------------------------
+SORUN OLURSA
+--------------------------------------------------------------------------------
+  • python bulunamadı → Python_Kurulumu.txt (PATH + yeni CMD)
+  • npm bulunamadı    → Node.js LTS, sonra yeni CMD
+  • sayfa açılmıyor   → iki siyah pencerenin de açık olduğundan emin olun
+  • port dolu         → 8000 / 3000 kullanan programı kapatın
+
+  SQLite için Alembic ÇALIŞTIRMAYIN.
+  tmp\bizimhesap bu pakette yoktur (büyük önbellek; günlük işe gerekmez).
+
+================================================================================

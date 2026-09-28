@@ -1,86 +1,74 @@
 ﻿================================================================================
-  BAYKUS - GÜVENLİ GÜNCELLEME KURALLARI (yeni başlayanlar için)
+  BAYKUŞ - GÜVENLİ GÜNCELLEME KURALLARI
 ================================================================================
 
 Bu dosya: kod nasıl güncellenir, veritabanı (baykus.db) nasıl KORUNUR.
+Taşınabilir paket ve sade kurulum paketi AYNI kuralı kullanır.
 
 --------------------------------------------------------------------------------
 1) İKİ PC = İKİ ROL (karıştırmayın)
 --------------------------------------------------------------------------------
-  • GÜNCELLEME PC (bu masaüstü / ev):
+  • GÜNCELLEME PC (ev / masaüstü):
       - Kod yazar, test eder, git push yapar.
-      - Buradaki baykus.db = deneme / boş / eski olabilir.
-      - İşyeri defteri DEĞİLDİR.
+      - Buradaki baykus.db = deneme; işyeri defteri DEĞİLDİR.
 
   • İŞYERİ PC:
-      - Gerçek defter burada: sipariş, cari, stok, masraf.
-      - apps\api\baykus.db = CANLI VERİ (en değerli dosya).
-      - apps\api\uploads = tasarımlar / belgeler.
+      - Gerçek defter: apps\api\baykus.db  (en değerli dosya)
+      - apps\api\uploads = tasarımlar / belgeler
 
   KURAL: İşyeri baykus.db ASLA güncelleme PC'deki db ile değiştirilmez.
-         Güncelleme PC db'sini USB ile işyerine "üzerine yazmak" YASAK.
+         USB'den "hepsini üzerine yaz" YASAK.
 
 --------------------------------------------------------------------------------
-2) İŞYERİNDE KOD GÜNCELLEME (önerilen yol)
+2) İŞYERİNDE KOD GÜNCELLEME
 --------------------------------------------------------------------------------
-  İşyeri PC'de baykus klasöründe:
-
-      guncelle.bat   ← buna çift tıklayın
+  İşyeri klasöründe guncelle.bat'a çift tıklayın.
 
   Script sırası:
-    1) Yedek alır → Yedekler\once_guncelle_YYYYMMDD_HHMM\
-       (baykus.db + uploads kopyası)
-    2) git pull --ff-only  (sadece ileri sarma; çatışmada DURUR)
-    3) Gerekirse pip / npm (paket dosyası değiştiyse)
-    4) Ekrana yazar: "Veritabanına dokunulmadı"
+    1) Yedek → Yedekler\once_guncelle_YYYYMMDD_HHMM\  (db + uploads)
+    2a) Git varsa: git pull --ff-only (çatışmada DURUR)
+    2b) Git yoksa (taşınabilir / USB): yeni zip'i AYRI klasöre çıkarın,
+        script kaynak yolu sorar. baykus.db, uploads, .venv, node_modules,
+        runtime, .env KOPYALANMAZ.
+    3) Gerekirse pip / npm
+    4) Yedekteki baykus.db + uploads GERİ YAZILIR
+       Ekran: "Veritabanina dokunulmadi"
 
-  Kirli / elle değiştirilmiş dosya varsa pull YAPILMAZ; önce temizleyin.
-  Elle tüm klasörü silip yapıştırmayın. Elle "her şeyi üzerine yazmayın".
+  Kirli / elle değiştirilmiş dosya varsa git pull YAPILMAZ.
+  Elle tüm klasörü silip yapıştırmayın.
 
 --------------------------------------------------------------------------------
-3) USB İLE KOD GÜNCELLEME (git yoksa)
+3) USB İLE KOD GÜNCELLEME (elle, script yoksa)
 --------------------------------------------------------------------------------
-  Kod zip'i / USB klasörünü işyeri kaynağının ÜZERİNE açarken:
-
   DAHİL ET (üzerine yazılabilir):
-    - apps\api\app\ ... (Python kod)
-    - apps\web\ ... (web kod; node_modules hariç tercih)
+    - apps\api\app\  (Python kod)
+    - apps\web\src\  (web kod; node_modules hariç)
     - scripts\, docs\, *.md, *.bat, GUNCELLEME.txt, KURULUM.txt
 
-  ASLA ÜZERİNE YAZMA / SİLME (hariç tut):
+  ASLA ÜZERİNE YAZMA / SİLME:
     - apps\api\baykus.db
-    - apps\api\baykus.db-journal  (varsa)
-    - apps\api\uploads\           (tüm klasör)
-    - apps\api\.venv\             (yeniden kurulum.bat yeter)
+    - apps\api\baykus.db-journal
+    - apps\api\uploads\
+    - apps\api\.venv\
     - apps\web\node_modules\
+    - runtime\          (taşınabilir Python + Node)
     - .env
+    - apps\web\.env.local
     - Yedekler\
 
-  Pratik yöntem (PowerShell örneği — işyeri PC'de):
-    1) Önce yedek-al.bat veya guncelle.bat yedeği
-    2) Zip'i geçici klasöre çıkarın
-    3) baykus.db ve uploads'U HEDEFTE BIRAKIP diğer dosyaları kopyalayın
-       (Windows Gezgini'nde "üzerine yaz" demeden önce db'yi seçmeyin)
-
-  Şüphe varsa: sadece guncelle.bat + git kullanın; USB zip'i ertelemeyin.
-
 --------------------------------------------------------------------------------
-4) YAPMAYIN (sık hatalar)
+4) YAPMAYIN
 --------------------------------------------------------------------------------
   ✗ Güncelleme PC'deki baykus.db'yi işyerine kopyalamak
   ✗ Tüm "baykus" klasörünü silip USB'den yeniden yapıştırmak
-  ✗ Zip'i açıp "tüm dosyaları değiştir" demek (db de değişir!)
+  ✗ Zip'i açıp "tüm dosyaları değiştir" demek (db de değişir)
   ✗ git reset --hard / git clean -fd (yedeksiz; uploads gidebilir)
-  ✗ İşyeri db'sini güncelleme PC'ye "geri taşıyıp" orada bozmak
 
 --------------------------------------------------------------------------------
 5) YEDEK NEREYE?
 --------------------------------------------------------------------------------
-  guncelle.bat yedeği:
-      ...\baykus\Yedekler\once_guncelle_YYYYMMDD_HHMM\
-
-  yedek-al.bat yedeği (zip):
-      ...\baykus\Yedekler\baykus_yedek_YYYYMMDD_HHMM.zip
+  guncelle.bat : ...\Yedekler\once_guncelle_YYYYMMDD_HHMM\
+  yedek-al.bat : ...\Yedekler\baykus_yedek_YYYYMMDD_HHMM.zip
 
   Büyük güncellemeden / Excel import'tan ÖNCE yedek alın.
 
@@ -90,6 +78,6 @@ Bu dosya: kod nasıl güncellenir, veritabanı (baykus.db) nasıl KORUNUR.
   Güncelleme PC = kod    |    İşyeri PC = defter (baykus.db)
   Her zaman: guncelle.bat
   Asla: işyeri db'sini güncelleme db'siyle değiştirmek
-  USB zip: kaynak üzerine aç, ama baykus.db + uploads HARİÇ
+  USB zip: kaynak AYRI klasöre, guncelle.bat yol sorar
 
 ================================================================================
