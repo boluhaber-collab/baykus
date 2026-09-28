@@ -23,7 +23,7 @@ function Write-Utf8Bom([string]$Path, [string]$Text) {
 
 function Copy-SourceTree([string]$From, [string]$To) {
   New-Item -ItemType Directory -Force -Path $To | Out-Null
-  $excludeDir = @('.git','tmp','backups','.venv','node_modules','.next','__pycache__','.pytest_cache','Yedekler','runtime','.turbo')
+  $excludeDir = @('.git','tmp','backups','.venv','node_modules','.next','__pycache__','.pytest_cache','Yedekler','runtime','.turbo','packaging')
   $excludeFile = @('.env','.env.local','tsconfig.tsbuildinfo','baykus.db','baykus.db-journal')
   robocopy $From $To /E /NFL /NDL /NJH /NJS /nc /ns /np `
     /XD $excludeDir `
@@ -178,6 +178,7 @@ $okuA = Join-Path $SrcRepo 'packaging\tasinabilir\OKU.txt'
 if (Test-Path $okuA) { Copy-Item $okuA (Join-Path $ARoot 'OKU.txt') -Force }
 else { throw 'missing packaging/tasinabilir/OKU.txt - pull latest' }
 Write-Utf8Bom (Join-Path $ARoot 'PACK_INFO.txt') (New-PackInfo 'Tasinabilir (gomulu Python+Node)')
+Remove-Item (Join-Path $ARoot 'packaging') -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path (Join-Path $ARoot 'Yedekler') | Out-Null
 
 # ========== B: Kurulum_Sade ==========
@@ -191,6 +192,7 @@ Remove-Item (Join-Path $BRoot 'Phyton Kurulumu.txt') -ErrorAction SilentlyContin
 $okuB = Join-Path $SrcRepo 'packaging\sade\OKU.txt'
 if (Test-Path $okuB) { Copy-Item $okuB (Join-Path $BRoot 'OKU.txt') -Force }
 Write-Utf8Bom (Join-Path $BRoot 'PACK_INFO.txt') (New-PackInfo 'Kurulum Sade (sistem Python+Node)')
+Remove-Item (Join-Path $BRoot 'packaging') -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path (Join-Path $BRoot 'Yedekler') | Out-Null
 # sade: no runtime, no node_modules (kurulum.bat installs)
 
