@@ -99,7 +99,7 @@ Copy-Item (Join-Path $nodeInner.FullName '*') $rtNode -Recurse -Force
 Expand-Archive -Path $pyZip -DestinationPath $rtPy -Force
 Copy-Item $getPip (Join-Path $rtPy 'get-pip.py') -Force
 
-$pth = Get-ChildItem $rtPy -Filter '*.pth' | Select-Object -First 1
+$pth = Get-ChildItem $rtPy -Filter '*._pth' | Select-Object -First 1
 if (-not $pth) { throw 'python ._pth not found' }
 $pthText = @"
 python312.zip
