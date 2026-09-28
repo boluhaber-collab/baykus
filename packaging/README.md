@@ -10,3 +10,8 @@
 Paketleri Windows güncelleme PC'de üretmek için: `packaging/build-packs.ps1`
 
 `guncelle.bat` her iki pakette de önce yedek alır, en sonda `baykus.db` + `uploads` yedekten geri yazar.
+
+## Kontrol paneli (CMD yok)
+
+Kökte `Baykus.bat` / `BaykusPanel.bat` → `BaykusPanel.ps1` (WinForms).
+Taşınabilir ve sade paketlere kaynak kopyasıyla gelir. `Kurulum` düğmesi yalnızca `kurulum.bat` varken aktiftir.

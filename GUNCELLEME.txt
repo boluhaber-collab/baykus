@@ -23,6 +23,7 @@ Taşınabilir paket ve sade kurulum paketi AYNI kuralı kullanır.
 2) İŞYERİNDE KOD GÜNCELLEME
 --------------------------------------------------------------------------------
   İşyeri klasöründe guncelle.bat'a çift tıklayın.
+  (Alternatif: Baykus.bat kontrol panelinden «Güncelle» — aynı koruma kuralları.)
 
   Script sırası:
     1) Yedek → Yedekler\once_guncelle_YYYYMMDD_HHMM\  (db + uploads)

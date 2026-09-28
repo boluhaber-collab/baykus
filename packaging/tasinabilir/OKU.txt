@@ -1,16 +1,21 @@
-﻿Baykuş — TAŞINABİLİR paket (işyeri, Python/Node kurulumu YOK)
+Baykuş — TAŞINABİLİR paket (işyeri, Python/Node kurulumu YOK)
 ==============================================================
 Bu pakette gömülü Python + Node vardır. kurulum.bat YOKTUR, gerekmez.
 
-ÜÇ ADIM
--------
-1) Zip'i Masaüstü'ne çıkarın (örnek: Masaüstü\Baykus_Tasinabilir).
-2) Klasörün içindeki baslat.bat dosyasına çift tıklayın.
-3) Tarayıcıda açın:  http://127.0.0.1:3000
-   Kapatmak için açılan iki siyah pencereyi kapatın.
+ÖNERİLEN: Baykus.bat (veya BaykusPanel.bat)
+------------------------------------------
+Çift tıklayın → küçük kontrol paneli açılır (CMD penceresi YOK).
+  • Başlat     → API + Web gizli çalışır, durum panoda görünür
+  • Durdur     → servisleri kapatır
+  • Tarayıcıyı Aç / Yedek Al / Güncelle / Tepsiye Küçült
 
-Yedek:     yedek-al.bat
-Güncelleme: guncelle.bat  (önce yedek; baykus.db ASLA ezilmez)
-Detay:     GUNCELLEME.txt
+Klasik yol (siyah pencereler):
+1) Zip'i Masaüstü'ne çıkarın (örnek: Masaüstü\Baykus_Tasinabilir).
+2) baslat.bat → iki CMD penceresi açılır.
+3) Tarayıcı: http://127.0.0.1:3000
+
+Yedek:      yedek-al.bat  (veya panelden Yedek Al)
+Güncelleme: guncelle.bat / panel Güncelle  (baykus.db ASLA ezilmez)
+Detay:      GUNCELLEME.txt
 
 İnternet ilk açılışta gerekmez. İşyeri defteri: apps\api\baykus.db
