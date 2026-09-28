@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 setlocal EnableExtensions
 cd /d "%~dp0"
@@ -13,16 +13,37 @@ if exist "runtime\python\python.exe" (
   set "BAYKUS_PY=%~dp0runtime\python\python.exe"
 ) else if exist "apps\api\.venv\Scripts\python.exe" (
   set "BAYKUS_PY=%~dp0apps\api\.venv\Scripts\python.exe"
+) else if exist ".venv\Scripts\python.exe" (
+  set "BAYKUS_PY=%~dp0.venv\Scripts\python.exe"
+) else if exist "venv\Scripts\python.exe" (
+  set "BAYKUS_PY=%~dp0venv\Scripts\python.exe"
 ) else (
-  echo [HATA] Python ortami yok.
-  echo        Tasinabilir pakette runtime\python eksik.
-  echo        Sade kurulumda once kurulum.bat calistirin.
-  pause
-  exit /b 1
+  set "BAYKUS_PY="
+  where py >nul 2>&1 && for /f "delims=" %%I in ('py -3 -c "import sys; print(sys.executable)" 2^>nul') do set "BAYKUS_PY=%%I"
+  if not defined BAYKUS_PY (
+    where python >nul 2>&1 && for /f "delims=" %%I in ('where python') do (
+      if not defined BAYKUS_PY set "BAYKUS_PY=%%I"
+    )
+  )
+  if not defined BAYKUS_PY (
+    echo [HATA] Python bulunamadi.
+    echo        Sira: runtime\python -^> .venv -^> sistem py -3 / python
+    echo        Sade: once kurulum.bat  veya  Masaustu\baykus kullanin.
+    pause
+    exit /b 1
+  )
 )
 
 if exist "runtime\node\npm.cmd" (
   set "PATH=%~dp0runtime\node;%~dp0runtime\python;%~dp0runtime\python\Scripts;%PATH%"
+) else (
+  where node >nul 2>&1
+  if errorlevel 1 (
+    echo [HATA] Node.js bulunamadi.
+    echo        Sira: runtime\node -^> sistem node
+    pause
+    exit /b 1
+  )
 )
 
 if not exist "apps\web\node_modules\" (

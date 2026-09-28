@@ -14,12 +14,71 @@ $script:WebProc = $null
 $script:ApiPid = 0
 $script:WebPid = 0
 
-function Get-BaykusPython {
-  $p1 = Join-Path $Root 'runtime\python\python.exe'
-  $p2 = Join-Path $Root 'apps\api\.venv\Scripts\python.exe'
-  if (Test-Path $p1) { return $p1 }
-  if (Test-Path $p2) { return $p2 }
+function Test-BaykusPythonExe([string]$Exe) {
+  if (-not $Exe) { return $false }
+  if (-not (Test-Path -LiteralPath $Exe)) { return $false }
+  try {
+    # Call operator keeps -c payload as one argv (Start-Process ArgumentList splits on spaces).
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Stop'
+    $null = & $Exe -c "import sys; raise SystemExit(0 if sys.version_info[0] >= 3 else 1)" 2>$null
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    return ($code -eq 0)
+  } catch { return $false }
+}
+
+function Resolve-BaykusSystemPython {
+  # Prefer py -3 launcher, then python on PATH. Skip Windows Store stubs that fail.
+  $candidates = @()
+  $pyCmd = Get-Command py -ErrorAction SilentlyContinue
+  if ($pyCmd) {
+    try {
+      $out = & $pyCmd.Source -3 -c "import sys; print(sys.executable)" 2>$null
+      if ($out) { $candidates += ([string]$out).Trim() }
+    } catch { }
+  }
+  foreach ($name in @('python','python3')) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) { $candidates += $cmd.Source }
+  }
+  foreach ($c in ($candidates | Select-Object -Unique)) {
+    if (Test-BaykusPythonExe $c) { return $c }
+  }
   return $null
+}
+
+function Get-BaykusPython {
+  # Order: portable runtime -> apps/api .venv -> root .venv/venv -> system py -3 / python
+  $paths = @(
+    (Join-Path $Root 'runtime\python\python.exe'),
+    (Join-Path $Root 'apps\api\.venv\Scripts\python.exe'),
+    (Join-Path $Root '.venv\Scripts\python.exe'),
+    (Join-Path $Root 'venv\Scripts\python.exe')
+  )
+  foreach ($p in $paths) {
+    if (Test-Path -LiteralPath $p) { return $p }
+  }
+  return (Resolve-BaykusSystemPython)
+}
+
+function Get-BaykusNode {
+  # Order: portable runtime\node -> system node on PATH
+  $p1 = Join-Path $Root 'runtime\node\node.exe'
+  if (Test-Path -LiteralPath $p1) { return $p1 }
+  $cmd = Get-Command node -ErrorAction SilentlyContinue
+  if ($cmd -and $cmd.Source -and (Test-Path -LiteralPath $cmd.Source)) { return $cmd.Source }
+  return $null
+}
+
+function Get-BaykusNpm {
+  $p1 = Join-Path $Root 'runtime\node\npm.cmd'
+  if (Test-Path -LiteralPath $p1) { return $p1 }
+  $cmd = Get-Command npm.cmd -ErrorAction SilentlyContinue
+  if ($cmd -and $cmd.Source) { return $cmd.Source }
+  $cmd2 = Get-Command npm -ErrorAction SilentlyContinue
+  if ($cmd2 -and $cmd2.Source) { return $cmd2.Source }
+  return 'npm.cmd'
 }
 
 function Ensure-EnvFiles {
@@ -130,7 +189,14 @@ function Start-BaykusServices {
   $py = Get-BaykusPython
   if (-not $py) {
     [System.Windows.Forms.MessageBox]::Show(
-      "Python ortamı yok.`nTaşınabilir: runtime\python eksik.`nSade: önce Kurulum yapın.",
+      "Python bulunamadi.`nSira: runtime\python -> .venv -> sistem (py -3 / python).`nSade pakette once Kurulum; veya Masaustu\baykus kullanin.",
+      'Baykus', 'OK', 'Error') | Out-Null
+    return
+  }
+  $nodeCheck = Get-BaykusNode
+  if (-not $nodeCheck) {
+    [System.Windows.Forms.MessageBox]::Show(
+      "Node.js bulunamadi.`nSira: runtime\node -> sistem node.`nTasinabilir zip'i yeniden cikarin veya Node LTS kurun.",
       'Baykus', 'OK', 'Error') | Out-Null
     return
   }
@@ -160,16 +226,12 @@ function Start-BaykusServices {
 
   if (-not (Test-PortUp 3000)) {
     $webDir = Join-Path $Root 'apps\web'
-    $nodeExe = Join-Path $Root 'runtime\node\node.exe'
-    if (-not (Test-Path $nodeExe)) {
-      $which = Get-Command node -ErrorAction SilentlyContinue
-      if ($which) { $nodeExe = $which.Source } else { $nodeExe = 'node.exe' }
-    }
+    $nodeExe = Get-BaykusNode
+    if (-not $nodeExe) { $nodeExe = 'node.exe' }
     $nextJs = Join-Path $webDir 'node_modules\next\dist\bin\next'
     if (-not (Test-Path $nextJs)) {
       # fallback npm.cmd (yine CreateNoWindow)
-      $npmCmd = Join-Path $Root 'runtime\node\npm.cmd'
-      if (-not (Test-Path $npmCmd)) { $npmCmd = 'npm.cmd' }
+      $npmCmd = Get-BaykusNpm
       $script:WebProc = Start-HiddenProcess -FileName 'cmd.exe' `
         -Arguments "/c `"$npmCmd`" run dev -- -H 127.0.0.1 -p 3000" `
         -WorkingDirectory $webDir `
@@ -336,8 +398,7 @@ function Invoke-BaykusUpdate {
   }
   $pkg = Join-Path $Root 'apps\web\package.json'
   if (Test-Path $pkg) {
-    $npmCmd = Join-Path $Root 'runtime\node\npm.cmd'
-    if (-not (Test-Path $npmCmd)) { $npmCmd = 'npm.cmd' }
+    $npmCmd = Get-BaykusNpm
     Push-Location (Join-Path $Root 'apps\web')
     try { & cmd.exe /c "`"$npmCmd`" install --no-audit --no-fund" 2>&1 | Out-Null } catch { }
     finally { Pop-Location }
