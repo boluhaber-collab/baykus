@@ -203,8 +203,12 @@ foreach ($name in @($AName, $BName)) {
   if ($LASTEXITCODE -ge 8) { throw "copy to desktop $name failed $LASTEXITCODE" }
   $zip = Join-Path $Desktop "$name.zip"
   if (Test-Path $zip) { Remove-Item $zip -Force }
-  Write-Host "Zipping $name ..."
-  Compress-Archive -Path $dest -DestinationPath $zip -CompressionLevel Optimal
+  Write-Host "Zipping $name (tar) ..."
+  Push-Location $Desktop
+  try {
+    & tar.exe -a -c -f $zip $name
+    if ($LASTEXITCODE -ne 0) { throw "tar zip failed $LASTEXITCODE for $name" }
+  } finally { Pop-Location }
 }
 
 Write-Host "DONE"
