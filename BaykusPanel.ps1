@@ -272,7 +272,7 @@ function Invoke-BaykusUpdate {
   if (Test-Path $gitDir) {
     $git = Get-Command git -ErrorAction SilentlyContinue
     if (-not $git) {
-      [System.Windows.Forms.MessageBox]::Show('.git var ama git PATH'te yok. Yedek alındı; DB dokunulmadı.', 'Güncelle', 'OK', 'Error') | Out-Null
+      [System.Windows.Forms.MessageBox]::Show(".git var ama git PATH'te yok. Yedek alındı; DB dokunulmadı.", 'Güncelle', 'OK', 'Error') | Out-Null
       return
     }
     Push-Location $Root
