@@ -507,6 +507,8 @@ export function statusBadgeClass(status: string): string {
       return "bg-[#e5e7eb] text-slate-800";
     case "Sipariş İptali":
       return "bg-[#fee2e2] text-red-800";
+    case "Satış":
+      return "bg-[#dbeafe] text-blue-900";
     default:
       return "bg-slate-100 text-slate-700";
   }

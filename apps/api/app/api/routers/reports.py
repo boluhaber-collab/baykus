@@ -103,7 +103,7 @@ def list_reports(_: User = Depends(require_roles(*READ_ROLES))) -> dict:
                 "title": "Satış raporu",
                 "path": "/api/reports/sales",
                 "href": "/reports/sales",
-                "description": "Siparişler: adet, ciro, durum dağılımı (tarih aralığı)",
+                "description": "Cari satış hareketleri (BH import + yerel): adet, ciro (tarih aralığı)",
             },
             {
                 "key": "stock",
@@ -229,6 +229,29 @@ def list_reports(_: User = Depends(require_roles(*READ_ROLES))) -> dict:
 
 
 # ── Shared sales query ─────────────────────────────────────────────────────
+# Source of truth: cari_movements.movement_type == "sale"
+# (BH Detaylı Ekstre import + local order side-effects). Orders table alone is
+# empty after demo wipe even when real BH sales remain on cari.
+
+
+def _sale_ref(m: CariMovement, parsed: dict[str, Any], order: Order | None) -> str:
+    if order and order.order_number:
+        return order.order_number
+    belge = parsed.get("belge")
+    if belge:
+        return str(belge)
+    return f"SAT-{m.id}"
+
+
+def _sale_note_display(parsed: dict[str, Any], m: CariMovement) -> str | None:
+    kalem = parsed.get("kalem_raw")
+    if kalem:
+        return str(kalem)[:200]
+    display = sanitize_display_note(m.note) or None
+    if display:
+        return display[:200]
+    hareket = parsed.get("hareket")
+    return str(hareket) if hareket else None
 
 
 def _sales_data(
@@ -237,55 +260,92 @@ def _sales_data(
     date_to: date | None,
     status: str | None,
 ) -> tuple[dict, list[dict]]:
-    q = db.query(Order).options(joinedload(Order.customer), joinedload(Order.payments))
-    if date_from:
-        q = q.filter(Order.created_at >= _day_start(date_from))
-    if date_to:
-        q = q.filter(Order.created_at <= _day_end(date_to))
-    if status:
-        q = q.filter(Order.status == status)
+    from app.utils.bh_note import parse_bh_note
 
-    orders = q.order_by(Order.created_at.desc()).all()
+    q = (
+        db.query(CariMovement)
+        .options(
+            joinedload(CariMovement.customer),
+            joinedload(CariMovement.order).joinedload(Order.payments),
+        )
+        .filter(CariMovement.movement_type == "sale")
+    )
+    if date_from:
+        q = q.filter(CariMovement.movement_date >= date_from)
+    if date_to:
+        q = q.filter(CariMovement.movement_date <= date_to)
+
+    moves = q.order_by(CariMovement.movement_date.desc(), CariMovement.id.desc()).all()
 
     rows_out: list[dict] = []
     total_revenue = Decimal("0")
     total_remaining = Decimal("0")
     cancelled_count = 0
-    by_status: dict[str, dict[str, float | int]] = {
-        s: {"count": 0, "revenue": 0.0} for s in ORDER_STATUSES
-    }
+    by_status: dict[str, dict[str, float | int]] = {}
 
-    for o in orders:
-        amt = _dec(o.total_amount)
-        rem = _remaining(o)
-        paid = _paid_amount(o)
-        if o.status == "Sipariş İptali":
+    for m in moves:
+        order: Order | None = m.order if m.order_id else None
+        if status:
+            if order and order.status != status:
+                continue
+            if not order and status not in ("Satış", "sale"):
+                continue
+
+        parsed = parse_bh_note(m.note)
+        amt = _dec(m.debit)
+        if amt <= 0 and order is not None:
+            amt = _dec(order.total_amount)
+
+        paid = Decimal("0")
+        rem = amt
+        due = None
+        cancelled = bool(order and order.status == "Sipariş İptali")
+        if order is not None:
+            paid = _paid_amount(order)
+            if paid <= 0:
+                paid = _dec(order.deposit_amount)
+            rem = Decimal("0") if cancelled else (
+                max(amt - paid, Decimal("0")) if paid > 0 else _remaining(order)
+            )
+            due = order.due_date.isoformat() if order.due_date else None
+            st = order.status or "Satış"
+            source = "order"
+        else:
+            st = "Satış"
+            source = "cari"
+
+        if cancelled:
             cancelled_count += 1
         else:
             total_revenue += amt
             total_remaining += rem
-        st = o.status or "?"
+
         bucket = by_status.setdefault(st, {"count": 0, "revenue": 0.0})
         bucket["count"] = int(bucket["count"]) + 1
-        if st != "Sipariş İptali":
+        if not cancelled:
             bucket["revenue"] = float(bucket["revenue"]) + _f(amt)
+
         rows_out.append(
             {
-                "id": o.id,
-                "order_number": o.order_number,
-                "customer_id": o.customer_id,
-                "customer_name": o.customer.name if o.customer else None,
-                "status": o.status,
+                "id": m.id,
+                "order_number": _sale_ref(m, parsed, order),
+                "customer_id": m.customer_id,
+                "customer_name": m.customer.name if m.customer else None,
+                "status": st,
                 "total_amount": _f(amt),
-                "paid_amount": _f(paid if paid > 0 else o.deposit_amount),
+                "paid_amount": _f(paid),
                 "remaining_amount": _f(rem),
-                "created_at": o.created_at.isoformat() if o.created_at else None,
-                "due_date": o.due_date.isoformat() if o.due_date else None,
+                "created_at": m.movement_date.isoformat() if m.movement_date else None,
+                "due_date": due,
+                "source": source,
+                "note": _sale_note_display(parsed, m),
+                "order_id": order.id if order else None,
             }
         )
 
     summary = {
-        "order_count": len(orders),
+        "order_count": len(rows_out),
+        "sale_count": len(rows_out),
         "revenue": _f(total_revenue),
         "remaining": _f(total_remaining),
         "cancelled_count": cancelled_count,
@@ -296,6 +356,13 @@ def _sales_data(
         "date_from": date_from.isoformat() if date_from else None,
         "date_to": date_to.isoformat() if date_to else None,
         "status_filter": status,
+        "source": "cari_sales",
+        "assumptions": [
+            "Satışlar cari hareketlerinden (movement_type=sale): BH ekstre import + yerel sipariş.",
+            "Demo wipe sonrası siparişler boş olsa da BH satışları burada görünür.",
+            "İptal siparişe bağlı cari satışlar ciroya dahil edilmez.",
+            "Ana Sayfa Eylül Cirosu BH portal KPI scrape; perakende/grupsuz satışlar cari kartta olmayabilir.",
+        ],
     }
     return summary, rows_out
 
@@ -314,14 +381,15 @@ def sales_report(
 
     if _wants_csv(request, format):
         headers = [
-            "Sipariş No",
+            "Belge/No",
             "Müşteri",
-            "Durum",
+            "Tip",
             "Tutar",
             "Ödenen",
             "Kalan",
-            "Oluşturma",
-            "Termin",
+            "Tarih",
+            "Kaynak",
+            "Açıklama",
         ]
         csv_rows = [
             [
@@ -332,7 +400,8 @@ def sales_report(
                 r["paid_amount"],
                 r["remaining_amount"],
                 r["created_at"] or "",
-                r["due_date"] or "",
+                r.get("source") or "",
+                r.get("note") or "",
             ]
             for r in rows_out
         ]
@@ -353,7 +422,8 @@ def sales_print(
     trs = "".join(
         f"<tr><td>{r['order_number']}</td><td>{r['customer_name'] or ''}</td>"
         f"<td>{r['status']}</td><td style='text-align:right'>{r['total_amount']:.2f}</td>"
-        f"<td>{(r['created_at'] or '')[:10]}</td></tr>"
+        f"<td>{(r['created_at'] or '')[:10]}</td>"
+        f"<td>{(r.get('note') or '')[:80]}</td></tr>"
         for r in rows
     )
     html = f"""<!DOCTYPE html>
@@ -367,9 +437,9 @@ th,td{{border:1px solid #cbd5e1;padding:6px 8px}} th{{background:#f1f5f9;text-al
 <button onclick="window.print()">Yazdır</button>
 <h1>Satış Raporu</h1>
 <div class="meta">Adet: {summary['order_count']} · Ciro: {summary['revenue']:.2f} TRY
-· Aralık: {summary.get('date_from') or '—'} → {summary.get('date_to') or '—'}</div>
-<table><thead><tr><th>Sipariş</th><th>Müşteri</th><th>Durum</th><th>Tutar</th><th>Tarih</th></tr></thead>
-<tbody>{trs or '<tr><td colspan="5">Kayıt yok</td></tr>'}</tbody></table>
+· Kaynak: cari satış hareketleri · Aralık: {summary.get('date_from') or '—'} → {summary.get('date_to') or '—'}</div>
+<table><thead><tr><th>Belge/No</th><th>Müşteri</th><th>Tip</th><th>Tutar</th><th>Tarih</th><th>Açıklama</th></tr></thead>
+<tbody>{trs or '<tr><td colspan="6">Kayıt yok</td></tr>'}</tbody></table>
 </body></html>"""
     return HTMLResponse(html)
 
@@ -1383,20 +1453,29 @@ def sales_six_months(
     total_cnt = 0
     for yy, mm in months:
         start, end = _month_bounds(yy, mm)
-        orders = (
-            db.query(Order)
-            .filter(Order.created_at >= _day_start(start), Order.created_at <= _day_end(end))
+        moves = (
+            db.query(CariMovement)
+            .options(joinedload(CariMovement.order))
+            .filter(
+                CariMovement.movement_type == "sale",
+                CariMovement.movement_date >= start,
+                CariMovement.movement_date <= end,
+            )
             .all()
         )
         rev = Decimal("0")
         cnt = 0
         cancelled = 0
-        for o in orders:
-            if o.status == "Sipariş İptali":
+        for m in moves:
+            order = m.order if m.order_id else None
+            if order and order.status == "Sipariş İptali":
                 cancelled += 1
                 continue
             cnt += 1
-            rev += _dec(o.total_amount)
+            amt = _dec(m.debit)
+            if amt <= 0 and order is not None:
+                amt = _dec(order.total_amount)
+            rev += amt
         total_rev += rev
         total_cnt += cnt
         rows_out.append(
@@ -1405,6 +1484,7 @@ def sales_six_months(
                 "month": mm,
                 "label": f"{yy}-{mm:02d}",
                 "order_count": cnt,
+                "sale_count": cnt,
                 "cancelled_count": cancelled,
                 "revenue": _f(rev),
             }
@@ -1416,7 +1496,7 @@ def sales_six_months(
         "revenue": _f(total_rev),
         "assumptions": [
             "Son 6 takvim ayı (içinde bulunulan ay dahil).",
-            "İptal siparişler ciroya dahil değil.",
+            "Cari satış hareketleri (BH import + yerel); iptal siparişler hariç.",
         ],
     }
     if _wants_csv(request, format):

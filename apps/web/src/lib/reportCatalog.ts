@@ -37,7 +37,7 @@ export const REPORT_HUBS: ReportHub[] = [
       {
         key: "basit-satis",
         title: "Basit Satış",
-        description: "Sipariş ciro · tarih/durum · CSV",
+        description: "Cari satış (BH + yerel) · tarih · CSV",
         href: "/reports/sales",
         color: "#2563eb",
         status: "live",

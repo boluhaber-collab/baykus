@@ -29,6 +29,9 @@ type SalesRow = {
   remaining_amount: number;
   created_at?: string | null;
   due_date?: string | null;
+  source?: string | null;
+  note?: string | null;
+  order_id?: number | null;
 };
 
 function monthStart(): string {
@@ -81,7 +84,7 @@ export default function SalesReportPage() {
     <div>
       <ReportHeader
         title="Satış raporu"
-        subtitle="Siparişler — adet, ciro, durum (tarih aralığı)"
+        subtitle="Cari satış hareketleri (BH import + yerel) — adet, ciro (tarih aralığı)"
         actions={
           <>
             <button
@@ -124,9 +127,10 @@ export default function SalesReportPage() {
         <Field label="Bitiş">
           <input type="date" className={inputCls} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </Field>
-        <Field label="Durum">
+        <Field label="Tip / durum">
           <select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Tümü</option>
+            <option value="Satış">Satış (cari / BH)</option>
             {ORDER_STATUSES.map((st) => (
               <option key={st} value={st}>
                 {st}
@@ -143,7 +147,7 @@ export default function SalesReportPage() {
 
       <SummaryCards
         items={[
-          { label: "Sipariş adedi", value: Number(s.order_count ?? 0) },
+          { label: "Satış adedi", value: Number(s.sale_count ?? s.order_count ?? 0) },
           { label: "Ciro (iptal hariç)", value: formatMoney(Number(s.revenue ?? 0)) },
           { label: "Kalan tahsilat", value: formatMoney(Number(s.remaining ?? 0)) },
           { label: "İptal", value: Number(s.cancelled_count ?? 0), accent: "border-red-200" },
@@ -166,7 +170,7 @@ export default function SalesReportPage() {
       )}
 
       <ReportTable
-        headers={["Sipariş", "Müşteri", "Durum", "Tutar", "Ödenen", "Kalan", "Tarih", "Termin"]}
+        headers={["Belge/No", "Müşteri", "Tip", "Tutar", "Ödenen", "Kalan", "Tarih", "Açıklama"]}
         colSpan={8}
         empty={!loading && (data?.rows.length ?? 0) === 0}
       >
@@ -178,6 +182,9 @@ export default function SalesReportPage() {
               <span className={`rounded-full px-2 py-0.5 text-xs ${statusBadgeClass(r.status)}`}>
                 {r.status}
               </span>
+              {r.source === "cari" && (
+                <span className="ml-1 text-[10px] uppercase tracking-wide text-slate-400">BH</span>
+              )}
             </td>
             <td className="px-4 py-3 text-right tabular-nums">{formatMoney(r.total_amount)}</td>
             <td className="px-4 py-3 text-right tabular-nums text-slate-600">
@@ -185,7 +192,9 @@ export default function SalesReportPage() {
             </td>
             <td className="px-4 py-3 text-right tabular-nums">{formatMoney(r.remaining_amount)}</td>
             <td className="px-4 py-3 text-slate-500">{(r.created_at || "").slice(0, 10)}</td>
-            <td className="px-4 py-3 text-slate-500">{r.due_date || "—"}</td>
+            <td className="px-4 py-3 text-slate-500 text-xs max-w-[240px] truncate" title={r.note || ""}>
+              {r.note || "—"}
+            </td>
           </tr>
         ))}
       </ReportTable>
