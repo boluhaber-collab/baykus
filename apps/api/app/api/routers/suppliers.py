@@ -98,6 +98,17 @@ def _ascii_filename(name: str, *, fallback: str = "dosya", max_len: int = 40) ->
     return raw
 
 
+
+def _period_label(from_date: date | None, to_date: date | None) -> str:
+    if from_date and to_date:
+        return f"{from_date.isoformat()} → {to_date.isoformat()}"
+    if from_date:
+        return f"{from_date.isoformat()} → …"
+    if to_date:
+        return f"… → {to_date.isoformat()}"
+    return "Tüm hareketler"
+
+
 def _movement_out(m: SupplierMovement, running: Decimal | None = None) -> SupplierMovementOut:
     purchase_number = None
     if m.purchase is not None:
@@ -628,6 +639,8 @@ def supplier_statement_pdf(
         settings_map,
         party_label="Tedarikçi",
         doc_title="Tedarikçi Hesap Ekstresi",
+        period_label=_period_label(from_date, to_date),
+        opening_balance=float(stmt.opening_balance),
     )
     safe = _ascii_filename(stmt.supplier_name, fallback=f"tedarikci_{supplier_id}")
     return Response(

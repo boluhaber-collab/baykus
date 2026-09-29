@@ -17,6 +17,7 @@ import ExpandableMovementTable, {
   linesFromPurchase,
 } from "@/components/ExpandableMovementTable";
 import PartyCardLayout, { partySmsHref } from "@/components/PartyCardLayout";
+import StatementPdfDateModal from "@/components/StatementPdfDateModal";
 import SplitPaymentRows, {
   SplitPaymentRow,
   rowsSum,
@@ -38,6 +39,8 @@ export default function SupplierDetailPage() {
   const [supplier, setSupplier] = useState<SupplierDetail | null>(null);
   const [statement, setStatement] = useState<SupplierStatement | null>(null);
   const [error, setError] = useState("");
+  const [okMsg, setOkMsg] = useState("");
+  const [showPdfDates, setShowPdfDates] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showSecondary, setShowSecondary] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -306,15 +309,8 @@ export default function SupplierDetailPage() {
     }, 80);
   }
 
-  async function downloadStatementPdf() {
-    try {
-      await downloadPdf(
-        `/api/suppliers/${id}/statement-pdf`,
-        `tedarikci_ekstre_${id}.pdf`,
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "PDF hatası");
-    }
+  function openStatementPdfModal() {
+    setShowPdfDates(true);
   }
 
   async function downloadVoucherPdf() {
@@ -486,6 +482,7 @@ export default function SupplierDetailPage() {
           bal > 0 ? "tedarikçiye borç" : bal < 0 ? "tedarikçiden alacak" : "hesap kapalı"
         }
         error={error}
+        okMsg={okMsg}
         actions={[
           {
             key: "alis",
@@ -534,7 +531,7 @@ export default function SupplierDetailPage() {
             menu: [
               {
                 label: "Cari döküm PDF",
-                onClick: () => void downloadStatementPdf(),
+                onClick: openStatementPdfModal,
               },
               {
                 label: "Hareketler / ekstre",
@@ -925,6 +922,23 @@ export default function SupplierDetailPage() {
         )}
       </PartyCardLayout>
       <StatusFooter onRefresh={load} />
+      <StatementPdfDateModal
+        open={showPdfDates}
+        onClose={() => setShowPdfDates(false)}
+        title="Cari döküm PDF"
+        partyName={supplier.name}
+        filename={`tedarikci_ekstre_${id}.pdf`}
+        buildUrl={(from, to) => {
+          const qs = new URLSearchParams();
+          if (from) qs.set("from_date", from);
+          if (to) qs.set("to_date", to);
+          const q = qs.toString();
+          return `/api/suppliers/${id}/statement-pdf${q ? `?${q}` : ""}`;
+        }}
+        onDone={(msg) => setOkMsg(msg)}
+        onError={(msg) => setError(msg)}
+      />
     </>
   );
 }
+

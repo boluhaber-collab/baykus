@@ -707,6 +707,8 @@ def build_cari_statement_pdf(
     *,
     party_label: str = "Müşteri",
     doc_title: str = "Cari Hesap Dökümü",
+    period_label: str | None = None,
+    opening_balance: Any | None = None,
 ) -> bytes:
     buf, c, width, height = _new_doc()
     settings = settings or {}
@@ -725,22 +727,41 @@ def build_cari_statement_pdf(
         "Döküm Tarihi",
         datetime.now().strftime("%d.%m.%Y %H:%M"),
     )
-    y -= 1.2 * cm
+    y -= 1.15 * cm
+
+    period_text = (period_label or "").strip() or "Tüm hareketler"
+    pdf_modern_kutu(c, 1.4 * cm, y, 18.2 * cm, 0.75 * cm, "Dönem", period_text)
+    y -= 1.05 * cm
 
     debit_sum = sum((Decimal(str(r.get("debit") or 0)) for r in rows), Decimal("0"))
     credit_sum = sum((Decimal(str(r.get("credit") or 0)) for r in rows), Decimal("0"))
-    pdf_modern_kutu(c, 1.4 * cm, y, 5.2 * cm, 1.0 * cm, "Toplam Borç", _money(debit_sum))
-    pdf_modern_kutu(c, 6.9 * cm, y, 5.2 * cm, 1.0 * cm, "Toplam Alacak", _money(credit_sum))
-    pdf_modern_kutu(
-        c,
-        12.4 * cm,
-        y,
-        5.2 * cm,
-        1.0 * cm,
-        "Kapanış Bakiyesi",
-        _money(closing_balance),
-        fill=(0.90, 0.96, 0.92),
-    )
+    if opening_balance is not None:
+        pdf_modern_kutu(c, 1.4 * cm, y, 4.4 * cm, 1.0 * cm, "Açılış", _money(opening_balance))
+        pdf_modern_kutu(c, 6.0 * cm, y, 4.4 * cm, 1.0 * cm, "Toplam Borç", _money(debit_sum))
+        pdf_modern_kutu(c, 10.6 * cm, y, 4.4 * cm, 1.0 * cm, "Toplam Alacak", _money(credit_sum))
+        pdf_modern_kutu(
+            c,
+            15.2 * cm,
+            y,
+            4.4 * cm,
+            1.0 * cm,
+            "Kapanış",
+            _money(closing_balance),
+            fill=(0.90, 0.96, 0.92),
+        )
+    else:
+        pdf_modern_kutu(c, 1.4 * cm, y, 5.2 * cm, 1.0 * cm, "Toplam Borç", _money(debit_sum))
+        pdf_modern_kutu(c, 6.9 * cm, y, 5.2 * cm, 1.0 * cm, "Toplam Alacak", _money(credit_sum))
+        pdf_modern_kutu(
+            c,
+            12.4 * cm,
+            y,
+            5.2 * cm,
+            1.0 * cm,
+            "Kapanış Bakiyesi",
+            _money(closing_balance),
+            fill=(0.90, 0.96, 0.92),
+        )
     y -= 1.45 * cm
 
     tablo: list[list[Any]] = []

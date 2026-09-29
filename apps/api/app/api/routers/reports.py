@@ -1229,7 +1229,21 @@ def cari_statements_report(
     if date_to:
         q = q.filter(CariMovement.movement_date <= date_to)
     moves = q.order_by(CariMovement.movement_date.asc(), CariMovement.id.asc()).all()
-    running = Decimal("0")
+    running = _dec(getattr(customer, "opening_balance", 0) or 0)
+    if date_from:
+        prior = (
+            db.query(
+                func.coalesce(func.sum(CariMovement.debit), 0),
+                func.coalesce(func.sum(CariMovement.credit), 0),
+            )
+            .filter(
+                CariMovement.customer_id == customer_id,
+                CariMovement.movement_date < date_from,
+            )
+            .one()
+        )
+        running = running + _dec(prior[0]) - _dec(prior[1])
+    opening = running
     detail = []
     for m in moves:
         running += _dec(m.debit) - _dec(m.credit)
@@ -1245,14 +1259,27 @@ def cari_statements_report(
                 "order_id": m.order_id,
             }
         )
+    if date_from and date_to:
+        period = f"{date_from.isoformat()} → {date_to.isoformat()}"
+    elif date_from:
+        period = f"{date_from.isoformat()} → …"
+    elif date_to:
+        period = f"… → {date_to.isoformat()}"
+    else:
+        period = "Tüm hareketler"
     summary = {
         "customer_id": customer.id,
         "customer_name": customer.name,
+        "opening_balance": _f(opening),
         "closing_balance": _f(running),
         "count": len(detail),
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "period": period,
         "assumptions": [
             "Borç (debit) alacağı artırır; alacak (credit) tahsilattır.",
             "CSV / basit PDF / yazdırılabilir HTML — masaüstü ReportLab Cari Döküm şablonu değildir.",
+            "Tarih aralığı boşsa tüm hareketler; doluysa dönem başı açılış bakiyesi dahil.",
         ],
     }
     if _wants_csv(request, format):
@@ -1274,6 +1301,8 @@ def cari_statements_report(
             detail,
             summary["closing_balance"],
             settings_map,
+            period_label=summary.get("period"),
+            opening_balance=summary.get("opening_balance"),
         )
         return Response(
             content=pdf,

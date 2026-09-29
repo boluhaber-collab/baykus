@@ -889,6 +889,23 @@ def delete_movement(
     )
 
 
+
+def _ascii_filename(name: str, *, fallback: str = "dosya", max_len: int = 40) -> str:
+    """Starlette encodes Content-Disposition as latin-1; keep ASCII only."""
+    raw = "".join(c if (c.isascii() and (c.isalnum() or c in "-_")) else "_" for c in (name or ""))
+    raw = raw.strip("_")[:max_len] or fallback
+    return raw
+
+
+def _period_label(from_date: date | None, to_date: date | None) -> str:
+    if from_date and to_date:
+        return f"{from_date.isoformat()} → {to_date.isoformat()}"
+    if from_date:
+        return f"{from_date.isoformat()} → …"
+    if to_date:
+        return f"… → {to_date.isoformat()}"
+    return "Tüm hareketler"
+
 @router.get("/{customer_id}/statement", response_model=StatementOut)
 def customer_statement(
     customer_id: int,
@@ -936,6 +953,57 @@ def customer_statement(
         opening_balance=opening,
         closing_balance=running,
         movements=out_rows,
+    )
+
+
+
+@router.get("/{customer_id}/statement-pdf")
+def customer_statement_pdf(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
+):
+    """Müşteri hesap ekstresi PDF — tarih aralığı (boş = tüm hareketler)."""
+    from app.models.settings_model import AppSetting
+    from app.services.pdf import build_cari_statement_pdf
+
+    stmt = customer_statement(
+        customer_id=customer_id,
+        db=db,
+        _=_,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    detail = [
+        {
+            "id": m.id,
+            "date": m.movement_date.isoformat() if hasattr(m.movement_date, "isoformat") else m.movement_date,
+            "type": m.movement_type,
+            "debit": float(m.debit or 0),
+            "credit": float(m.credit or 0),
+            "balance": float(m.running_balance) if m.running_balance is not None else None,
+            "note": sanitize_display_note(m.note),
+        }
+        for m in stmt.movements
+    ]
+    settings_map = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
+    pdf_bytes = build_cari_statement_pdf(
+        stmt.customer_name,
+        detail,
+        float(stmt.closing_balance),
+        settings_map,
+        party_label="Müşteri",
+        doc_title="Cari Hesap Dökümü",
+        period_label=_period_label(from_date, to_date),
+        opening_balance=float(stmt.opening_balance),
+    )
+    safe = _ascii_filename(stmt.customer_name, fallback=f"musteri_{customer_id}")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="cari_dokum_{customer_id}_{safe}.pdf"'},
     )
 
 

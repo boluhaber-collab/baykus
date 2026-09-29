@@ -9,7 +9,6 @@ import {
   CustomerStatement,
   WhatsAppTemplate,
   apiFetch,
-  downloadPdf,
   formatMoney,
   statusBadgeClass,
   quoteStatusBadgeClass,
@@ -22,6 +21,7 @@ import SplitPaymentRows, {
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
 import CustomerDevirModal from "@/components/CustomerDevirModal";
+import StatementPdfDateModal from "@/components/StatementPdfDateModal";
 import StatusFooter from "@/components/StatusFooter";
 import ExpandableMovementTable, {
   linesFromOrder,
@@ -48,6 +48,7 @@ export default function CustomerDetailPage() {
   const [showSecondary, setShowSecondary] = useState(false);
   const [showTahsilat, setShowTahsilat] = useState(false);
   const [showDevir, setShowDevir] = useState(false);
+  const [showPdfDates, setShowPdfDates] = useState(false);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
 
   const [payType, setPayType] = useState<"payment" | "deposit" | "adjustment" | "sale">("payment");
@@ -358,16 +359,8 @@ export default function CustomerDetailPage() {
     window.open(`https://wa.me/${digits}?text=${text}`, "_blank");
   }
 
-  async function downloadCariPdf() {
-    try {
-      await downloadPdf(
-        `/api/reports/cari-statements?customer_id=${id}&format=pdf`,
-        `cari_dokum_${id}.pdf`,
-      );
-      setOkMsg("Cari döküm PDF indirildi");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "PDF hatası");
-    }
+  function openCariPdfModal() {
+    setShowPdfDates(true);
   }
 
   if (!customer && !error) {
@@ -610,7 +603,7 @@ export default function CustomerDetailPage() {
             menu: [
               {
                 label: "Cari döküm PDF",
-                onClick: () => void downloadCariPdf(),
+                onClick: openCariPdfModal,
               },
               {
                 label: "Hareketler sekmesi",
@@ -1244,6 +1237,22 @@ export default function CustomerDetailPage() {
           setOkMsg("Cari devir bakiyesi kaydedildi.");
           void load();
         }}
+      />
+      <StatementPdfDateModal
+        open={showPdfDates}
+        onClose={() => setShowPdfDates(false)}
+        title="Cari döküm PDF"
+        partyName={customer.name}
+        filename={`cari_dokum_${id}.pdf`}
+        buildUrl={(from, to) => {
+          const qs = new URLSearchParams();
+          if (from) qs.set("from_date", from);
+          if (to) qs.set("to_date", to);
+          const q = qs.toString();
+          return `/api/customers/${id}/statement-pdf${q ? `?${q}` : ""}`;
+        }}
+        onDone={(msg) => setOkMsg(msg)}
+        onError={(msg) => setError(msg)}
       />
     </>
   );

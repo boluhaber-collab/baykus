@@ -20,6 +20,12 @@ export default function CariStatementsPage() {
   const [q, setQ] = useState("");
   const [csvBusy, setCsvBusy] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+
 
   useEffect(() => {
     // Support deep link ?customer_id=
@@ -32,19 +38,30 @@ export default function CariStatementsPage() {
       .catch((e) => setError(e instanceof Error ? e.message : "Yükleme hatası"));
   }, []);
 
+  function dateQs(): string {
+    const qs = new URLSearchParams();
+    if (dateFrom) qs.set("date_from", dateFrom);
+    if (dateTo) qs.set("date_to", dateTo);
+    const s = qs.toString();
+    return s ? `&${s}` : "";
+  }
+
   const load = useCallback(async () => {
     if (!customerId) return;
     setError("");
     try {
+      const qs = new URLSearchParams({ customer_id: customerId });
+      if (dateFrom) qs.set("date_from", dateFrom);
+      if (dateTo) qs.set("date_to", dateTo);
       const data = await apiFetch<{ summary: { customer_name: string; closing_balance: number }; rows: Move[] }>(
-        `/api/reports/cari-statements?customer_id=${customerId}`,
+        `/api/reports/cari-statements?${qs}`,
       );
       setRows(data.rows);
       setSummary(data.summary);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
-  }, [customerId]);
+  }, [customerId, dateFrom, dateTo]);
 
   useEffect(() => {
     void load();
@@ -68,7 +85,7 @@ export default function CariStatementsPage() {
     setCsvBusy(true);
     try {
       await downloadReportCsv(
-        `/api/reports/cari-statements?customer_id=${customerId}&format=csv`,
+        `/api/reports/cari-statements?customer_id=${customerId}&format=csv${dateQs()}`,
         `cari-dokum-${customerId}.csv`,
       );
     } catch (e) {
@@ -83,7 +100,7 @@ export default function CariStatementsPage() {
     setPdfBusy(true);
     try {
       const res = await fetch(
-        `${getApiBase()}/api/reports/cari-statements?customer_id=${customerId}&format=pdf`,
+        `${getApiBase()}/api/reports/cari-statements?customer_id=${customerId}&format=pdf${dateQs()}`,
         { headers: { Authorization: `Bearer ${getToken()}` } },
       );
       if (!res.ok) throw new Error(`PDF ${res.status}`);
@@ -102,7 +119,7 @@ export default function CariStatementsPage() {
 
   function openPrintable() {
     if (!customerId) return;
-    const url = `${getApiBase()}/api/reports/cari-statements?customer_id=${customerId}&format=html`;
+    const url = `${getApiBase()}/api/reports/cari-statements?customer_id=${customerId}&format=html${dateQs()}`;
     // open with token via blob fetch
     void (async () => {
       try {
@@ -124,9 +141,9 @@ export default function CariStatementsPage() {
     <div className="space-y-2 pb-2">
       <ReportHeader
         title="Cari Dökümler"
-        subtitle="CSV + PDF + yazdırılabilir HTML (masaüstü ReportLab twin değil)"
+        subtitle="Tarih aralığı + CSV/PDF/HTML (boş tarih = tüm hareketler)"
       />
-      <div className="bk-filter-bar">
+      <div className="bk-filter-bar items-end">
         <input
           className="bk-input max-w-[160px]"
           placeholder="Müşteri ara…"
@@ -142,6 +159,24 @@ export default function CariStatementsPage() {
             </option>
           ))}
         </select>
+        <label className="text-xs">
+          <span className="text-baykus-muted block mb-0.5">Başlangıç</span>
+          <input type="date" className="bk-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+        </label>
+        <label className="text-xs">
+          <span className="text-baykus-muted block mb-0.5">Bitiş</span>
+          <input type="date" className="bk-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </label>
+        <button
+          type="button"
+          className="bk-btn bk-btn-ghost text-xs"
+          onClick={() => {
+            setDateFrom("");
+            setDateTo("");
+          }}
+        >
+          Tümü
+        </button>
         <button type="button" className="bk-btn bk-btn-primary text-xs" onClick={load} disabled={!customerId}>
           Getir
         </button>
