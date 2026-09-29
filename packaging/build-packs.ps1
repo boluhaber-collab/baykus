@@ -1,5 +1,5 @@
 # Baykus workplace packs builder (Windows). Run from anywhere.
-# Creates Desktop\Baykus_Tasinabilir_YYYYMMDD and Desktop\Baykus_Kurulum_Sade_YYYYMMDD
+# Creates Desktop\Baykus_Tasinabilir_YYYYMMDD_Panel and Desktop\Baykus_Kurulum_Sade_YYYYMMDD
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -156,7 +156,7 @@ Korunan (guncellemede ASLA ezilmez):
 }
 
 # ========== A: Tasinabilir ==========
-$AName = "Baykus_Tasinabilir_$Stamp"
+$AName = "Baykus_Tasinabilir_${Stamp}_Panel"
 $ARoot = Join-Path $Work $AName
 Write-Host "Assembling $AName ..."
 Copy-SourceTree $SrcRepo $ARoot
@@ -215,3 +215,4 @@ foreach ($name in @($AName, $BName)) {
 
 Write-Host "DONE"
 Get-ChildItem $Desktop -Filter "Baykus_*_$Stamp*" | Format-Table Name, Length, LastWriteTime
+

@@ -1,11 +1,17 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_API_DIR = Path(__file__).resolve().parents[2]  # apps/api
+_ROOT_DIR = Path(__file__).resolve().parents[4]  # baykus root
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Absolute paths: works even if process cwd is not apps/api (panel/portable)
+        env_file=(str(_API_DIR / ".env"), str(_ROOT_DIR / ".env")),
+        env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
     )
