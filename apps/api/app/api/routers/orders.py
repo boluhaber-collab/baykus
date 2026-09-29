@@ -555,29 +555,34 @@ def create_order(
                     notes=line_note,
                 )
             )
+            cari_id = None
             if order.customer_id:
                 from app.models.customer import CariMovement
 
-                db.add(
-                    CariMovement(
-                        customer_id=order.customer_id,
-                        movement_type="payment",
-                        debit=Decimal("0"),
-                        credit=line["amount"],
-                        movement_date=mov_date,
-                        order_id=order.id,
-                        note=line_note,
-                    )
+                cari = CariMovement(
+                    customer_id=order.customer_id,
+                    movement_type="payment",
+                    debit=Decimal("0"),
+                    credit=line["amount"],
+                    movement_date=mov_date,
+                    order_id=order.id,
+                    note=line_note,
                 )
-        post_finance_lines(
-            db,
-            deposit_lines,
-            direction="in",
-            mov_date=mov_date,
-            note=note,
-            customer_id=order.customer_id,
-            require_account=False,
-        )
+                db.add(cari)
+                db.flush()
+                cari_id = cari.id
+            # One finance movement per deposit line (linked to cari when present)
+            post_finance_lines(
+                db,
+                [line],
+                direction="in",
+                mov_date=mov_date,
+                note=line_note,
+                customer_id=order.customer_id,
+                cari_movement_id=cari_id,
+                created_by_user_id=user.id,
+                require_account=False,
+            )
 
     _record_status(db, order, None, order.status, user, note="Sipariş oluşturuldu")
     db.commit()
@@ -900,17 +905,17 @@ def create_payment(
                 )
             )
 
-    if payload.post_to_finance and (payload.payments or payload.finance_method):
+    if payload.post_to_finance:
         fin_lines = lines
-        if not payload.payments and payload.finance_method:
+        if not payload.payments:
             fin_lines = normalize_payment_lines(
                 amount=amount,
-                finance_method=payload.finance_method,
+                finance_method=payload.finance_method or ("bank" if payload.bank_account_id else "cash"),
                 cash_register_id=payload.cash_register_id,
                 bank_account_id=payload.bank_account_id,
                 method=payload.method,
             )
-        # Only post lines that have an account target (or finance_method implies default)
+        # Post even when only cash_register_id / bank_account_id set (no finance_method)
         post_finance_lines(
             db,
             fin_lines,
@@ -919,7 +924,7 @@ def create_payment(
             note=note,
             customer_id=order.customer_id,
             created_by_user_id=user.id,
-            require_account=True,
+            require_account=False,
         )
 
     order.updated_at = datetime.utcnow()

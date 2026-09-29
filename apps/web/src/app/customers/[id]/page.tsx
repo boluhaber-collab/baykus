@@ -105,6 +105,19 @@ export default function CustomerDetailPage() {
     load();
   }, [id, load]);
 
+  // Re-fetch balances when returning to this tab after a sale/tahsilat elsewhere
+  useEffect(() => {
+    function onVis() {
+      if (document.visibilityState === "visible" && Number.isFinite(id)) void load();
+    }
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
+    };
+  }, [id, load]);
+
   useEffect(() => {
     apiFetch<WhatsAppTemplate[]>("/api/whatsapp/templates")
       .then(setTemplates)
@@ -240,6 +253,9 @@ export default function CustomerDetailPage() {
         amount: Number(payAmount),
         movement_date: payDate || null,
         note: payNote.trim() || null,
+        // payment/deposit → kasa; sale/adjustment → cari only
+        post_to_finance: payType === "payment" || payType === "deposit",
+        finance_method: payType === "payment" || payType === "deposit" ? "cash" : null,
       };
       if (payType === "adjustment") body.side = paySide;
       await apiFetch(`/api/customers/${id}/movements`, {
@@ -248,7 +264,11 @@ export default function CustomerDetailPage() {
       });
       setPayAmount("");
       setPayNote("");
-      setOkMsg("Tahsilat / hareket kaydedildi");
+      setOkMsg(
+        payType === "payment" || payType === "deposit"
+          ? "Tahsilat kaydedildi · cari + kasa güncellendi"
+          : "Cari hareket kaydedildi",
+      );
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Hareket kaydı başarısız");

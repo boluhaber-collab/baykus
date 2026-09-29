@@ -111,6 +111,18 @@ export default function DashboardPage() {
     void loadNotes();
   }, [load, loadUsd, loadStock, loadNotes]);
 
+  useEffect(() => {
+    function onVis() {
+      if (document.visibilityState === "visible") void load();
+    }
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
+    };
+  }, [load]);
+
   const todayLabel = useMemo(
     () =>
       new Date().toLocaleDateString("tr-TR", {

@@ -210,7 +210,8 @@ export default function PerakendeSatisGirPage() {
         `Tarih ${tarih} ${saat}`,
         payments.length > 1 ? `Çoklu tahsilat (${payments.length} satır)` : "Tahsilat",
       ].filter(Boolean);
-      const created = await apiFetch<{ id: number; order_number: string }>("/api/orders", {
+      // Single create: stok↓ + (optional) cari sale + kapora payment + kasa/banka
+      await apiFetch<{ id: number; order_number: string }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
           customer_id: null,
@@ -220,7 +221,7 @@ export default function PerakendeSatisGirPage() {
           design_status: "Bekliyor",
           due_date: delivered ? tarih : null,
           delivery_date: delivered ? tarih : null,
-          deposit_amount: 0,
+          deposit_amount: tahsilatNum > 0 ? tahsilatNum : 0,
           discount_amount: 0,
           lines: cart.map((l) => ({
             product_id: l.product_id,
@@ -234,22 +235,9 @@ export default function PerakendeSatisGirPage() {
             discount_rate: 0,
             discount_amount: l.indirim || 0,
           })),
+          payments: payments.length && tahsilatNum > 0 ? payments : undefined,
         }),
       });
-
-      if (payments.length > 0 && tahsilatNum > 0) {
-        await apiFetch(`/api/orders/${created.id}/payments`, {
-          method: "POST",
-          body: JSON.stringify({
-            amount: tahsilatNum,
-            method: payments.length > 1 ? "çoklu" : payments[0]!.method || "nakit",
-            notes: aciklama || `Perakende direkt satış tahsilatı ${created.order_number}`,
-            post_to_cari: false,
-            post_to_finance: true,
-            payments,
-          }),
-        });
-      }
 
       router.push("/sales");
     } catch (e) {

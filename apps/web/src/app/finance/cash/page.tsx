@@ -53,6 +53,18 @@ export default function CashPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    function onVis() {
+      if (document.visibilityState === "visible") void load();
+    }
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
+    };
+  }, [load]);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);

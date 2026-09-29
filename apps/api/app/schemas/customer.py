@@ -61,8 +61,8 @@ class CariMovementCreate(BaseModel):
     note: str | None = None
     # For adjustment: "debit" (borç) or "credit" (alacak). Ignored for other types.
     side: str | None = Field(default=None, pattern="^(debit|credit)$")
-    # Optional: also post cash/bank movement when recording payment/deposit
-    post_to_finance: bool = False
+    # Mirror payment/deposit into kasa/banka (sale/adjustment skip finance)
+    post_to_finance: bool = True
     finance_method: str | None = Field(default=None, pattern="^(cash|bank)$")
     bank_account_id: int | None = None
 

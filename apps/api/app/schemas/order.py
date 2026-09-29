@@ -201,7 +201,7 @@ class PaymentCreate(BaseModel):
     notes: str | None = None
     paid_at: datetime | None = None
     post_to_cari: bool = True
-    post_to_finance: bool = False
+    post_to_finance: bool = True
     finance_method: str | None = Field(default=None, pattern="^(cash|bank)$")
     bank_account_id: int | None = None
     cash_register_id: int | None = None

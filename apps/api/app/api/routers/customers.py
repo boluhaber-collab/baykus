@@ -755,50 +755,29 @@ def create_movement(
     db.add(movement)
     db.flush()
 
-    # Nice-to-have: mirror payment/deposit into kasa or banka
-    if (
-        payload.post_to_finance
-        and payload.movement_type in ("payment", "deposit")
-        and payload.finance_method
-    ):
-        from app.models.finance import BankAccount, BankMovement, CashMovement, CashRegister
+    # Mirror payment/deposit into kasa/banka so open cari + kasa stay in sync.
+    # Default finance_method=cash when post_to_finance and method omitted.
+    if payload.movement_type in ("payment", "deposit") and payload.post_to_finance:
+        from app.services.split_payments import normalize_payment_lines, post_finance_lines
 
         note = payload.note or f"Cari {payload.movement_type} — müşteri #{customer_id}"
-        if payload.finance_method == "cash":
-            reg = (
-                db.query(CashRegister)
-                .filter(CashRegister.is_active.is_(True))
-                .order_by(CashRegister.id.asc())
-                .first()
-            )
-            if reg:
-                db.add(
-                    CashMovement(
-                        cash_register_id=reg.id,
-                        movement_type="tahsilat",
-                        amount=payload.amount,
-                        movement_date=mov_date,
-                        note=note,
-                        customer_id=customer_id,
-                        cari_movement_id=movement.id,
-                    )
-                )
-        elif payload.finance_method == "bank":
-            if not payload.bank_account_id:
-                raise HTTPException(status_code=400, detail="Banka hesabı seçilmedi")
-            acc = db.get(BankAccount, payload.bank_account_id)
-            if not acc or not acc.is_active:
-                raise HTTPException(status_code=400, detail="Banka hesabı bulunamadı")
-            db.add(
-                BankMovement(
-                    bank_account_id=acc.id,
-                    movement_type="deposit",
-                    amount=payload.amount,
-                    movement_date=mov_date,
-                    note=note,
-                    customer_id=customer_id,
-                    cari_movement_id=movement.id,
-                )
+        finance_method = payload.finance_method or ("bank" if payload.bank_account_id else "cash")
+        fin_lines = normalize_payment_lines(
+            amount=payload.amount,
+            finance_method=finance_method,
+            bank_account_id=payload.bank_account_id,
+            method="nakit" if finance_method == "cash" else "eft",
+        )
+        if fin_lines:
+            post_finance_lines(
+                db,
+                fin_lines,
+                direction="in",
+                mov_date=mov_date,
+                note=note,
+                customer_id=customer_id,
+                cari_movement_id=movement.id,
+                require_account=False,
             )
 
     db.commit()

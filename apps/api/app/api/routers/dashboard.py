@@ -687,9 +687,9 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
     except Exception:
         top_selling_product = None
 
-    # Prefer live BizimHesap newportal KPI cards for the four Ana Sayfa tiles
-    # (Eylül Cirosu / Net Kâr / Güncel Kasa / Banka Bakiyesi) when cache/scrape
-    # covers the current calendar month.
+    # Live kasa/banka ALWAYS from local cash_movements / bank_movements.
+    # BH portal cache is only used for month ciro / net kâr labels — never for
+    # cash/bank tiles, otherwise Baykuş satış/tahsilat would not move Ana Sayfa.
     month_revenue = _f(month_row[1])
     cash_out = _f(cash_total)
     bank_out = _f(bank_total)
@@ -702,10 +702,6 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
             month_revenue = _f(bh["orders_month_revenue"])
         if bh.get("month_net_profit") is not None:
             month_profit = _f(bh["month_net_profit"])
-        if bh.get("cash_balance") is not None:
-            cash_out = _f(bh["cash_balance"])
-        if bh.get("bank_balance") is not None:
-            bank_out = _f(bh["bank_balance"])
         if bh.get("month_label"):
             month_label = str(bh["month_label"])
 
