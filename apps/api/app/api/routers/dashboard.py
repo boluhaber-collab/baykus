@@ -40,6 +40,7 @@ from app.schemas.common import (
 )
 
 from app.utils.bh_note import sanitize_display_note
+from app.services.bh_portal_kpis import get_bh_dashboard_kpis, is_oos_bank_account
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -395,11 +396,23 @@ def get_kpis(user: CurrentUser, db: Session = Depends(get_db)) -> KPIStats:
         .filter(Order.created_at >= month_start, Order.status != "Sipariş İptali")
         .scalar()
     )
+    rev_out = _f(revenue)
+    try:
+        bh = get_bh_dashboard_kpis(allow_network=True)
+        if (
+            bh
+            and bh.get("month_year") == month_start.year
+            and bh.get("month_month") == month_start.month
+            and bh.get("orders_month_revenue") is not None
+        ):
+            rev_out = _f(bh["orders_month_revenue"])
+    except Exception:
+        pass
     return KPIStats(
         customers=int(customers),
         products=int(products),
         open_orders=int(open_orders),
-        revenue_month=_f(revenue),
+        revenue_month=rev_out,
         pending_quotes=0,  # quotes module is stub — no fake count
     )
 
@@ -453,11 +466,17 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
     recv_total, recv_cust, cust_count = _receivables(db)
 
     # ── Finance ───────────────────────────────────────────────────────────
+    # BH portal "Kasa" / "Banka" widgets: cash registers + Banka-type accounts
+    # only (exclude POS / Kredi Kartı / Şirket Ortağı / OOS closed accounts).
     cash_total = Decimal("0")
     for reg in db.query(CashRegister).filter(CashRegister.is_active.is_(True)).all():
         cash_total += _cash_balance(db, reg)
     bank_total = Decimal("0")
     for acc in db.query(BankAccount).filter(BankAccount.is_active.is_(True)).all():
+        if (getattr(acc, "account_type", None) or "Banka") != "Banka":
+            continue
+        if is_oos_bank_account(acc.name, getattr(acc, "notes", None)):
+            continue
         bank_total += _bank_balance(db, acc)
 
     # ── Recent orders ─────────────────────────────────────────────────────
@@ -668,11 +687,33 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
     except Exception:
         top_selling_product = None
 
+    # Prefer live BizimHesap newportal KPI cards for the four Ana Sayfa tiles
+    # (Eylül Cirosu / Net Kâr / Güncel Kasa / Banka Bakiyesi) when cache/scrape
+    # covers the current calendar month.
+    month_revenue = _f(month_row[1])
+    cash_out = _f(cash_total)
+    bank_out = _f(bank_total)
+    try:
+        bh = get_bh_dashboard_kpis(allow_network=True)
+    except Exception:
+        bh = None
+    if bh and bh.get("month_year") == month_start.year and bh.get("month_month") == month_start.month:
+        if bh.get("orders_month_revenue") is not None:
+            month_revenue = _f(bh["orders_month_revenue"])
+        if bh.get("month_net_profit") is not None:
+            month_profit = _f(bh["month_net_profit"])
+        if bh.get("cash_balance") is not None:
+            cash_out = _f(bh["cash_balance"])
+        if bh.get("bank_balance") is not None:
+            bank_out = _f(bh["bank_balance"])
+        if bh.get("month_label"):
+            month_label = str(bh["month_label"])
+
     return DashboardSummary(
         orders_today_count=int(today_row[0] or 0),
         orders_today_revenue=_f(today_row[1]),
         orders_month_count=int(month_row[0] or 0),
-        orders_month_revenue=_f(month_row[1]),
+        orders_month_revenue=month_revenue,
         open_orders=int(open_orders),
         status_counts=status_counts,
         collections_today=collections,
@@ -696,9 +737,9 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         receivables_customer_count=recv_cust,
         payables_total=payables_total,
         top_selling_product=top_selling_product,
-        cash_balance=_f(cash_total),
-        bank_balance=_f(bank_total),
-        total_liquidity=_f(cash_total + bank_total),
+        cash_balance=cash_out,
+        bank_balance=bank_out,
+        total_liquidity=_f(_dec(cash_out) + _dec(bank_out)),
         recent_orders=recent_orders,
         recent_cari_payments=recent_cari,
         recent_finance_movements=recent_fin,

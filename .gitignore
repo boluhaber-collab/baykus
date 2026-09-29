@@ -37,3 +37,6 @@ tmp/
 
 .env.local
 apps/web/.env.local
+
+apps/api/data/*
+!apps/api/data/.gitkeep
