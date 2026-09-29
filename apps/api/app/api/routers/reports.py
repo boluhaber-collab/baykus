@@ -103,7 +103,7 @@ def list_reports(_: User = Depends(require_roles(*READ_ROLES))) -> dict:
                 "title": "Satış raporu",
                 "path": "/api/reports/sales",
                 "href": "/reports/sales",
-                "description": "Cari satış hareketleri (BH import + yerel): adet, ciro (tarih aralığı)",
+                "description": "Cari satış hareketleri (BH ekstre + perakende + yerel): adet, ciro (tarih aralığı)",
             },
             {
                 "key": "stock",
@@ -358,10 +358,10 @@ def _sales_data(
         "status_filter": status,
         "source": "cari_sales",
         "assumptions": [
-            "Satışlar cari hareketlerinden (movement_type=sale): BH ekstre import + yerel sipariş.",
+            "Satışlar cari hareketlerinden (movement_type=sale): BH ekstre + Perakende Satışlar (GetSalesReport) + yerel sipariş.",
+            "Perakende Satışlar müşteri kartı (BH:PERAKENDE) GetSalesReport satırlarından materialize edilir — Eylül ciro BH portal ile hizalanır.",
             "Demo wipe sonrası siparişler boş olsa da BH satışları burada görünür.",
             "İptal siparişe bağlı cari satışlar ciroya dahil edilmez.",
-            "Ana Sayfa Eylül Cirosu BH portal KPI scrape; perakende/grupsuz satışlar cari kartta olmayabilir.",
         ],
     }
     return summary, rows_out

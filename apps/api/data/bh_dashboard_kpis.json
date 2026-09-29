@@ -1,0 +1,24 @@
+{
+  "scraped_at": "2026-09-29T21:50:06",
+  "source": "BH newportal KPI cards",
+  "month_label": "Eylül",
+  "month_year": 2026,
+  "month_month": 9,
+  "orders_month_revenue": 14153.44,
+  "month_expenses": 17552.86,
+  "month_net_profit": -3399.42,
+  "revenue_30d": 16453.44,
+  "expenses_30d": 19353.53,
+  "cash_balance": 402.06,
+  "bank_balance": 3270.32,
+  "titles": {
+    "lblRevenueMonthTitle": "Eylül Cirosu"
+  },
+  "raw_values": {
+    "lblRevenue30": "TL 16.453,44",
+    "lblRevenueMonth": "TL 14.153,44",
+    "lblCost30": "TL 19.353,53",
+    "lblCostMonth": "TL 17.552,86",
+    "lblInventory": "310.315,04"
+  }
+}

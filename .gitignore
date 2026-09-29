@@ -43,3 +43,7 @@ apps/api/data/*
 
 .bh_env_local
 apps/api/.bh_env_local
+
+# Large BH offline archives (keep markdown inventories; tarballs stay on disk)
+docs/archives/*.tgz
+docs/archives/bh-export-*/
