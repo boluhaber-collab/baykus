@@ -367,6 +367,41 @@ def list_orders(
 
 
 
+
+def _purge_order_ledger(db: Session, order: Order, user: User, *, restore_stock: bool) -> None:
+    """Remove cari + kasa/banka + Payment rows for an order; optionally restore stock."""
+    from app.models.customer import CariMovement
+    from app.models.finance import CashMovement, BankMovement
+
+    if restore_stock and order.status != "Sipariş İptali":
+        _restore_stock_on_cancel(db, order, user)
+
+    cari_rows = (
+        db.query(CariMovement).filter(CariMovement.order_id == order.id).all()
+    )
+    cari_ids = [c.id for c in cari_rows]
+    if cari_ids:
+        db.query(CashMovement).filter(CashMovement.cari_movement_id.in_(cari_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(BankMovement).filter(BankMovement.cari_movement_id.in_(cari_ids)).delete(
+            synchronize_session=False
+        )
+        for c in cari_rows:
+            db.delete(c)
+
+    # Legacy note-matched finance (kapora without cari_movement_id)
+    onum = (order.order_number or "").strip()
+    if onum:
+        for m in db.query(CashMovement).filter(CashMovement.note.ilike(f"%{onum}%")).all():
+            db.delete(m)
+        for m in db.query(BankMovement).filter(BankMovement.note.ilike(f"%{onum}%")).all():
+            db.delete(m)
+
+    for p in list(order.payments or []):
+        db.delete(p)
+
+
 def _apply_sale_side_effects(db: Session, order: Order, user: User) -> None:
     """Stok düşümü (stoklu varyant/ürün) + cari satış hareketi."""
     from datetime import date as date_cls
@@ -584,6 +619,22 @@ def create_order(
                 require_account=False,
             )
 
+    # Paid retail-style (kapora/tahsilat): skip workflow → Teslim Edildi + tasarım onay
+    paid = bool(deposit_lines) and order.deposit_amount and order.deposit_amount > 0
+    if paid and order.status != "Sipariş İptali":
+        if order.status != "Teslim Edildi":
+            order.status = "Teslim Edildi"
+        if (order.design_status or DEFAULT_DESIGN_STATUS) in (
+            DEFAULT_DESIGN_STATUS,
+            "Bekliyor",
+            "Onay İstendi",
+        ):
+            order.design_status = "Onaylandı"
+        if not order.delivery_date:
+            order.delivery_date = date_cls.today()
+        if not order.design_approved_at:
+            order.design_approved_at = datetime.utcnow()
+
     _record_status(db, order, None, order.status, user, note="Sipariş oluşturuldu")
     db.commit()
     write_audit(
@@ -591,7 +642,11 @@ def create_order(
         action="create",
         entity_type="order",
         entity_id=order.id,
-        detail={"order_number": order.order_number},
+        detail={
+            "order_number": order.order_number,
+            "paid_instant": bool(paid),
+            "status": order.status,
+        },
     )
     return _to_out(_load_order(db, order.id))
 
@@ -687,39 +742,30 @@ def change_status(
 @router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_order(
     order_id: int,
-    soft: bool = Query(default=True, description="True: Sipariş İptali; False: hard delete"),
+    soft: bool = Query(default=True, description="True: reverse ledger + Sipariş İptali; False: hard delete"),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("admin", "satış")),
 ) -> None:
     order = _load_order(db, order_id)
+    number = order.order_number
     if soft:
         if order.status != "Sipariş İptali":
             old = order.status
-            # Stok iadesi (satış iptali)
-            _restore_stock_on_cancel(db, order, user)
-            # Bağlı kasa/banka tahsilatlarını sil (order_id note eşleşmesi yok; payment kayıtları kalsın)
-            from app.models.finance import CashMovement, BankMovement
-            for m in db.query(CashMovement).filter(CashMovement.note.ilike(f"%{order.order_number}%")).all():
-                db.delete(m)
-            for m in db.query(BankMovement).filter(BankMovement.note.ilike(f"%{order.order_number}%")).all():
-                db.delete(m)
+            _purge_order_ledger(db, order, user, restore_stock=True)
             order.status = "Sipariş İptali"
             order.updated_at = datetime.utcnow()
-            _record_status(db, order, old, "Sipariş İptali", user, note="Satış iptali")
+            _record_status(db, order, old, "Sipariş İptali", user, note="Satış iptali · cari/kasa ters")
             db.commit()
             write_audit(
                 user_id=user.id,
                 action="delete",
                 entity_type="order",
                 entity_id=order.id,
-                detail={"soft": True, "order_number": order.order_number, "stock_restored": True},
+                detail={"soft": True, "order_number": number, "ledger_purged": True},
             )
         return
-    # Hard delete only for admin
-    role_names = {r.name for r in user.roles}
-    if "admin" not in role_names:
-        raise HTTPException(status_code=403, detail="Kalıcı silme yalnızca admin")
-    number = order.order_number
+    # Hard delete: satış may purge (customer panel); still reverses stock/ledger first
+    _purge_order_ledger(db, order, user, restore_stock=order.status != "Sipariş İptali")
     db.delete(order)
     db.commit()
     write_audit(
@@ -727,7 +773,7 @@ def delete_order(
         action="delete",
         entity_type="order",
         entity_id=order_id,
-        detail={"soft": False, "order_number": number},
+        detail={"soft": False, "order_number": number, "ledger_purged": True},
     )
 
 

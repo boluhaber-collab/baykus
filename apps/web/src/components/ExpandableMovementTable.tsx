@@ -60,6 +60,13 @@ export type ExpandableMovementTableProps<T extends { id: number | string }> = {
   defaultDateDir?: DateSortDir;
   /** After sort, keep only the first N rows (e.g. party-card previews). */
   limit?: number;
+  /**
+   * When set, the leading green control deletes the row (confirm) instead of expanding.
+   * Expand remains available via row click when loadDetail is also provided.
+   */
+  onDelete?: (row: T) => void | Promise<void>;
+  /** Confirm dialog text; string or per-row builder. */
+  deleteConfirm?: string | ((row: T) => string);
 };
 
 type CacheEntry = ExpandDetailPayload & { loading?: boolean; error?: string | null };
@@ -77,6 +84,24 @@ function ExpandToggle({ open, onClick }: { open: boolean; onClick: () => void })
       }}
     >
       {open ? "−" : "+"}
+    </button>
+  );
+}
+
+function DeleteToggle({ onClick, busy }: { onClick: () => void; busy?: boolean }) {
+  return (
+    <button
+      type="button"
+      className="bk-expand-toggle bk-expand-toggle--plus bk-expand-toggle--delete"
+      aria-label="İşlemi sil"
+      title="Sil · cari + kasa/banka tersine çevrilir"
+      disabled={busy}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {busy ? "…" : "+"}
     </button>
   );
 }
@@ -164,10 +189,13 @@ export default function ExpandableMovementTable<T extends { id: number | string 
   dateColumnKey = "date",
   defaultDateDir = DEFAULT_DATE_SORT,
   limit,
+  onDelete,
+  deleteConfirm,
 }: ExpandableMovementTableProps<T>) {
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [cache, setCache] = useState<Record<string, CacheEntry>>({});
   const [dateDir, setDateDir] = useState<DateSortDir>(defaultDateDir);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const displayRows = useMemo(() => {
     let list = rows;
@@ -272,9 +300,37 @@ export default function ExpandableMovementTable<T extends { id: number | string 
             const note = getNote?.(row);
             return (
               <Fragment key={key}>
-                <tr className="border-t border-slate-100">
+                <tr
+                  className="border-t border-slate-100"
+                  onDoubleClick={
+                    onDelete && loadDetail
+                      ? () => {
+                          void toggle(row);
+                        }
+                      : undefined
+                  }
+                  title={onDelete && loadDetail ? "Çift tık: kalem detayı" : undefined}
+                >
                   <td className="bk-expand-td">
-                    <ExpandToggle open={open} onClick={() => void toggle(row)} />
+                    {onDelete ? (
+                      <DeleteToggle
+                        busy={deletingId === key}
+                        onClick={() => {
+                          const msg =
+                            typeof deleteConfirm === "function"
+                              ? deleteConfirm(row)
+                              : deleteConfirm ||
+                                "Bu işlemi tamamen silmek istiyor musunuz? Bağlı cari ve kasa/banka hareketleri de kaldırılır.";
+                          if (!confirm(msg)) return;
+                          setDeletingId(key);
+                          void Promise.resolve(onDelete(row)).finally(() =>
+                            setDeletingId(null),
+                          );
+                        }}
+                      />
+                    ) : (
+                      <ExpandToggle open={open} onClick={() => void toggle(row)} />
+                    )}
                   </td>
                   {columns.map((col) => (
                     <td

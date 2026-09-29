@@ -793,6 +793,102 @@ def create_movement(
     return _movement_out(movement)
 
 
+
+
+@router.delete(
+    "/{customer_id}/movements/{movement_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_movement(
+    customer_id: int,
+    movement_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*CARI_WRITE_ROLES)),
+) -> None:
+    """Delete a cari hareket and reverse linked kasa/banka (and sale order if any)."""
+    from app.models.finance import CashMovement, BankMovement
+
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Müşteri bulunamadı")
+    movement = db.get(CariMovement, movement_id)
+    if not movement or movement.customer_id != customer_id:
+        raise HTTPException(status_code=404, detail="Cari hareket bulunamadı")
+
+    note = movement.note or ""
+    if "BH_IMPORT:" in note:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="BizimHesap aktarım kayıtları silinemez",
+        )
+
+    # Sale tied to an order → full order purge (stock↑ + all cari/kapora/kasa)
+    if movement.movement_type == "sale" and movement.order_id:
+        from app.api.routers.orders import _load_order, _purge_order_ledger
+
+        order = _load_order(db, movement.order_id)
+        oid, onum = order.id, order.order_number
+        _purge_order_ledger(
+            db, order, user, restore_stock=order.status != "Sipariş İptali"
+        )
+        db.delete(order)
+        db.commit()
+        write_audit(
+            user_id=user.id,
+            action="delete",
+            entity_type="cari_movement",
+            entity_id=movement_id,
+            detail={
+                "customer_id": customer_id,
+                "via": "sale_order_purge",
+                "order_id": oid,
+                "order_number": onum,
+            },
+        )
+        return
+
+    # Payment / deposit / adjustment (or sale without order): drop finance + this cari
+    for m in (
+        db.query(CashMovement)
+        .filter(CashMovement.cari_movement_id == movement.id)
+        .all()
+    ):
+        db.delete(m)
+    for m in (
+        db.query(BankMovement)
+        .filter(BankMovement.cari_movement_id == movement.id)
+        .all()
+    ):
+        db.delete(m)
+
+    # Matching Payment row on order (kapora)
+    if movement.order_id and movement.movement_type in ("payment", "deposit"):
+        amt = movement.credit or Decimal("0")
+        pays = (
+            db.query(Payment)
+            .filter(Payment.order_id == movement.order_id)
+            .all()
+        )
+        for p in pays:
+            if abs(Decimal(str(p.amount or 0)) - amt) < Decimal("0.02"):
+                db.delete(p)
+                break
+
+    db.delete(movement)
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="delete",
+        entity_type="cari_movement",
+        entity_id=movement_id,
+        detail={
+            "customer_id": customer_id,
+            "movement_type": movement.movement_type,
+            "order_id": movement.order_id,
+        },
+    )
+
+
 @router.get("/{customer_id}/statement", response_model=StatementOut)
 def customer_statement(
     customer_id: int,

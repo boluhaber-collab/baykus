@@ -202,6 +202,7 @@ export default function CustomerDetailPage() {
     }
     for (const o of customer?.recent_orders || []) {
       if (linkedOrderIds.has(o.id)) continue;
+      if (o.status === "Sipariş İptali") continue;
       rows.push({
         id: `o-${o.id}`,
         source: "order",
@@ -215,6 +216,35 @@ export default function CustomerDetailPage() {
     rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     return rows;
   }, [saleMovements, customer]);
+
+  async function deleteSalesRow(r: SalesPanelRow) {
+    try {
+      const oid = r.order?.id ?? r.movement?.order_id;
+      if (oid) {
+        await apiFetch(`/api/orders/${oid}?soft=false`, { method: "DELETE" });
+      } else if (r.movement?.id) {
+        await apiFetch(`/api/customers/${id}/movements/${r.movement.id}`, {
+          method: "DELETE",
+        });
+      } else {
+        throw new Error("Silinecek satış kaydı bulunamadı");
+      }
+      setOkMsg("Satış silindi · stok iade · cari/kasa ters");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Satış silinemedi");
+    }
+  }
+
+  async function deleteCollectionRow(m: CariMovement) {
+    try {
+      await apiFetch(`/api/customers/${id}/movements/${m.id}`, { method: "DELETE" });
+      setOkMsg("Tahsilat silindi · cari + kasa/banka ters");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Tahsilat silinemedi");
+    }
+  }
 
   async function saveEdit(e: FormEvent) {
     e.preventDefault();
@@ -384,6 +414,10 @@ export default function CustomerDetailPage() {
       getDate={(r) => r.date}
       getDateTie={(r) => r.id}
       emptyText="Satış / sipariş yok"
+      onDelete={(r) => deleteSalesRow(r)}
+      deleteConfirm={(r) =>
+        `Satış ${r.no} (${formatMoney(r.amount)}) silinsin mi?\nStok iade edilir; cari + kasa/banka hareketleri kaldırılır.`
+      }
       getNote={(r) =>
         r.movement ? detailFromBhNote(r.movement.note, r.amount).note : null
       }
@@ -460,6 +494,10 @@ export default function CustomerDetailPage() {
       getDate={(m) => m.movement_date}
       getDateTie={(m) => m.id}
       emptyText="Tahsilat yok"
+      onDelete={(m) => deleteCollectionRow(m)}
+      deleteConfirm={(m) =>
+        `Tahsilat ${formatMoney(Number(m.credit) || Number(m.debit))} silinsin mi?\nCari + kasa/banka hareketi kaldırılır.`
+      }
       getNote={(m) => detailFromBhNote(m.note).note}
       getCta={(m) =>
         m.order_id ? { href: `/orders/${m.order_id}`, label: "Sipariş ekranına git" } : null

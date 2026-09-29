@@ -437,12 +437,82 @@ def cancel_purchase(
 def delete_purchase(
     purchase_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin")),
+    user: User = Depends(require_roles("admin", "muhasebe")),
 ) -> None:
-    purchase = db.get(Purchase, purchase_id)
+    """Delete purchase; if confirmed, reverse stock and purge supplier + finance legs."""
+    from app.models.finance import CashMovement, BankMovement
+    from app.models.product import Product, ProductVariant, StockMovement
+    from app.services.audit import write_audit
+
+    purchase = (
+        db.query(Purchase)
+        .options(joinedload(Purchase.lines))
+        .filter(Purchase.id == purchase_id)
+        .first()
+    )
     if not purchase:
         raise HTTPException(status_code=404, detail="Satın alma bulunamadı")
+
+    # Purge supplier movements + linked kasa/banka
+    movs = (
+        db.query(SupplierMovement)
+        .filter(SupplierMovement.purchase_id == purchase.id)
+        .all()
+    )
+    for mov in movs:
+        for m in (
+            db.query(CashMovement)
+            .filter(CashMovement.supplier_movement_id == mov.id)
+            .all()
+        ):
+            db.delete(m)
+        for m in (
+            db.query(BankMovement)
+            .filter(BankMovement.supplier_movement_id == mov.id)
+            .all()
+        ):
+            db.delete(m)
+        db.delete(mov)
+
     if purchase.status == "confirmed":
-        raise HTTPException(status_code=400, detail="Onaylı satın alma silinemez")
+        for line in purchase.lines or []:
+            qty = int(line.quantity or 0)
+            if qty <= 0 or not line.product_id:
+                continue
+            product = db.get(Product, line.product_id)
+            if not product:
+                continue
+            variant = db.get(ProductVariant, line.variant_id) if line.variant_id else None
+            if variant and variant.product_id == product.id:
+                before = int(variant.stock_qty or 0)
+                after = before - qty
+                variant.stock_qty = after
+            else:
+                before = int(product.stock_qty or 0)
+                after = before - qty
+                product.stock_qty = after
+            db.add(
+                StockMovement(
+                    product_id=product.id,
+                    variant_id=variant.id if variant else None,
+                    direction="decrease",
+                    quantity=qty,
+                    qty_before=before,
+                    qty_after=after,
+                    reason="purchase_cancel",
+                    note=f"Alış silindi {purchase.purchase_number}",
+                    warehouse=getattr(product, "warehouse", None) or "Ana Depo",
+                    created_by_user_id=user.id,
+                )
+            )
+
+    number = purchase.purchase_number
     db.delete(purchase)
     db.commit()
+    write_audit(
+        user_id=user.id,
+        action="delete",
+        entity_type="purchase",
+        entity_id=purchase_id,
+        detail={"purchase_number": number},
+    )

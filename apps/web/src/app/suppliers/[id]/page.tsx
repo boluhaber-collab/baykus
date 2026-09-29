@@ -240,6 +240,32 @@ export default function SupplierDetailPage() {
     return rows;
   }, [purchaseMovements, supplier]);
 
+  async function deletePurchaseRow(r: PurchasePanelRow) {
+    try {
+      if (r.movement?.id) {
+        await apiFetch(`/api/suppliers/${id}/movements/${r.movement.id}`, {
+          method: "DELETE",
+        });
+      } else if (r.purchase?.id) {
+        await apiFetch(`/api/purchases/${r.purchase.id}`, { method: "DELETE" });
+      } else {
+        throw new Error("Silinecek alış kaydı bulunamadı");
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Alış silinemedi");
+    }
+  }
+
+  async function deletePaymentRow(m: SupplierMovement) {
+    try {
+      await apiFetch(`/api/suppliers/${id}/movements/${m.id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ödeme silinemedi");
+    }
+  }
+
   if (!supplier && !error) {
     return <div className="text-slate-500">Yükleniyor…</div>;
   }
@@ -311,6 +337,10 @@ export default function SupplierDetailPage() {
       getDate={(r) => r.date}
       getDateTie={(r) => r.id}
       emptyText="Alış kaydı yok"
+      onDelete={(r) => deletePurchaseRow(r)}
+      deleteConfirm={(r) =>
+        `Alış ${r.no} (${formatMoney(r.amount)}) silinsin mi?\nStok ve tedarikçi cari + kasa/banka tersine çevrilir.`
+      }
       getNote={(r) =>
         r.movement ? detailFromBhNote(r.movement.note, r.amount).note : null
       }
@@ -378,6 +408,10 @@ export default function SupplierDetailPage() {
       getDate={(m) => m.movement_date}
       getDateTie={(m) => m.id}
       emptyText="Ödeme yok"
+      onDelete={(m) => deletePaymentRow(m)}
+      deleteConfirm={(m) =>
+        `Ödeme ${formatMoney(Number(m.credit) || Number(m.debit))} silinsin mi?\nTedarikçi cari + kasa/banka kaldırılır.`
+      }
       getNote={(m) => detailFromBhNote(m.note).note}
       getCta={(m) =>
         m.purchase_id ? { href: `/purchases/${m.purchase_id}`, label: "Alış ekranına git" } : null

@@ -386,16 +386,18 @@ function CreateSaleInner() {
             ? "perakende"
             : "mağaza";
 
-      // Kapora → deposit_amount (stok↓ + cari/finans order_flow)
+      // Tahsilatlı satış → anında Teslim Edildi (iş akışı atlanır); veresiye → Sipariş Alındı
+      const paidNow = !veresiye && amount > 0;
       const created = await apiFetch<{ id: number }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
           customer_id: cid,
-          status: "Sipariş Alındı",
+          status: paidNow ? "Teslim Edildi" : "Sipariş Alındı",
           notes: notes || null,
           channel: orderChannel,
-          design_status: "Bekliyor",
+          design_status: paidNow ? "Onaylandı" : "Bekliyor",
           due_date: dueDate || null,
+          delivery_date: paidNow ? dueDate || new Date().toISOString().slice(0, 10) : null,
           deposit_amount: amount > 0 ? amount : 0,
           discount_amount: 0,
           lines: payloadLines,
@@ -403,8 +405,12 @@ function CreateSaleInner() {
         }),
       });
 
-      setMsg("Satış kaydedildi · stok ve finans güncellendi");
-      router.push(`/orders/${created.id}`);
+      setMsg(
+        paidNow
+          ? "Satış tamamlandı · stok↓ · cari + kasa/banka işlendi"
+          : "Satış kaydedildi · veresiye (sipariş akışı)",
+      );
+      router.push(paidNow ? `/customers/${cid}` : `/orders/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kayıt hatası");
     } finally {

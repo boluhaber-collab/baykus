@@ -409,6 +409,136 @@ def create_movement(
     return _movement_out(movement)
 
 
+
+
+@router.delete(
+    "/{supplier_id}/movements/{movement_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_movement(
+    supplier_id: int,
+    movement_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*LEDGER_WRITE_ROLES)),
+) -> None:
+    """Delete supplier hareket and reverse linked kasa/banka; purchase sales reverse stock."""
+    from app.models.finance import CashMovement, BankMovement
+    from app.services.audit import write_audit
+
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    movement = db.get(SupplierMovement, movement_id)
+    if not movement or movement.supplier_id != supplier_id:
+        raise HTTPException(status_code=404, detail="Tedarikçi hareketi bulunamadı")
+
+    note = movement.note or ""
+    if "BH_IMPORT:" in note:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="BizimHesap aktarım kayıtları silinemez",
+        )
+
+    purchase_id = movement.purchase_id
+    mtype = movement.movement_type
+
+    # Linked finance
+    for m in (
+        db.query(CashMovement)
+        .filter(CashMovement.supplier_movement_id == movement.id)
+        .all()
+    ):
+        db.delete(m)
+    for m in (
+        db.query(BankMovement)
+        .filter(BankMovement.supplier_movement_id == movement.id)
+        .all()
+    ):
+        db.delete(m)
+
+    # Purchase-linked "purchase" debit: purge sibling movements + reverse stock + delete purchase
+    if mtype == "purchase" and purchase_id:
+        siblings = (
+            db.query(SupplierMovement)
+            .filter(
+                SupplierMovement.purchase_id == purchase_id,
+                SupplierMovement.id != movement.id,
+            )
+            .all()
+        )
+        for sib in siblings:
+            for m in (
+                db.query(CashMovement)
+                .filter(CashMovement.supplier_movement_id == sib.id)
+                .all()
+            ):
+                db.delete(m)
+            for m in (
+                db.query(BankMovement)
+                .filter(BankMovement.supplier_movement_id == sib.id)
+                .all()
+            ):
+                db.delete(m)
+            db.delete(sib)
+
+        purchase = db.get(Purchase, purchase_id)
+        if purchase and purchase.status == "confirmed":
+            # Reverse stock increase from confirm
+            from app.models.product import Product, ProductVariant, StockMovement
+
+            for line in purchase.lines or []:
+                qty = int(line.quantity or 0)
+                if qty <= 0 or not line.product_id:
+                    continue
+                product = db.get(Product, line.product_id)
+                if not product:
+                    continue
+                variant = db.get(ProductVariant, line.variant_id) if line.variant_id else None
+                if variant and variant.product_id == product.id:
+                    before = int(variant.stock_qty or 0)
+                    after = before - qty
+                    variant.stock_qty = after
+                else:
+                    before = int(product.stock_qty or 0)
+                    after = before - qty
+                    product.stock_qty = after
+                db.add(
+                    StockMovement(
+                        product_id=product.id,
+                        variant_id=variant.id if variant else None,
+                        direction="decrease",
+                        quantity=qty,
+                        qty_before=before,
+                        qty_after=after,
+                        reason="purchase_cancel",
+                        note=f"Alış iptal {purchase.purchase_number}",
+                        warehouse=getattr(product, "warehouse", None) or "Ana Depo",
+                        created_by_user_id=user.id,
+                    )
+                )
+            db.delete(movement)
+            db.delete(purchase)
+        else:
+            db.delete(movement)
+            if purchase:
+                db.delete(purchase)
+    else:
+        db.delete(movement)
+
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="delete",
+        entity_type="supplier_movement",
+        entity_id=movement_id,
+        detail={
+            "supplier_id": supplier_id,
+            "movement_type": mtype,
+            "purchase_id": purchase_id,
+        },
+    )
+
+
 @router.get("/{supplier_id}/statement", response_model=SupplierStatementOut)
 def supplier_statement(
     supplier_id: int,

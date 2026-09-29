@@ -430,6 +430,16 @@ body {
   .bk-expand-toggle--minus:hover {
     background-color: #374151;
   }
+  .bk-expand-toggle--delete {
+    background-color: #ef4444;
+  }
+  .bk-expand-toggle--delete:hover {
+    background-color: #dc2626;
+  }
+  .bk-expand-toggle--delete:disabled {
+    opacity: 0.55;
+    cursor: wait;
+  }
   .bk-expand-th {
     width: 2rem;
     padding-left: 0.5rem !important;
