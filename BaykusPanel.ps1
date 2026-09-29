@@ -1,9 +1,17 @@
-# Baykus kontrol paneli — gizli konsollarla API+Web yonetimi (WinForms)
+﻿# Baykus kontrol paneli — gizli konsollarla API+Web yonetimi (WinForms)
 # Çift tık: Baykus.bat / Baykus.vbs (CMD penceresi açmaz)
+# UTF-8: script must be saved with BOM so Windows PowerShell 5.1 parses Turkish correctly.
+try {
+  chcp 65001 > $null
+  [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+  [Console]::InputEncoding  = [System.Text.Encoding]::UTF8
+  $OutputEncoding = [System.Text.Encoding]::UTF8
+} catch { }
 $ErrorActionPreference = 'Continue'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
+[System.Windows.Forms.Application]::SetCompatibleTextRenderingDefault($false)
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $Root) { $Root = (Get-Location).Path }
