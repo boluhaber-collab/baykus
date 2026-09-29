@@ -18,6 +18,7 @@ import {
   formatMoney,
   statusBadgeClass,
 } from "@/lib/api";
+import { useDateSort } from "@/hooks/useDateSort";
 
 type SalesRow = {
   id: number;
@@ -79,6 +80,12 @@ export default function SalesReportPage() {
 
   const s = data?.summary || {};
   const byStatus = (s.by_status as { status: string; count: number; revenue: number }[]) || [];
+
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    data?.rows || [],
+    (r) => r.created_at,
+    (r) => r.id,
+  );
 
   return (
     <div>
@@ -172,9 +179,10 @@ export default function SalesReportPage() {
       <ReportTable
         headers={["Belge/No", "Müşteri", "Tip", "Tutar", "Ödenen", "Kalan", "Tarih", "Açıklama"]}
         colSpan={8}
-        empty={!loading && (data?.rows.length ?? 0) === 0}
+        dateSort={{ dir: dateDir, onChange: setDateDir }}
+        empty={!loading && sortedRows.length === 0}
       >
-        {(data?.rows || []).map((r) => (
+        {sortedRows.map((r) => (
           <tr key={r.id} className="border-t border-slate-100 hover:bg-slate-50">
             <td className="px-4 py-3 font-mono text-xs">{r.order_number}</td>
             <td className="px-4 py-3">{r.customer_name || "—"}</td>

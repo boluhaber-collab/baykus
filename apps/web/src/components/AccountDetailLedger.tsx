@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
 import {
   accountAciklama,
@@ -11,6 +11,8 @@ import {
   hareketLabel,
   isBhImportNote,
 } from "@/lib/bhNote";
+import { DEFAULT_DATE_SORT, DateSortDir, sortByDate } from "@/lib/dateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 export type AccountLedgerRow = {
   id: number;
@@ -276,6 +278,18 @@ export default function AccountDetailLedger({
   onRowError,
   onRowOk,
 }: AccountDetailLedgerProps) {
+  const [dateDir, setDateDir] = useState<DateSortDir>(DEFAULT_DATE_SORT);
+  const sortedMovements = useMemo(
+    () =>
+      sortByDate(
+        movements,
+        (m) => m.movement_date,
+        dateDir,
+        (m) => m.id,
+      ),
+    [movements, dateDir],
+  );
+
   return (
     <div className="space-y-3">
       <div className="text-xs text-baykus-muted">
@@ -317,7 +331,9 @@ export default function AccountDetailLedger({
         <table className="bk-table text-sm">
           <thead>
             <tr>
-              <th>Tarih</th>
+              <th className="bk-th-sortable">
+                <SortableDateHeader dir={dateDir} onChange={setDateDir} />
+              </th>
               <th>İşlem</th>
               <th>Kullanıcı</th>
               <th>Hesap</th>
@@ -329,14 +345,14 @@ export default function AccountDetailLedger({
             </tr>
           </thead>
           <tbody>
-            {movements.length === 0 && (
+            {sortedMovements.length === 0 && (
               <tr>
                 <td colSpan={9} className="text-center text-baykus-muted py-8">
                   {emptyLabel}
                 </td>
               </tr>
             )}
-            {movements.map((m) => {
+            {sortedMovements.map((m) => {
               const isIn = m.direction === "in";
               const amt = Number(m.amount);
               const borc = isIn ? amt : 0;

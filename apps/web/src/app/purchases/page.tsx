@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 import { PURCHASE_STATUS_LABELS, PurchaseListItem, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 
@@ -32,6 +34,12 @@ export default function PurchasesPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    items,
+    (p) => p.purchase_date,
+    (p) => p.id,
+  );
 
   return (
     <div className="space-y-2 pb-2">
@@ -110,14 +118,14 @@ export default function PurchasesPage() {
             <tr>
               <th>No</th>
               <th>Tedarikçi</th>
-              <th>Tarih</th>
+              <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} /></th>
               <th>Durum</th>
               <th className="text-right">Toplam</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {items.map((p) => (
+            {sortedRows.map((p) => (
               <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs">
                   <Link href={`/purchases/${p.id}`} className="text-baykus-700 hover:underline">

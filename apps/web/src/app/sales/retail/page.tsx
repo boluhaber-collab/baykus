@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 import { OrderListItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 
@@ -25,13 +27,18 @@ export default function RetailSalesPage() {
     void load();
   }, [load]);
 
-  const filtered = items.filter((o) => {
+  const filteredRaw = items.filter((o) => {
     if (status !== "Tümü" && o.status !== status) return false;
     const needle = q.trim().toLocaleLowerCase("tr");
     if (!needle) return true;
     const hay = `${o.order_number} ${o.customer_name || ""} ${o.customer_phone || ""} ${o.notes || ""}`.toLocaleLowerCase("tr");
     return hay.includes(needle);
   });
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    filteredRaw,
+    (o) => o.created_at,
+    (o) => o.id,
+  );
 
   return (
     <div className="space-y-3">
@@ -77,7 +84,7 @@ export default function RetailSalesPage() {
         <table className="bk-table">
           <thead>
             <tr>
-              <th>Tarih</th>
+              <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} /></th>
               <th>Sipariş No</th>
               <th>Müşteri</th>
               <th>Telefon</th>
@@ -90,7 +97,7 @@ export default function RetailSalesPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((o) => (
+            {sortedRows.map((o) => (
               <tr key={o.id}>
                 <td className="text-xs whitespace-nowrap">
                   {new Date(o.created_at).toLocaleDateString("tr-TR")}
@@ -120,7 +127,7 @@ export default function RetailSalesPage() {
                 <td className="text-xs max-w-[12rem] truncate">{o.notes || "—"}</td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {sortedRows.length === 0 && (
               <tr>
                 <td colSpan={10} className="text-center text-baykus-muted py-8">
                   Perakende satış yok —{" "}

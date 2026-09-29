@@ -4,6 +4,8 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { OrderListItem, apiFetch, downloadAuthFile, downloadPdf } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 type Doc = {
   id: number;
@@ -64,6 +66,18 @@ export default function ArchiveCenterPage() {
       return name.endsWith(".pdf") || ct.includes("pdf");
     });
   }, [items, pdfOnly]);
+
+  const { dir: docDateDir, setDir: setDocDateDir, sorted: sortedDocs } = useDateSort(
+    docs,
+    (d) => d.created_at,
+    (d) => d.id,
+  );
+  const { dir: orderDateDir, setDir: setOrderDateDir, sorted: sortedOrders } = useDateSort(
+    orders,
+    (o) => o.created_at,
+    (o) => o.id,
+  );
+
 
   async function upload(e: FormEvent) {
     e.preventDefault();
@@ -202,12 +216,12 @@ export default function ArchiveCenterPage() {
                   <th>Etiket</th>
                   <th>Dosya</th>
                   <th>Boyut</th>
-                  <th>Tarih</th>
+                  <th className="bk-th-sortable"><SortableDateHeader dir={docDateDir} onChange={setDocDateDir} /></th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {docs.map((d) => (
+                {sortedDocs.map((d) => (
                   <tr key={d.id}>
                     <td className="font-medium">{d.title}</td>
                     <td>
@@ -259,12 +273,12 @@ export default function ArchiveCenterPage() {
                   <th>Sipariş</th>
                   <th>Müşteri</th>
                   <th>Durum</th>
-                  <th>Tarih</th>
+                  <th className="bk-th-sortable"><SortableDateHeader dir={orderDateDir} onChange={setOrderDateDir} /></th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
+                {sortedOrders.map((o) => (
                   <tr key={o.id}>
                     <td className="font-medium">
                       <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline">

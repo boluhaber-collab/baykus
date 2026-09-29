@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 import { apiFetch, downloadReportCsv, formatMoney, getApiBase, getToken } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { ReportHeader } from "@/components/reports/ReportChrome";
@@ -54,6 +56,12 @@ export default function CariStatementsPage() {
 
   const debitSum = rows.reduce((s, r) => s + r.debit, 0);
   const creditSum = rows.reduce((s, r) => s + r.credit, 0);
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    rows,
+    (r) => r.date,
+    (r) => r.id,
+  );
+
 
   async function exportCsv() {
     if (!customerId) return;
@@ -175,7 +183,7 @@ export default function CariStatementsPage() {
         <table className="bk-table">
           <thead>
             <tr>
-              <th>Tarih</th>
+              <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} /></th>
               <th>Tip</th>
               <th className="text-right">Borç</th>
               <th className="text-right">Alacak</th>
@@ -184,7 +192,7 @@ export default function CariStatementsPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.id}>
                 <td className="text-xs">{r.date || "—"}</td>
                 <td className="text-xs">{r.type}</td>
@@ -194,7 +202,7 @@ export default function CariStatementsPage() {
                 <td className="text-xs text-baykus-muted">{sanitizeDisplayNote(r.note) || "—"}</td>
               </tr>
             ))}
-            {rows.length === 0 && (
+            {sortedRows.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center text-baykus-muted py-8">
                   {customerId ? "Hareket yok" : "Önce müşteri seçin"}

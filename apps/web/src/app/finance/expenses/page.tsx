@@ -5,6 +5,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 const PERIODS = [
   { key: "30", label: "Son 30 Gün", days: 30 },
@@ -79,6 +81,12 @@ export default function ExpensesPage() {
   }, [load]);
 
   const total = useMemo(() => items.reduce((s, i) => s + Number(i.amount), 0), [items]);
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    items,
+    (e) => e.expense_date,
+    (e) => e.id,
+  );
+
 
   async function addCategory(e: FormEvent) {
     e.preventDefault();
@@ -468,7 +476,7 @@ export default function ExpensesPage() {
         <table className="bk-table">
           <thead>
             <tr>
-              <th>İşlem Tarihi</th>
+              <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} label="İşlem Tarihi" /></th>
               <th>Belge No</th>
               <th>Vadesi</th>
               <th>Masraf</th>
@@ -481,7 +489,7 @@ export default function ExpensesPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map((e) => {
+            {sortedRows.map((e) => {
               const st = e.status_label || (e.is_posted ? "Ödenmiş" : "Ödenecek");
               return (
                 <tr

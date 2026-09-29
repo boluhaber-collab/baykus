@@ -1,10 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, ReactNode, useCallback, useState } from "react";
+import { Fragment, ReactNode, useCallback, useMemo, useState } from "react";
 import { formatMoney } from "@/lib/api";
 import { decodeHtmlEntities } from "@/lib/htmlEntities";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import {
+  DEFAULT_DATE_SORT,
+  DateSortDir,
+  sortByDate,
+} from "@/lib/dateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 export type ExpandLineItem = {
   label: string;
@@ -36,9 +42,24 @@ export type ExpandableMovementTableProps<T extends { id: number | string }> = {
   getCta?: (row: T) => { href: string; label: string } | null | undefined;
   /** Lazy-load line items / extra note / user when the row expands. */
   loadDetail?: (row: T) => Promise<ExpandDetailPayload | null>;
-  /** Optional leading rows (e.g. opening balance) rendered before data rows. */
+  /**
+   * Optional leading rows (e.g. opening balance).
+   * When date sorting is on, pinned to the oldest end (top in ASC, bottom in DESC).
+   */
   leadingRows?: ReactNode;
   className?: string;
+  /**
+   * Enable newest↔oldest sorting via clickable date header.
+   * Default dir is DESC (newest first). When set, rows are sorted before render/limit.
+   */
+  getDate?: (row: T) => string | null | undefined;
+  /** Stable tie-breaker (e.g. id) so same-day rows keep a deterministic order. */
+  getDateTie?: (row: T) => string | number | null | undefined;
+  /** Column key whose header becomes the sort control. Default: "date". */
+  dateColumnKey?: string;
+  defaultDateDir?: DateSortDir;
+  /** After sort, keep only the first N rows (e.g. party-card previews). */
+  limit?: number;
 };
 
 type CacheEntry = ExpandDetailPayload & { loading?: boolean; error?: string | null };
@@ -127,6 +148,7 @@ function ExpandPanel({
 /**
  * BizimHesap-style hareket tablosu: her satırın solunda yeşil + / gri −,
  * genişleyince kalemler + açıklama + CTA.
+ * Optional getDate → default newest→oldest + clickable Tarih header.
  */
 export default function ExpandableMovementTable<T extends { id: number | string }>({
   columns,
@@ -137,9 +159,26 @@ export default function ExpandableMovementTable<T extends { id: number | string 
   loadDetail,
   leadingRows,
   className,
+  getDate,
+  getDateTie,
+  dateColumnKey = "date",
+  defaultDateDir = DEFAULT_DATE_SORT,
+  limit,
 }: ExpandableMovementTableProps<T>) {
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [cache, setCache] = useState<Record<string, CacheEntry>>({});
+  const [dateDir, setDateDir] = useState<DateSortDir>(defaultDateDir);
+
+  const displayRows = useMemo(() => {
+    let list = rows;
+    if (getDate) {
+      list = sortByDate(list, getDate, dateDir, getDateTie);
+    }
+    if (limit != null && limit >= 0) {
+      list = list.slice(0, limit);
+    }
+    return list;
+  }, [rows, getDate, getDateTie, dateDir, limit]);
 
   const toggle = useCallback(
     async (row: T) => {
@@ -191,6 +230,9 @@ export default function ExpandableMovementTable<T extends { id: number | string 
   );
 
   const colCount = columns.length + 1;
+  const pinOpeningToOldest = Boolean(getDate && leadingRows);
+  const showLeadingTop = leadingRows && (!pinOpeningToOldest || dateDir === "asc");
+  const showLeadingBottom = leadingRows && pinOpeningToOldest && dateDir === "desc";
 
   return (
     <div className={`bk-table-wrap ${className || ""}`.trim()}>
@@ -198,24 +240,32 @@ export default function ExpandableMovementTable<T extends { id: number | string 
         <thead>
           <tr>
             <th className="bk-expand-th" aria-label="Detay" />
-            {columns.map((col) => (
-              <th
-                key={col.key}
-                className={[
-                  col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "",
-                  col.className || "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                {col.header}
-              </th>
-            ))}
+            {columns.map((col) => {
+              const isDateCol = Boolean(getDate) && col.key === dateColumnKey;
+              return (
+                <th
+                  key={col.key}
+                  className={[
+                    col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "",
+                    col.className || "",
+                    isDateCol ? "bk-th-sortable" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  {isDateCol ? (
+                    <SortableDateHeader dir={dateDir} onChange={setDateDir} label={col.header} />
+                  ) : (
+                    col.header
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
-          {leadingRows}
-          {rows.map((row) => {
+          {showLeadingTop ? leadingRows : null}
+          {displayRows.map((row) => {
             const key = String(row.id);
             const open = openIds.has(key);
             const cta = getCta?.(row) ?? null;
@@ -250,7 +300,8 @@ export default function ExpandableMovementTable<T extends { id: number | string 
               </Fragment>
             );
           })}
-          {rows.length === 0 && !leadingRows && (
+          {showLeadingBottom ? leadingRows : null}
+          {displayRows.length === 0 && !leadingRows && (
             <tr>
               <td colSpan={colCount} className="text-center text-baykus-muted py-6">
                 {emptyText}

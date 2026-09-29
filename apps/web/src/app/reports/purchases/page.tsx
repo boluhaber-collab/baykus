@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 type Row = { id: number; number: string; date: string | null; supplier: string | null; status: string; amount: number };
 
@@ -49,6 +51,12 @@ export default function PurchaseReportPage() {
   }, [rows, q, status]);
 
   const filteredTotal = filtered.reduce((s, r) => s + r.amount, 0);
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    filtered,
+    (r) => r.date,
+    (r) => r.id,
+  );
+
 
   async function exportCsv() {
     setCsvBusy(true);
@@ -114,14 +122,14 @@ export default function PurchaseReportPage() {
           <thead>
             <tr>
               <th>Belge</th>
-              <th>Tarih</th>
+              <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} /></th>
               <th>Tedarikçi</th>
               <th>Durum</th>
               <th className="text-right">Tutar</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.id}>
                 <td>
                   <Link href={`/purchases/${r.id}`} className="text-baykus-primary hover:underline font-medium">

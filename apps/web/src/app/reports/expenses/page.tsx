@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 type Row = {
   id: number;
@@ -62,6 +64,12 @@ export default function ExpenseReportsPage() {
   }, [filtered]);
 
   const filteredTotal = filtered.reduce((s, r) => s + r.amount, 0);
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    filtered,
+    (r) => r.date,
+    (r) => r.id,
+  );
+
 
   async function exportCsv() {
     setCsvBusy(true);
@@ -122,7 +130,7 @@ export default function ExpenseReportsPage() {
         <table className="bk-table">
           <thead>
             <tr>
-              <th>Tarih</th>
+              <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} /></th>
               <th>Kategori</th>
               <th>Ödeme</th>
               <th>Durum</th>
@@ -131,7 +139,7 @@ export default function ExpenseReportsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.id}>
                 <td className="text-xs">{r.date || "—"}</td>
                 <td>{r.category || "—"}</td>

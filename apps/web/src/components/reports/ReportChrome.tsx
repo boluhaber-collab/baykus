@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { ReactNode } from "react";
+import { DateSortDir } from "@/lib/dateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 export function ReportHeader({
   title,
@@ -99,11 +101,16 @@ export function ReportTable({
   children,
   empty,
   colSpan,
+  dateSort,
+  dateHeader = "Tarih",
 }: {
   headers: string[];
   children: ReactNode;
   empty?: boolean;
   colSpan: number;
+  /** When set, the matching date header becomes clickable newest↔oldest. */
+  dateSort?: { dir: DateSortDir; onChange: (next: DateSortDir) => void };
+  dateHeader?: string;
 }) {
   return (
     <div className="bk-table-wrap">
@@ -111,7 +118,13 @@ export function ReportTable({
         <thead>
           <tr>
             {headers.map((h) => (
-              <th key={h}>{h}</th>
+              <th key={h} className={dateSort && h === dateHeader ? "bk-th-sortable" : undefined}>
+                {dateSort && h === dateHeader ? (
+                  <SortableDateHeader dir={dateSort.dir} onChange={dateSort.onChange} label={h} />
+                ) : (
+                  h
+                )}
+              </th>
             ))}
           </tr>
         </thead>

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 import StatusFooter from "@/components/StatusFooter";
 import {
   CASH_TYPE_LABELS,
@@ -78,6 +80,19 @@ export default function CashPage() {
   }
 
   const s = panel?.summary;
+  const orders = panel?.orders || [];
+  const movements = panel?.movements || [];
+  const {
+    dir: orderDateDir,
+    setDir: setOrderDateDir,
+    sorted: sortedOrders,
+  } = useDateSort(orders, (o) => o.date, (o) => o.id);
+  const {
+    dir: moveDateDir,
+    setDir: setMoveDateDir,
+    sorted: sortedMoves,
+  } = useDateSort(movements, (m) => m.date, (m) => `${m.source}-${m.date}`);
+
   const main = panel?.cash_register;
 
   const cards = s
@@ -250,7 +265,7 @@ export default function CashPage() {
                 <tr>
                   <th>Sipariş No</th>
                   <th>Belge</th>
-                  <th>Tarih</th>
+                  <th className="bk-th-sortable"><SortableDateHeader dir={orderDateDir} onChange={setOrderDateDir} /></th>
                   <th>Müşteri</th>
                   <th>Ürün</th>
                   <th className="text-right">Adet</th>
@@ -263,7 +278,7 @@ export default function CashPage() {
                 </tr>
               </thead>
               <tbody>
-                {(panel?.orders || []).map((o) => (
+                {sortedOrders.map((o) => (
                   <tr key={o.id}>
                     <td>
                       <Link href={o.href} className="text-baykus-primary hover:underline font-medium">
@@ -290,7 +305,7 @@ export default function CashPage() {
                     </td>
                   </tr>
                 ))}
-                {(panel?.orders || []).length === 0 && (
+                {sortedOrders.length === 0 && (
                   <tr>
                     <td colSpan={12} className="text-center text-baykus-muted py-6">
                       Aralıkta sipariş yok
@@ -307,7 +322,7 @@ export default function CashPage() {
               <table className="bk-table">
                 <thead>
                   <tr>
-                    <th>Tarih</th>
+                    <th className="bk-th-sortable"><SortableDateHeader dir={moveDateDir} onChange={setMoveDateDir} /></th>
                     <th>Kaynak</th>
                     <th>Hesap</th>
                     <th>İşlem</th>
@@ -318,7 +333,7 @@ export default function CashPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(panel?.movements || []).map((m, i) => (
+                  {sortedMoves.map((m, i) => (
                     <tr key={`${m.source}-${m.date}-${i}`}>
                       <td className="text-xs whitespace-nowrap">{m.date}</td>
                       <td className="text-xs">{m.source}</td>

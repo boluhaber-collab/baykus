@@ -13,6 +13,7 @@ import {
 import StatusFooter from "@/components/StatusFooter";
 import { ReportResponse, apiFetch, downloadReportCsv } from "@/lib/api";
 import { displaySku } from "@/lib/productLabel";
+import { useDateSort } from "@/hooks/useDateSort";
 
 type Row = {
   id: number;
@@ -68,6 +69,12 @@ export default function StockMovementsReportPage() {
   const s = data?.summary || {};
   const rows = data?.rows || [];
 
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    rows,
+    (r) => r.created_at,
+    (r) => r.id,
+  );
+
   return (
     <div>
       <ReportHeader
@@ -111,9 +118,10 @@ export default function StockMovementsReportPage() {
       <ReportTable
         headers={["Tarih", "SKU", "Ürün", "Varyant", "Miktar", "Yön", "Neden", "Depo"]}
         colSpan={8}
-        empty={rows.length === 0}
+        dateSort={{ dir: dateDir, onChange: setDateDir }}
+        empty={sortedRows.length === 0}
       >
-        {rows.map((r) => (
+        {sortedRows.map((r) => (
           <tr key={r.id}>
             <td className="whitespace-nowrap">{(r.created_at || "").slice(0, 16).replace("T", " ")}</td>
             <td>{displaySku(r.sku)}</td>

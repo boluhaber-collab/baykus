@@ -306,7 +306,10 @@ export default function SupplierDetailPage() {
 
   const purchasesPanel = (
     <ExpandableMovementTable<PurchasePanelRow>
-      rows={purchaseRows.slice(0, 12)}
+      rows={purchaseRows}
+      limit={12}
+      getDate={(r) => r.date}
+      getDateTie={(r) => r.id}
       emptyText="Alış kaydı yok"
       getNote={(r) =>
         r.movement ? detailFromBhNote(r.movement.note, r.amount).note : null
@@ -370,7 +373,10 @@ export default function SupplierDetailPage() {
 
   const paymentsPanel = (
     <ExpandableMovementTable<SupplierMovement>
-      rows={payments.slice(0, 12)}
+      rows={payments}
+      limit={12}
+      getDate={(m) => m.movement_date}
+      getDateTie={(m) => m.id}
       emptyText="Ödeme yok"
       getNote={(m) => detailFromBhNote(m.note).note}
       getCta={(m) =>
@@ -788,6 +794,8 @@ export default function SupplierDetailPage() {
               </div>
               <ExpandableMovementTable<SupplierMovement>
                 rows={statement?.movements || []}
+                    getDate={(m) => m.movement_date}
+                    getDateTie={(m) => m.id}
                 emptyText="Hareket yok"
                 getNote={(m) => detailFromBhNote(m.note).note}
                 getCta={(m) =>

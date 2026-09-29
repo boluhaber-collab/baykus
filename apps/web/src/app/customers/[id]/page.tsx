@@ -342,7 +342,10 @@ export default function CustomerDetailPage() {
 
   const salesPanel = (
     <ExpandableMovementTable<SalesPanelRow>
-      rows={salesRows.slice(0, 12)}
+      rows={salesRows}
+      limit={12}
+      getDate={(r) => r.date}
+      getDateTie={(r) => r.id}
       emptyText="Satış / sipariş yok"
       getNote={(r) =>
         r.movement ? detailFromBhNote(r.movement.note, r.amount).note : null
@@ -415,7 +418,10 @@ export default function CustomerDetailPage() {
 
   const collectionsPanel = (
     <ExpandableMovementTable<CariMovement>
-      rows={collections.slice(0, 12)}
+      rows={collections}
+      limit={12}
+      getDate={(m) => m.movement_date}
+      getDateTie={(m) => m.id}
       emptyText="Tahsilat yok"
       getNote={(m) => detailFromBhNote(m.note).note}
       getCta={(m) =>
@@ -864,6 +870,8 @@ export default function CustomerDetailPage() {
                   </div>
                   <ExpandableMovementTable<CariMovement>
                     rows={statement?.movements || []}
+                    getDate={(m) => m.movement_date}
+                    getDateTie={(m) => m.id}
                     emptyText="Hareket yok"
                     getNote={(m) => detailFromBhNote(m.note).note}
                     getCta={(m) =>

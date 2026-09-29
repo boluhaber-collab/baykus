@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OrderListItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 const DIRECT_CHANNELS = "perakende,mağaza,yeni müşteri,kayıtlı müşteri";
 
@@ -98,6 +100,12 @@ export default function DirektSatislarPage() {
       return true;
     });
   }, [items, belge, donem, q, araTip, showCancel]);
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    filtered,
+    (o) => o.created_at,
+    (o) => o.id,
+  );
+
 
   const summary = useMemo(() => {
     const active = filtered.filter((o) => !isCancelled(o.status));
@@ -330,7 +338,7 @@ export default function DirektSatislarPage() {
           <table className="bk-table">
             <thead>
               <tr>
-                <th>Tarih</th>
+                <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} /></th>
                 <th>İsim / Ünvan</th>
                 <th>Belge No</th>
                 <th>Sipariş No</th>
@@ -339,7 +347,7 @@ export default function DirektSatislarPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((o) => {
+              {sortedRows.map((o) => {
                 const cancelled = isCancelled(o.status);
                 return (
                   <tr

@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { useDateSort } from "@/hooks/useDateSort";
 
 type Row = {
   source: string;
@@ -82,6 +83,12 @@ export default function FinanceReportPage() {
     return BANK_TYPE_LABELS[t] || t;
   }
 
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    data?.rows || [],
+    (r) => r.movement_date,
+    (r) => r.id,
+  );
+
   return (
     <div>
       <ReportHeader
@@ -142,9 +149,10 @@ export default function FinanceReportPage() {
       <ReportTable
         headers={["Kaynak", "Hesap", "Tip", "Yön", "Tutar", "Tarih", "Kategori", "Taraf", "Not"]}
         colSpan={9}
-        empty={!loading && (data?.rows.length ?? 0) === 0}
+        dateSort={{ dir: dateDir, onChange: setDateDir }}
+        empty={!loading && sortedRows.length === 0}
       >
-        {(data?.rows || []).map((r) => (
+        {sortedRows.map((r) => (
           <tr key={`${r.source}-${r.id}`} className="border-t border-slate-100 hover:bg-slate-50">
             <td className="px-4 py-3">{r.source === "cash" ? "Kasa" : "Banka"}</td>
             <td className="px-4 py-3">{r.account_name || "—"}</td>

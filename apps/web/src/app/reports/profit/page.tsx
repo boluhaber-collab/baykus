@@ -12,6 +12,7 @@ import {
 } from "@/components/reports/ReportChrome";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { useDateSort } from "@/hooks/useDateSort";
 
 type Row = {
   section?: string;
@@ -56,6 +57,12 @@ export default function ProfitReportPage() {
 
   const s = data?.summary || {};
   const gross = Number(s.gross_approx ?? 0);
+
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
+    data?.rows || [],
+    (r) => r.date,
+    (r) => r.ref,
+  );
 
   return (
     <div>
@@ -133,9 +140,10 @@ export default function ProfitReportPage() {
       <ReportTable
         headers={["Bölüm", "Ref", "Tarih", "Durum / Tedarikçi", "Tutar"]}
         colSpan={5}
-        empty={!loading && (data?.rows.length ?? 0) === 0}
+        dateSort={{ dir: dateDir, onChange: setDateDir }}
+        empty={!loading && sortedRows.length === 0}
       >
-        {(data?.rows || []).map((r, idx) => (
+        {sortedRows.map((r, idx) => (
           <tr key={`${r.kind}-${r.ref}-${idx}`} className="border-t border-slate-100 hover:bg-slate-50">
             <td className="px-4 py-3">{r.section || (r.kind === "order" ? "Satış" : "Satın alma")}</td>
             <td className="px-4 py-3 font-mono text-xs">{r.ref}</td>

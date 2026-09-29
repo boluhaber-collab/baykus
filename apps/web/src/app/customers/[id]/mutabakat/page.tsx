@@ -14,6 +14,8 @@ import {
 } from "@/lib/api";
 
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { useDateSort } from "@/hooks/useDateSort";
+import SortableDateHeader from "@/components/SortableDateHeader";
 
 export default function MutabakatPage() {
   const params = useParams();
@@ -97,6 +99,13 @@ export default function MutabakatPage() {
   }
 
   const todayLabel = new Date().toLocaleDateString("tr-TR");
+  const movements = statement?.movements || [];
+  const { dir: dateDir, setDir: setDateDir, sorted: sortedMoves } = useDateSort(
+    movements,
+    (m) => m.movement_date,
+    (m) => m.id,
+  );
+
 
   return (
     <div className="space-y-3">
@@ -170,7 +179,7 @@ export default function MutabakatPage() {
           <table className="bk-table text-xs">
             <thead>
               <tr>
-                <th>Tarih</th>
+                <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} /></th>
                 <th>İşlem</th>
                 <th className="text-right">Borç</th>
                 <th className="text-right">Alacak</th>
@@ -179,7 +188,7 @@ export default function MutabakatPage() {
               </tr>
             </thead>
             <tbody>
-              {(statement?.movements || []).map((m) => (
+              {sortedMoves.map((m) => (
                 <tr key={m.id}>
                   <td>{m.movement_date}</td>
                   <td>{m.movement_type}</td>
@@ -191,7 +200,7 @@ export default function MutabakatPage() {
                   <td className="text-slate-500">{sanitizeDisplayNote(m.note) || "—"}</td>
                 </tr>
               ))}
-              {(statement?.movements || []).length === 0 && (
+              {sortedMoves.length === 0 && (
                 <tr>
                   <td colSpan={6} className="text-center text-slate-400 py-6">
                     Seçili dönemde hareket yok
