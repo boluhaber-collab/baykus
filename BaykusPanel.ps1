@@ -1,4 +1,4 @@
-﻿# Baykus kontrol paneli — gizli konsollarla API+Web yonetimi (WinForms)
+# Baykus kontrol paneli — gizli konsollarla API+Web yonetimi (WinForms)
 # Çift tık: Baykus.bat / Baykus.vbs (CMD penceresi açmaz)
 $ErrorActionPreference = 'Continue'
 Add-Type -AssemblyName System.Windows.Forms
@@ -92,9 +92,31 @@ ACCESS_TOKEN_EXPIRE_MINUTES=720
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 "@ | Set-Content -Path $envPath -Encoding UTF8
   }
+  # API cwd is apps/api; pydantic Settings(env_file=".env") only sees this file
+  $apiEnv = Join-Path $Root 'apps\api\.env'
+  $apiEnvBody = @"
+DATABASE_URL=sqlite:///./baykus.db
+SECRET_KEY=baykus-isyeri-local-change-me
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+ACCESS_TOKEN_EXPIRE_MINUTES=720
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+"@
+  if (-not (Test-Path $apiEnv)) {
+    $apiEnvBody | Set-Content -Path $apiEnv -Encoding UTF8
+  } else {
+    $apiContent = Get-Content $apiEnv -Raw -ErrorAction SilentlyContinue
+    if ($apiContent -notmatch '(?m)^DATABASE_URL=sqlite') {
+      $apiEnvBody | Set-Content -Path $apiEnv -Encoding UTF8
+    }
+  }
   $webEnv = Join-Path $Root 'apps\web\.env.local'
   if (-not (Test-Path $webEnv)) {
     'NEXT_PUBLIC_API_URL=http://127.0.0.1:8000' | Set-Content -Path $webEnv -Encoding UTF8
+  } else {
+    $webContent = Get-Content $webEnv -Raw -ErrorAction SilentlyContinue
+    if ($webContent -match 'NEXT_PUBLIC_API_URL=http://localhost:8000') {
+      'NEXT_PUBLIC_API_URL=http://127.0.0.1:8000' | Set-Content -Path $webEnv -Encoding UTF8
+    }
   }
 }
 
@@ -133,15 +155,22 @@ function Get-PidsOnPort([int]$Port) {
 }
 
 function Stop-PortTree([int]$Port) {
-  $pids = Get-PidsOnPort $Port
-  foreach ($pid in $pids) {
+  # NOTE: never use $pid / $PID here - $PID is a read-only automatic variable in PowerShell
+  $listenPids = @(Get-PidsOnPort $Port)
+  foreach ($listenPid in $listenPids) {
+    if ($listenPid -le 0) { continue }
     try {
-      $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$pid" -ErrorAction SilentlyContinue
-      if ($proc) {
-        Get-CimInstance Win32_Process -Filter "ParentProcessId=$pid" -ErrorAction SilentlyContinue |
+      # children / grandchildren (node workers, uvicorn reloaders)
+      $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$listenPid" -ErrorAction SilentlyContinue)
+      foreach ($child in $children) {
+        $childId = [int]$child.ProcessId
+        Get-CimInstance Win32_Process -Filter "ParentProcessId=$childId" -ErrorAction SilentlyContinue |
           ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Stop-Process -Id $childId -Force -ErrorAction SilentlyContinue
       }
-      Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+      # whole tree (covers cmd->npm->node wrappers)
+      & taskkill.exe /PID $listenPid /T /F 2>$null | Out-Null
+      Stop-Process -Id $listenPid -Force -ErrorAction SilentlyContinue
     } catch { }
   }
 }
@@ -570,3 +599,4 @@ $form.Add_FormClosing({
 })
 
 [void][System.Windows.Forms.Application]::Run($form)
+
