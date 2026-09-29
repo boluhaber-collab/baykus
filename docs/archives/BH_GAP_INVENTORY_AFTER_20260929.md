@@ -28,3 +28,16 @@
 - Ekstre PDF re-pull not re-run (existing full-range PDFs in archive; Sep already in data)
 - Box still has 10 demo orders (PC wiped to 0) — cosmetic
 - GetSalesReport BAY FEROO lines already on cari via ekstre — not double-imported (filter DsIdentity=Perakende only)
+
+
+## PC confirm (`C:\Users\engin\Desktop\baykus`) — 2026-09-29 ~21:52 TR
+
+| Metric | Value |
+|--------|------:|
+| customers | 38 |
+| cari_movements | 1031 |
+| expenses | 597 |
+| Sep cari sales | **14.153,44** (match) |
+| git | `0013f70` pulled |
+| archive | `apps\api\data\bh-export-20260929\` extracted |
+| API/Web | restarted on 127.0.0.1:8000 / :3000 |
