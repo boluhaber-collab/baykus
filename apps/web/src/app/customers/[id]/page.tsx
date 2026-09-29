@@ -16,6 +16,11 @@ import {
 } from "@/lib/api";
 import { decodeHtmlEntities } from "@/lib/htmlEntities";
 import CustomerTahsilatModal from "@/components/CustomerTahsilatModal";
+import SplitPaymentRows, {
+  SplitPaymentRow,
+  rowsSum,
+  rowsToPayload,
+} from "@/components/SplitPaymentRows";
 import CustomerDevirModal from "@/components/CustomerDevirModal";
 import StatusFooter from "@/components/StatusFooter";
 import ExpandableMovementTable, {
@@ -50,6 +55,8 @@ export default function CustomerDetailPage() {
   const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [payNote, setPayNote] = useState("");
   const [paySide, setPaySide] = useState<"debit" | "credit">("credit");
+  const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
+  const [payResetKey, setPayResetKey] = useState(0);
 
   const [editForm, setEditForm] = useState({
     code: "",
@@ -248,14 +255,22 @@ export default function CustomerDetailPage() {
     setBusy(true);
     setError("");
     try {
+      const finance = payType === "payment" || payType === "deposit";
+      const payments = finance ? rowsToPayload(payRows) : [];
+      let amount = Number(payAmount);
+      if (finance && payments.length) {
+        amount = rowsSum(payRows);
+        if (!(amount > 0)) throw new Error("En az bir kasa/hesap tahsilat satırı girin.");
+      }
       const body: Record<string, unknown> = {
         movement_type: payType,
-        amount: Number(payAmount),
+        amount,
         movement_date: payDate || null,
         note: payNote.trim() || null,
-        // payment/deposit → kasa; sale/adjustment → cari only
-        post_to_finance: payType === "payment" || payType === "deposit",
-        finance_method: payType === "payment" || payType === "deposit" ? "cash" : null,
+        // payment/deposit → kasa or selected bank; sale/adjustment → cari only
+        post_to_finance: finance,
+        finance_method: finance && !payments.length ? "cash" : null,
+        ...(payments.length ? { payments } : {}),
       };
       if (payType === "adjustment") body.side = paySide;
       await apiFetch(`/api/customers/${id}/movements`, {
@@ -264,9 +279,11 @@ export default function CustomerDetailPage() {
       });
       setPayAmount("");
       setPayNote("");
+      setPayRows([]);
+      setPayResetKey((k) => k + 1);
       setOkMsg(
         payType === "payment" || payType === "deposit"
-          ? "Tahsilat kaydedildi · cari + kasa güncellendi"
+          ? "Tahsilat kaydedildi · cari + kasa/banka güncellendi"
           : "Cari hareket kaydedildi",
       );
       await load();
@@ -869,6 +886,21 @@ export default function CustomerDetailPage() {
                       onChange={(e) => setPayNote(e.target.value)}
                     />
                   </div>
+                  {(payType === "payment" || payType === "deposit") && (
+                    <div className="space-y-2 rounded-lg bg-slate-50 p-3">
+                      <div className="text-xs font-semibold text-slate-600">
+                        Kasa / banka (boş bırakılırsa ana kasa)
+                      </div>
+                      <SplitPaymentRows
+                        key={payResetKey}
+                        expectedTotal={Number(payAmount) || 0}
+                        mode="tahsilat"
+                        autoFill={false}
+                        dense
+                        onChange={setPayRows}
+                      />
+                    </div>
+                  )}
                   <button
                     type="submit"
                     data-baykus-save

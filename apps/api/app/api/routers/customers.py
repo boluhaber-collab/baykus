@@ -755,20 +755,28 @@ def create_movement(
     db.add(movement)
     db.flush()
 
-    # Mirror payment/deposit into kasa/banka so open cari + kasa stay in sync.
+    # Mirror payment/deposit into kasa/banka so open cari + kasa/banka stay in sync.
     # Default finance_method=cash when post_to_finance and method omitted.
+    # payments[] (dual) is preferred; otherwise finance_method + account id.
     if payload.movement_type in ("payment", "deposit") and payload.post_to_finance:
-        from app.services.split_payments import normalize_payment_lines, post_finance_lines
+        from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
 
         note = payload.note or f"Cari {payload.movement_type} — müşteri #{customer_id}"
         finance_method = payload.finance_method or ("bank" if payload.bank_account_id else "cash")
         fin_lines = normalize_payment_lines(
-            amount=payload.amount,
+            payments=payload.payments,
+            amount=None if payload.payments else payload.amount,
             finance_method=finance_method,
+            cash_register_id=payload.cash_register_id,
             bank_account_id=payload.bank_account_id,
             method="nakit" if finance_method == "cash" else "eft",
         )
         if fin_lines:
+            if payload.payments and abs(lines_total(fin_lines) - payload.amount) > Decimal("0.02"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ödeme satırları toplamı hareket tutarı ile eşleşmeli",
+                )
             post_finance_lines(
                 db,
                 fin_lines,
@@ -777,7 +785,7 @@ def create_movement(
                 note=note,
                 customer_id=customer_id,
                 cari_movement_id=movement.id,
-                require_account=False,
+                require_account=True,
             )
 
     db.commit()
@@ -1035,32 +1043,25 @@ def customer_tahsilat(
             }
         ]
         # If neither set, fall back to legacy helper (default kasa/banka)
+        # Always go through post_finance_lines so bank method without an id
+        # still hits a Banka-type account (not cash, not first POS row).
         if fin_line[0]["cash_register_id"] is None and fin_line[0]["bank_account_id"] is None:
-            posted = _post_finance_for_tahsilat(
+            fin_line[0]["prefer"] = finance_method
+            fin_line[0]["method"] = "eft" if finance_method == "bank" else "nakit"
+        posted = (
+            post_finance_lines(
                 db,
-                customer_id=customer_id,
-                amount=amt,
+                fin_line,
+                direction="in",
                 mov_date=mov_date,
                 note=note,
-                finance_method=finance_method,
-                bank_account_id=line.get("bank_account_id"),
+                customer_id=customer_id,
                 cari_movement_id=movement.id,
+                created_by_user_id=user.id,
+                require_account=True,
             )
-        else:
-            posted = (
-                post_finance_lines(
-                    db,
-                    fin_line,
-                    direction="in",
-                    mov_date=mov_date,
-                    note=note,
-                    customer_id=customer_id,
-                    cari_movement_id=movement.id,
-                    created_by_user_id=user.id,
-                    require_account=True,
-                )
-                > 0
-            )
+            > 0
+        )
         finance_ok = finance_ok or posted
 
     applied = Decimal("0")

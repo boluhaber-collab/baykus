@@ -374,10 +374,14 @@ def create_movement(
         from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
 
         note = payload.note or f"Tedarikçi ödemesi — #{supplier_id} {supplier.name}"
+        # post_to_finance without method/payments used to post NOTHING (amount=None).
+        finance_method = payload.finance_method or (
+            "bank" if payload.bank_account_id else "cash"
+        )
         fin_lines = normalize_payment_lines(
             payments=payload.payments,
-            amount=payload.amount if (payload.finance_method or payload.payments) else None,
-            finance_method=payload.finance_method,
+            amount=None if payload.payments else payload.amount,
+            finance_method=finance_method,
             cash_register_id=payload.cash_register_id,
             bank_account_id=payload.bank_account_id,
         )

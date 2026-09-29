@@ -41,15 +41,51 @@ def resolve_bank(db: Session, bank_account_id: int | None) -> BankAccount:
         if not acc or not acc.is_active:
             raise HTTPException(status_code=400, detail="Banka hesabı bulunamadı veya pasif")
         return acc
+    # Prefer account_type=Banka so Ana Sayfa bank_balance (Banka-only) moves.
+    # First-by-id would pick POS/Kredi Kartı and look like "banka güncellenmedi".
     acc = (
         db.query(BankAccount)
-        .filter(BankAccount.is_active.is_(True))
+        .filter(BankAccount.is_active.is_(True), BankAccount.account_type == "Banka")
         .order_by(BankAccount.id.asc())
         .first()
     )
     if not acc:
+        acc = (
+            db.query(BankAccount)
+            .filter(BankAccount.is_active.is_(True))
+            .order_by(BankAccount.id.asc())
+            .first()
+        )
+    if not acc:
         raise HTTPException(status_code=400, detail="Aktif banka hesabı bulunamadı")
     return acc
+
+
+_BANK_METHOD_HINTS = frozenset(
+    {
+        "banka",
+        "eft",
+        "havale",
+        "transfer",
+        "pos",
+        "kk",
+        "kredi kartı",
+        "kredi karti",
+        "kredi_karti",
+    }
+)
+
+
+def _line_prefers_bank(line: dict) -> bool:
+    """Decide cash vs bank when ids are missing — honor method/prefer hints."""
+    if line.get("bank_account_id") is not None:
+        return True
+    if line.get("cash_register_id") is not None:
+        return False
+    if (line.get("prefer") or "").strip().lower() == "bank":
+        return True
+    method = (line.get("method") or "").strip().casefold()
+    return method in _BANK_METHOD_HINTS
 
 
 def _as_dict(p: Any) -> dict:
@@ -75,12 +111,21 @@ def normalize_payment_lines(
             amt = _dec(d.get("amount"))
             if amt <= 0:
                 continue
+            method_v = d.get("method") or d.get("payment_type") or method
+            bank_id = d.get("bank_account_id")
+            cash_id = d.get("cash_register_id")
+            prefer = d.get("prefer")
+            if prefer is None and bank_id is None and cash_id is None:
+                mfold = (method_v or "").strip().casefold()
+                if mfold in _BANK_METHOD_HINTS or mfold in {"eft", "banka"}:
+                    prefer = "bank"
             lines.append(
                 {
                     "amount": amt,
-                    "cash_register_id": d.get("cash_register_id"),
-                    "bank_account_id": d.get("bank_account_id"),
-                    "method": d.get("method") or d.get("payment_type") or method,
+                    "cash_register_id": cash_id,
+                    "bank_account_id": bank_id,
+                    "method": method_v,
+                    "prefer": prefer,
                 }
             )
         return lines
@@ -97,6 +142,7 @@ def normalize_payment_lines(
                 "cash_register_id": None,
                 "bank_account_id": bank_account_id,
                 "method": method or "banka",
+                "prefer": "bank",
             }
         )
     else:
@@ -137,8 +183,9 @@ def post_finance_lines(
     for idx, line in enumerate(lines, start=1):
         amt = line["amount"]
         line_note = note if len(lines) == 1 else f"{note} ({idx}/{len(lines)})"
-        use_bank = line.get("bank_account_id") is not None
-        use_cash = line.get("cash_register_id") is not None or not use_bank
+        # finance_method=bank with no bank_account_id used to fall through to cash
+        # because bank_account_id was None — honor method/prefer instead.
+        use_bank = _line_prefers_bank(line)
         try:
             if use_bank:
                 acc = resolve_bank(db, line.get("bank_account_id"))
@@ -158,7 +205,7 @@ def post_finance_lines(
                     )
                 )
                 n += 1
-            elif use_cash:
+            else:
                 reg = resolve_cash(db, line.get("cash_register_id"))
                 db.add(
                     CashMovement(

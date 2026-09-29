@@ -65,6 +65,8 @@ class CariMovementCreate(BaseModel):
     post_to_finance: bool = True
     finance_method: str | None = Field(default=None, pattern="^(cash|bank)$")
     bank_account_id: int | None = None
+    cash_register_id: int | None = None
+    payments: list[PaymentLineIn] | None = None
 
 
 class CariMovementOut(BaseModel):
