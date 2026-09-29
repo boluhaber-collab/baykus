@@ -23,7 +23,7 @@ import SplitPaymentRows, {
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
 import {
-  belgeFromNote, detailFromBhNote, hareketLabel, sanitizeDisplayNote,
+  belgeFromNote, detailFromBhNote, hareketLabel, isBhImportNote, sanitizeDisplayNote,
 } from "@/lib/bhNote";
 import type {
   PurchaseDetail,
@@ -242,6 +242,9 @@ export default function SupplierDetailPage() {
 
   async function deletePurchaseRow(r: PurchasePanelRow) {
     try {
+      if (isBhImportNote(r.movement?.note)) {
+        throw new Error("BizimHesap aktarım kayıtları silinemez");
+      }
       if (r.movement?.id) {
         await apiFetch(`/api/suppliers/${id}/movements/${r.movement.id}`, {
           method: "DELETE",
@@ -259,6 +262,9 @@ export default function SupplierDetailPage() {
 
   async function deletePaymentRow(m: SupplierMovement) {
     try {
+      if (isBhImportNote(m.note)) {
+        throw new Error("BizimHesap aktarım kayıtları silinemez");
+      }
       await apiFetch(`/api/suppliers/${id}/movements/${m.id}`, { method: "DELETE" });
       await load();
     } catch (e) {
@@ -338,6 +344,7 @@ export default function SupplierDetailPage() {
       getDateTie={(r) => r.id}
       emptyText="Alış kaydı yok"
       onDelete={(r) => deletePurchaseRow(r)}
+      canDelete={(r) => !isBhImportNote(r.movement?.note)}
       deleteConfirm={(r) =>
         `Alış ${r.no} (${formatMoney(r.amount)}) silinsin mi?\nStok ve tedarikçi cari + kasa/banka tersine çevrilir.`
       }
@@ -409,6 +416,7 @@ export default function SupplierDetailPage() {
       getDateTie={(m) => m.id}
       emptyText="Ödeme yok"
       onDelete={(m) => deletePaymentRow(m)}
+      canDelete={(m) => !isBhImportNote(m.note)}
       deleteConfirm={(m) =>
         `Ödeme ${formatMoney(Number(m.credit) || Number(m.debit))} silinsin mi?\nTedarikçi cari + kasa/banka kaldırılır.`
       }

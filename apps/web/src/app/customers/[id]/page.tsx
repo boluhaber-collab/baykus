@@ -28,7 +28,7 @@ import ExpandableMovementTable, {
 } from "@/components/ExpandableMovementTable";
 import PartyCardLayout, { partySmsHref } from "@/components/PartyCardLayout";
 import {
-  belgeFromNote, detailFromBhNote, hareketLabel, sanitizeDisplayNote,
+  belgeFromNote, detailFromBhNote, hareketLabel, isBhImportNote, sanitizeDisplayNote,
 } from "@/lib/bhNote";
 import type { CariMovement, CustomerOrderBrief, OrderDetail } from "@/lib/api";
 
@@ -219,13 +219,16 @@ export default function CustomerDetailPage() {
 
   async function deleteSalesRow(r: SalesPanelRow) {
     try {
-      const oid = r.order?.id ?? r.movement?.order_id;
-      if (oid) {
-        await apiFetch(`/api/orders/${oid}?soft=false`, { method: "DELETE" });
-      } else if (r.movement?.id) {
+      if (isBhImportNote(r.movement?.note)) {
+        throw new Error("BizimHesap aktarım kayıtları silinemez");
+      }
+      // Prefer cari movement delete (BH check + order purge cascade)
+      if (r.movement?.id) {
         await apiFetch(`/api/customers/${id}/movements/${r.movement.id}`, {
           method: "DELETE",
         });
+      } else if (r.order?.id) {
+        await apiFetch(`/api/orders/${r.order.id}?soft=false`, { method: "DELETE" });
       } else {
         throw new Error("Silinecek satış kaydı bulunamadı");
       }
@@ -238,6 +241,9 @@ export default function CustomerDetailPage() {
 
   async function deleteCollectionRow(m: CariMovement) {
     try {
+      if (isBhImportNote(m.note)) {
+        throw new Error("BizimHesap aktarım kayıtları silinemez");
+      }
       await apiFetch(`/api/customers/${id}/movements/${m.id}`, { method: "DELETE" });
       setOkMsg("Tahsilat silindi · cari + kasa/banka ters");
       await load();
@@ -415,6 +421,7 @@ export default function CustomerDetailPage() {
       getDateTie={(r) => r.id}
       emptyText="Satış / sipariş yok"
       onDelete={(r) => deleteSalesRow(r)}
+      canDelete={(r) => !isBhImportNote(r.movement?.note)}
       deleteConfirm={(r) =>
         `Satış ${r.no} (${formatMoney(r.amount)}) silinsin mi?\nStok iade edilir; cari + kasa/banka hareketleri kaldırılır.`
       }
@@ -495,6 +502,7 @@ export default function CustomerDetailPage() {
       getDateTie={(m) => m.id}
       emptyText="Tahsilat yok"
       onDelete={(m) => deleteCollectionRow(m)}
+      canDelete={(m) => !isBhImportNote(m.note)}
       deleteConfirm={(m) =>
         `Tahsilat ${formatMoney(Number(m.credit) || Number(m.debit))} silinsin mi?\nCari + kasa/banka hareketi kaldırılır.`
       }

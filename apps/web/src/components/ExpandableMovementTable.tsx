@@ -61,12 +61,14 @@ export type ExpandableMovementTableProps<T extends { id: number | string }> = {
   /** After sort, keep only the first N rows (e.g. party-card previews). */
   limit?: number;
   /**
-   * When set, the leading green control deletes the row (confirm) instead of expanding.
-   * Expand remains available via row click when loadDetail is also provided.
+   * When set, expanded Kalem panel shows a Sil button that cascades delete
+   * (order/purchase + cari + kasa/banka) after confirm. Green + always expands.
    */
   onDelete?: (row: T) => void | Promise<void>;
   /** Confirm dialog text; string or per-row builder. */
   deleteConfirm?: string | ((row: T) => string);
+  /** Return false to hide Sil (e.g. BH_IMPORT rows). Default: allow when onDelete set. */
+  canDelete?: (row: T) => boolean;
 };
 
 type CacheEntry = ExpandDetailPayload & { loading?: boolean; error?: string | null };
@@ -88,38 +90,27 @@ function ExpandToggle({ open, onClick }: { open: boolean; onClick: () => void })
   );
 }
 
-function DeleteToggle({ onClick, busy }: { onClick: () => void; busy?: boolean }) {
-  return (
-    <button
-      type="button"
-      className="bk-expand-toggle bk-expand-toggle--plus bk-expand-toggle--delete"
-      aria-label="İşlemi sil"
-      title="Sil · cari + kasa/banka tersine çevrilir"
-      disabled={busy}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-    >
-      {busy ? "…" : "+"}
-    </button>
-  );
-}
-
 function ExpandPanel({
   detail,
   fallbackNote,
   cta,
+  onDelete,
+  deleteBusy,
+  deleteDisabledReason,
 }: {
   detail: CacheEntry | undefined;
   fallbackNote?: string | null;
   cta?: { href: string; label: string } | null;
+  onDelete?: () => void;
+  deleteBusy?: boolean;
+  deleteDisabledReason?: string | null;
 }) {
   const loading = detail?.loading;
   const error = detail?.error;
   const lines = detail?.lines || [];
   const note = sanitizeDisplayNote(detail?.note ?? fallbackNote ?? "");
   const userName = decodeHtmlEntities(detail?.userName || "").trim();
+  const showActions = Boolean(cta || onDelete || deleteDisabledReason);
 
   return (
     <div className="bk-expand-panel">
@@ -148,7 +139,7 @@ function ExpandPanel({
       {!loading && !error && lines.length === 0 && !note && (
         <div className="bk-expand-empty">Kalem detayı yok</div>
       )}
-      {(note || userName || cta) && (
+      {(note || userName || showActions) && (
         <div className="bk-expand-meta">
           <div className="min-w-0 flex-1">
             {note ? (
@@ -157,13 +148,31 @@ function ExpandPanel({
               </div>
             ) : null}
             {userName ? <div className="user">Kullanıcı : {userName}</div> : null}
+            {deleteDisabledReason ? (
+              <div className="bk-expand-delete-hint">{deleteDisabledReason}</div>
+            ) : null}
           </div>
-          {cta ? (
-            <Link href={cta.href} className="bk-expand-cta">
-              <span aria-hidden>↗</span>
-              {cta.label}
-            </Link>
-          ) : null}
+          <div className="bk-expand-actions">
+            {onDelete ? (
+              <button
+                type="button"
+                className="bk-expand-delete"
+                disabled={deleteBusy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                {deleteBusy ? "Siliniyor…" : "Sil"}
+              </button>
+            ) : null}
+            {cta ? (
+              <Link href={cta.href} className="bk-expand-cta">
+                <span aria-hidden>↗</span>
+                {cta.label}
+              </Link>
+            ) : null}
+          </div>
         </div>
       )}
     </div>
@@ -172,7 +181,7 @@ function ExpandPanel({
 
 /**
  * BizimHesap-style hareket tablosu: her satırın solunda yeşil + / gri −,
- * genişleyince kalemler + açıklama + CTA.
+ * genişleyince kalemler + açıklama + CTA (+ isteğe bağlı Sil).
  * Optional getDate → default newest→oldest + clickable Tarih header.
  */
 export default function ExpandableMovementTable<T extends { id: number | string }>({
@@ -191,6 +200,7 @@ export default function ExpandableMovementTable<T extends { id: number | string 
   limit,
   onDelete,
   deleteConfirm,
+  canDelete,
 }: ExpandableMovementTableProps<T>) {
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [cache, setCache] = useState<Record<string, CacheEntry>>({});
@@ -257,6 +267,22 @@ export default function ExpandableMovementTable<T extends { id: number | string 
     [openIds, loadDetail],
   );
 
+  const runDelete = useCallback(
+    (row: T) => {
+      if (!onDelete) return;
+      const key = String(row.id);
+      const msg =
+        typeof deleteConfirm === "function"
+          ? deleteConfirm(row)
+          : deleteConfirm ||
+            "Bu işlemi tamamen silmek istiyor musunuz? Bağlı sipariş/alış, cari ve kasa/banka hareketleri de kaldırılır.";
+      if (!confirm(msg)) return;
+      setDeletingId(key);
+      void Promise.resolve(onDelete(row)).finally(() => setDeletingId(null));
+    },
+    [onDelete, deleteConfirm],
+  );
+
   const colCount = columns.length + 1;
   const pinOpeningToOldest = Boolean(getDate && leadingRows);
   const showLeadingTop = leadingRows && (!pinOpeningToOldest || dateDir === "asc");
@@ -298,39 +324,13 @@ export default function ExpandableMovementTable<T extends { id: number | string 
             const open = openIds.has(key);
             const cta = getCta?.(row) ?? null;
             const note = getNote?.(row);
+            const allowDelete = Boolean(onDelete) && (canDelete ? canDelete(row) : true);
+            const bhBlocked = Boolean(onDelete) && canDelete && !canDelete(row);
             return (
               <Fragment key={key}>
-                <tr
-                  className="border-t border-slate-100"
-                  onDoubleClick={
-                    onDelete && loadDetail
-                      ? () => {
-                          void toggle(row);
-                        }
-                      : undefined
-                  }
-                  title={onDelete && loadDetail ? "Çift tık: kalem detayı" : undefined}
-                >
+                <tr className="border-t border-slate-100">
                   <td className="bk-expand-td">
-                    {onDelete ? (
-                      <DeleteToggle
-                        busy={deletingId === key}
-                        onClick={() => {
-                          const msg =
-                            typeof deleteConfirm === "function"
-                              ? deleteConfirm(row)
-                              : deleteConfirm ||
-                                "Bu işlemi tamamen silmek istiyor musunuz? Bağlı cari ve kasa/banka hareketleri de kaldırılır.";
-                          if (!confirm(msg)) return;
-                          setDeletingId(key);
-                          void Promise.resolve(onDelete(row)).finally(() =>
-                            setDeletingId(null),
-                          );
-                        }}
-                      />
-                    ) : (
-                      <ExpandToggle open={open} onClick={() => void toggle(row)} />
-                    )}
+                    <ExpandToggle open={open} onClick={() => void toggle(row)} />
                   </td>
                   {columns.map((col) => (
                     <td
@@ -349,7 +349,18 @@ export default function ExpandableMovementTable<T extends { id: number | string 
                 {open && (
                   <tr className="bk-expand-detail-row">
                     <td colSpan={colCount}>
-                      <ExpandPanel detail={cache[key]} fallbackNote={note} cta={cta} />
+                      <ExpandPanel
+                        detail={cache[key]}
+                        fallbackNote={note}
+                        cta={cta}
+                        onDelete={allowDelete ? () => runDelete(row) : undefined}
+                        deleteBusy={deletingId === key}
+                        deleteDisabledReason={
+                          bhBlocked
+                            ? "BizimHesap aktarım kaydı — silinemez"
+                            : null
+                        }
+                      />
                     </td>
                   </tr>
                 )}

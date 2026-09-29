@@ -765,6 +765,15 @@ def delete_order(
             )
         return
     # Hard delete: satış may purge (customer panel); still reverses stock/ledger first
+    from app.models.customer import CariMovement
+
+    for cm in db.query(CariMovement).filter(CariMovement.order_id == order.id).all():
+        note = cm.note or ""
+        if "BH_IMPORT:" in note:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="BizimHesap aktarım kayıtları silinemez",
+            )
     _purge_order_ledger(db, order, user, restore_stock=order.status != "Sipariş İptali")
     db.delete(order)
     db.commit()

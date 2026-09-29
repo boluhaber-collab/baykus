@@ -430,15 +430,37 @@ body {
   .bk-expand-toggle--minus:hover {
     background-color: #374151;
   }
-  .bk-expand-toggle--delete {
-    background-color: #ef4444;
+  .bk-expand-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
   }
-  .bk-expand-toggle--delete:hover {
+  .bk-expand-delete {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 0.25rem;
+    border: none;
+    background-color: #ef4444;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.35rem 0.7rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .bk-expand-delete:hover {
     background-color: #dc2626;
   }
-  .bk-expand-toggle--delete:disabled {
+  .bk-expand-delete:disabled {
     opacity: 0.55;
     cursor: wait;
+  }
+  .bk-expand-delete-hint {
+    margin-top: 0.25rem;
+    color: #b45309;
+    font-size: 0.7rem;
   }
   .bk-expand-th {
     width: 2rem;
