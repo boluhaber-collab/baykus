@@ -127,8 +127,8 @@ export default function PerakendeSatisGirPage() {
     try {
       const detail = await apiFetch<ProductDetail>(`/api/products/${p.id}`);
       depo = detail.warehouse || depo;
-      const variants = detail.variants || [];
-      if (variants.length > 1) {
+      const variants = (detail.variants || []).filter((v) => Number(v.stock_qty ?? 0) > 0);
+      if ((detail.variants || []).length > 1) {
         setVariantPick({ product: p, detail, variants });
         return;
       }
@@ -140,6 +140,11 @@ export default function PerakendeSatisGirPage() {
           price: Number(v.price || price),
           depo,
         });
+        return;
+      }
+      if ((detail.variants || []).length === 1) {
+        // sole variant is zero-stock — still open picker empty so user sees why
+        setVariantPick({ product: p, detail, variants: [] });
         return;
       }
     } catch {
@@ -497,22 +502,28 @@ export default function PerakendeSatisGirPage() {
               </button>
             </div>
             <div className="max-h-72 overflow-auto p-2 space-y-1">
-              {variantPick.variants.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => confirmVariant(v)}
-                  className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-baykus-primary hover:bg-sky-50 transition"
-                >
-                  <div className="text-sm font-medium">
-                    {[v.color, v.size, v.name].filter(Boolean).join(" / ") || v.sku || `Varyant #${v.id}`}
-                  </div>
-                  <div className="text-xs text-baykus-muted flex justify-between mt-0.5">
-                    <span>Stok: {v.stock_qty ?? 0}</span>
-                    <span className="font-semibold text-baykus-text">{formatMoney(Number(v.price || 0))}</span>
-                  </div>
-                </button>
-              ))}
+              {variantPick.variants.length === 0 ? (
+                <p className="text-sm text-baykus-muted px-2 py-6 text-center">
+                  Stoğu olan varyant yok.
+                </p>
+              ) : (
+                variantPick.variants.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => confirmVariant(v)}
+                    className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-baykus-primary hover:bg-sky-50 transition"
+                  >
+                    <div className="text-sm font-medium">
+                      {[v.color, v.size, v.name].filter(Boolean).join(" / ") || v.sku || `Varyant #${v.id}`}
+                    </div>
+                    <div className="text-xs text-baykus-muted flex justify-between mt-0.5">
+                      <span>Stok: {v.stock_qty ?? 0}</span>
+                      <span className="font-semibold text-baykus-text">{formatMoney(Number(v.price || 0))}</span>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

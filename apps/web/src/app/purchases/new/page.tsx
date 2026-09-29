@@ -451,7 +451,11 @@ function NewPurchaseForm() {
               </button>
             </div>
             {lines.map((line, idx) => {
-              const variants = productDetails[Number(line.product_id)]?.variants || [];
+              const allVariants = productDetails[Number(line.product_id)]?.variants || [];
+              // In-stock only (sale/retail picker parity); keep current selection if zero
+              const variants = allVariants.filter(
+                (v) => Number(v.stock_qty ?? 0) > 0 || String(v.id) === String(line.variant_id),
+              );
               return (
                 <div key={idx} className="rounded-lg border border-slate-100 p-3 space-y-2">
                   <div className="grid sm:grid-cols-2 gap-2">
@@ -477,10 +481,12 @@ function NewPurchaseForm() {
                       <select
                         className={input}
                         value={line.variant_id}
-                        disabled={!variants.length}
+                        disabled={!allVariants.length}
                         onChange={(e) => onVariantChange(idx, e.target.value)}
                       >
-                        <option value="">{variants.length ? "Seçin" : "—"}</option>
+                        <option value="">
+                          {variants.length ? "Seçin" : allVariants.length ? "Stoğu olan yok" : "—"}
+                        </option>
                         {variants.map((v) => (
                           <option key={v.id} value={v.id}>
                             {v.name} (stok: {v.stock_qty})

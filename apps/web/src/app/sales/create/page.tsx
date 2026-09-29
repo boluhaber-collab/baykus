@@ -48,6 +48,23 @@ type Line = {
 
 type Wh = { id: number; name: string; is_default?: boolean; is_active?: boolean };
 
+
+function stockForVariantAtDepo(
+  v: ProductVariant,
+  depo: string,
+  whStocks: Record<string, number>,
+): number {
+  const key = `${depo}::${v.id}`;
+  if (Object.prototype.hasOwnProperty.call(whStocks, key)) {
+    return Number(whStocks[key] ?? 0);
+  }
+  // Depot has other rows → missing variant = 0 at this warehouse (do not use ::0 total)
+  const prefix = `${depo}::`;
+  if (Object.keys(whStocks).some((k) => k.startsWith(prefix))) return 0;
+  return Number(v.stock_qty ?? 0);
+}
+
+
 function emptyLine(): Line {
   return {
     key: Math.random().toString(36).slice(2),
@@ -222,12 +239,7 @@ function CreateSaleInner() {
       }
       if (variants.length === 1) {
         const v = variants[0]!;
-        const stock =
-          whStocks[`${depo}::${v.id}`] ??
-          whStocks[`${depo}::0`] ??
-          v.stock_qty ??
-          detail.stock_qty ??
-          null;
+        const stock = stockForVariantAtDepo(v, depo, whStocks);
         updateLine(lineKey, {
           product_id: pid,
           variant_id: String(v.id),
@@ -263,11 +275,7 @@ function CreateSaleInner() {
   function confirmVariant(v: ProductVariant, depoOverride?: string) {
     if (!variantPick) return;
     const depo = depoOverride || variantPick.depo;
-    const stock =
-      variantPick.whStocks[`${depo}::${v.id}`] ??
-      variantPick.whStocks[`${depo}::0`] ??
-      v.stock_qty ??
-      null;
+    const stock = stockForVariantAtDepo(v, depo, variantPick.whStocks);
     updateLine(variantPick.lineKey, {
       product_id: String(variantPick.product.id),
       variant_id: String(v.id),
@@ -817,31 +825,39 @@ function CreateSaleInner() {
               </select>
             </div>
             <div className="max-h-72 overflow-auto p-2 space-y-1">
-              {variantPick.variants.map((v) => {
-                const stock =
-                  variantPick.whStocks[`${variantPick.depo}::${v.id}`] ??
-                  variantPick.whStocks[`${variantPick.depo}::0`] ??
-                  v.stock_qty ??
-                  0;
-                return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => confirmVariant(v)}
-                    className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-baykus-primary hover:bg-sky-50 transition"
-                  >
-                    <div className="text-sm font-medium">
-                      {[v.color, v.size, v.name].filter(Boolean).join(" / ") || v.sku || `Varyant #${v.id}`}
-                    </div>
-                    <div className="text-xs text-baykus-muted flex justify-between mt-0.5">
-                      <span className={stock <= 0 ? "text-red-600 font-semibold" : ""}>
-                        Stok ({variantPick.depo}): {stock}
-                      </span>
-                      <span className="font-semibold text-baykus-text">{formatMoney(Number(v.price || 0))}</span>
-                    </div>
-                  </button>
+              {(() => {
+                const inStock = variantPick.variants.filter(
+                  (v) => stockForVariantAtDepo(v, variantPick.depo, variantPick.whStocks) > 0,
                 );
-              })}
+                if (!inStock.length) {
+                  return (
+                    <p className="text-sm text-baykus-muted px-2 py-6 text-center">
+                      Bu depoda stoğu olan varyant yok.
+                    </p>
+                  );
+                }
+                return inStock.map((v) => {
+                  const stock = stockForVariantAtDepo(v, variantPick.depo, variantPick.whStocks);
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => confirmVariant(v)}
+                      className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-baykus-primary hover:bg-sky-50 transition"
+                    >
+                      <div className="text-sm font-medium">
+                        {[v.color, v.size, v.name].filter(Boolean).join(" / ") || v.sku || `Varyant #${v.id}`}
+                      </div>
+                      <div className="text-xs text-baykus-muted flex justify-between mt-0.5">
+                        <span>
+                          Stok ({variantPick.depo}): {stock}
+                        </span>
+                        <span className="font-semibold text-baykus-text">{formatMoney(Number(v.price || 0))}</span>
+                      </div>
+                    </button>
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>
