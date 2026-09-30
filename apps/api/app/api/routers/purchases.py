@@ -1,4 +1,4 @@
-"""Purchase orders: draft CRUD + confirm (stock + supplier ledger)."""
+"""Purchase orders: draft/confirmed CRUD + confirm/cancel (stock + supplier ledger)."""
 
 from __future__ import annotations
 
@@ -26,6 +26,34 @@ router = APIRouter(prefix="/purchases", tags=["purchases"])
 
 READ_ROLES = ("admin", "üretim", "muhasebe", "satış")
 WRITE_ROLES = ("admin", "üretim", "muhasebe")
+
+BH_IMPORT_MARKER = "BH_IMPORT:"
+
+
+def _is_bh_import_note(note: str | None) -> bool:
+    if not note:
+        return False
+    return BH_IMPORT_MARKER in note
+
+
+def _refuse_bh_purchase(db: Session, purchase: Purchase) -> None:
+    """BizimHesap aktarım alışları düzenlenemez / iptal edilemez."""
+    if _is_bh_import_note(purchase.notes):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="BizimHesap aktarım kayıtları düzenlenemez / iptal edilemez",
+        )
+    movs = (
+        db.query(SupplierMovement)
+        .filter(SupplierMovement.purchase_id == purchase.id)
+        .all()
+    )
+    for mov in movs:
+        if _is_bh_import_note(mov.note):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="BizimHesap aktarım kayıtları düzenlenemez / iptal edilemez",
+            )
 
 
 def _next_purchase_number(db: Session) -> str:
@@ -88,6 +116,19 @@ def _purchase_out(p: Purchase) -> PurchaseOut:
     )
 
 
+def _reload_purchase(db: Session, purchase_id: int) -> Purchase:
+    return (
+        db.query(Purchase)
+        .options(
+            joinedload(Purchase.supplier),
+            joinedload(Purchase.lines).joinedload(PurchaseLine.product),
+            joinedload(Purchase.lines).joinedload(PurchaseLine.variant),
+        )
+        .filter(Purchase.id == purchase_id)
+        .one()
+    )
+
+
 def _build_lines(db: Session, lines_in: list[PurchaseLineIn]) -> tuple[list[PurchaseLine], Decimal]:
     built: list[PurchaseLine] = []
     subtotal = Decimal("0")
@@ -119,7 +160,17 @@ def _build_lines(db: Session, lines_in: list[PurchaseLineIn]) -> tuple[list[Purc
     return built, subtotal
 
 
-def _apply_stock_increase(db: Session, purchase: Purchase, user_id: int | None) -> None:
+def _apply_stock_delta(
+    db: Session,
+    purchase: Purchase,
+    user_id: int | None,
+    *,
+    increase: bool,
+    reason: str,
+    note_prefix: str,
+) -> None:
+    """Increase (confirm) or decrease (cancel/edit) stock for purchase lines."""
+    direction = "increase" if increase else "decrease"
     for line in purchase.lines:
         qty_int = int(line.quantity)
         if qty_int <= 0:
@@ -132,20 +183,19 @@ def _apply_stock_increase(db: Session, purchase: Purchase, user_id: int | None) 
             if not product or product.product_type == "hizmet":
                 continue
             before = variant.stock_qty or 0
-            after = before + qty_int
+            after = before + qty_int if increase else before - qty_int
             variant.stock_qty = after
-            # sync product aggregate
             product.stock_qty = sum(v.stock_qty for v in product.variants)
             db.add(
                 StockMovement(
                     product_id=product.id,
                     variant_id=variant.id,
-                    direction="increase",
+                    direction=direction,
                     quantity=qty_int,
                     qty_before=before,
                     qty_after=after,
-                    reason="Satın alma",
-                    note=f"{purchase.purchase_number}: {line.description}",
+                    reason=reason,
+                    note=f"{note_prefix}{purchase.purchase_number}: {line.description}",
                     warehouse=product.warehouse or DEFAULT_WAREHOUSE,
                     created_by_user_id=user_id,
                 )
@@ -154,26 +204,118 @@ def _apply_stock_increase(db: Session, purchase: Purchase, user_id: int | None) 
             product = db.get(Product, line.product_id)
             if not product or product.product_type == "hizmet":
                 continue
-            # Prefer product-level stock only when no variants
             if product.variants:
                 continue
             before = product.stock_qty or 0
-            after = before + qty_int
+            after = before + qty_int if increase else before - qty_int
             product.stock_qty = after
             db.add(
                 StockMovement(
                     product_id=product.id,
                     variant_id=None,
-                    direction="increase",
+                    direction=direction,
                     quantity=qty_int,
                     qty_before=before,
                     qty_after=after,
-                    reason="Satın alma",
-                    note=f"{purchase.purchase_number}: {line.description}",
+                    reason=reason,
+                    note=f"{note_prefix}{purchase.purchase_number}: {line.description}",
                     warehouse=product.warehouse or DEFAULT_WAREHOUSE,
                     created_by_user_id=user_id,
                 )
             )
+
+
+def _apply_stock_increase(db: Session, purchase: Purchase, user_id: int | None) -> None:
+    _apply_stock_delta(
+        db,
+        purchase,
+        user_id,
+        increase=True,
+        reason="Satın alma",
+        note_prefix="",
+    )
+
+
+def _apply_stock_decrease(
+    db: Session,
+    purchase: Purchase,
+    user_id: int | None,
+    *,
+    reason: str = "purchase_cancel",
+    note_label: str = "Alış iptal ",
+) -> None:
+    _apply_stock_delta(
+        db,
+        purchase,
+        user_id,
+        increase=False,
+        reason=reason,
+        note_prefix=note_label,
+    )
+
+
+def _purge_purchase_ledger(db: Session, purchase: Purchase) -> None:
+    """Remove supplier movements for this purchase and linked kasa/banka legs."""
+    from app.models.finance import BankMovement, CashMovement
+
+    movs = (
+        db.query(SupplierMovement)
+        .filter(SupplierMovement.purchase_id == purchase.id)
+        .all()
+    )
+    for mov in movs:
+        for m in (
+            db.query(CashMovement)
+            .filter(CashMovement.supplier_movement_id == mov.id)
+            .all()
+        ):
+            db.delete(m)
+        for m in (
+            db.query(BankMovement)
+            .filter(BankMovement.supplier_movement_id == mov.id)
+            .all()
+        ):
+            db.delete(m)
+        db.delete(mov)
+
+
+def _sync_purchase_supplier_debit(db: Session, purchase: Purchase) -> None:
+    """Ensure a single purchase-type debit matches total_amount (payments untouched)."""
+    purchase_movs = (
+        db.query(SupplierMovement)
+        .filter(
+            SupplierMovement.purchase_id == purchase.id,
+            SupplierMovement.movement_type == "purchase",
+        )
+        .all()
+    )
+    total = purchase.total_amount or Decimal("0")
+    if not purchase_movs:
+        if total > 0:
+            db.add(
+                SupplierMovement(
+                    supplier_id=purchase.supplier_id,
+                    movement_type="purchase",
+                    debit=total,
+                    credit=Decimal("0"),
+                    movement_date=purchase.purchase_date,
+                    purchase_id=purchase.id,
+                    note=f"Satın alma {purchase.purchase_number}",
+                )
+            )
+        return
+    # Keep first; drop duplicate purchase debits (should be rare)
+    primary = purchase_movs[0]
+    for extra in purchase_movs[1:]:
+        db.delete(extra)
+    if total > 0:
+        primary.debit = total
+        primary.credit = Decimal("0")
+        primary.movement_date = purchase.purchase_date
+        primary.supplier_id = purchase.supplier_id
+        primary.note = f"Satın alma {purchase.purchase_number}"
+    else:
+        db.delete(primary)
 
 
 def _confirm_purchase(db: Session, purchase: Purchase, user_id: int | None) -> None:
@@ -284,17 +426,7 @@ def create_purchase(
         _confirm_purchase(db, purchase, user.id)
 
     db.commit()
-    purchase = (
-        db.query(Purchase)
-        .options(
-            joinedload(Purchase.supplier),
-            joinedload(Purchase.lines).joinedload(PurchaseLine.product),
-            joinedload(Purchase.lines).joinedload(PurchaseLine.variant),
-        )
-        .filter(Purchase.id == purchase.id)
-        .one()
-    )
-    return _purchase_out(purchase)
+    return _purchase_out(_reload_purchase(db, purchase.id))
 
 
 @router.get("/{purchase_id}", response_model=PurchaseOut)
@@ -323,16 +455,44 @@ def update_purchase(
     purchase_id: int,
     payload: PurchaseUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*WRITE_ROLES)),
+    user: User = Depends(require_roles(*WRITE_ROLES)),
 ) -> PurchaseOut:
-    purchase = db.get(Purchase, purchase_id)
+    purchase = (
+        db.query(Purchase)
+        .options(joinedload(Purchase.lines))
+        .filter(Purchase.id == purchase_id)
+        .first()
+    )
     if not purchase:
         raise HTTPException(status_code=404, detail="Satın alma bulunamadı")
-    if purchase.status != "draft":
-        raise HTTPException(status_code=400, detail="Sadece taslak satın alma düzenlenebilir")
+    if purchase.status == "cancelled":
+        raise HTTPException(status_code=400, detail="İptal edilmiş satın alma düzenlenemez")
+
+    _refuse_bh_purchase(db, purchase)
 
     data = payload.model_dump(exclude_unset=True)
-    if "supplier_id" in data and data["supplier_id"] is not None:
+    was_confirmed = purchase.status == "confirmed"
+    lines_changing = "lines" in data and data["lines"] is not None
+
+    # Confirmed: supplier change is unsafe (payments / cari history)
+    if was_confirmed and "supplier_id" in data and data["supplier_id"] is not None:
+        if data["supplier_id"] != purchase.supplier_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Onaylı alışta tedarikçi değiştirilemez (güvenli düzenleme)",
+            )
+
+    if was_confirmed and lines_changing:
+        # Reverse stock from old lines, then rebuild + re-apply
+        _apply_stock_decrease(
+            db,
+            purchase,
+            user.id,
+            reason="purchase_edit",
+            note_label="Alış düzenleme (eski) ",
+        )
+
+    if "supplier_id" in data and data["supplier_id"] is not None and not was_confirmed:
         if not db.get(Supplier, data["supplier_id"]):
             raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
         purchase.supplier_id = data["supplier_id"]
@@ -342,7 +502,8 @@ def update_purchase(
         purchase.notes = data["notes"]
     if "tax_amount" in data and data["tax_amount"] is not None:
         purchase.tax_amount = Decimal(str(data["tax_amount"]))
-    if "lines" in data and data["lines"] is not None:
+
+    if lines_changing:
         lines_in = [PurchaseLineIn(**row) if isinstance(row, dict) else row for row in payload.lines or []]
         if not lines_in:
             raise HTTPException(status_code=400, detail="En az bir satır gerekli")
@@ -356,19 +517,15 @@ def update_purchase(
 
     purchase.total_amount = (purchase.subtotal or Decimal("0")) + (purchase.tax_amount or Decimal("0"))
     purchase.updated_at = datetime.utcnow()
-    db.commit()
 
-    purchase = (
-        db.query(Purchase)
-        .options(
-            joinedload(Purchase.supplier),
-            joinedload(Purchase.lines).joinedload(PurchaseLine.product),
-            joinedload(Purchase.lines).joinedload(PurchaseLine.variant),
-        )
-        .filter(Purchase.id == purchase_id)
-        .one()
-    )
-    return _purchase_out(purchase)
+    if was_confirmed:
+        if lines_changing:
+            _apply_stock_increase(db, purchase, user.id)
+            # Tag stock note reason via last movements already "Satın alma"; OK
+        _sync_purchase_supplier_debit(db, purchase)
+
+    db.commit()
+    return _purchase_out(_reload_purchase(db, purchase_id))
 
 
 @router.post("/{purchase_id}/confirm", response_model=PurchaseOut)
@@ -387,50 +544,61 @@ def confirm_purchase(
         raise HTTPException(status_code=404, detail="Satın alma bulunamadı")
     _confirm_purchase(db, purchase, user.id)
     db.commit()
-
-    purchase = (
-        db.query(Purchase)
-        .options(
-            joinedload(Purchase.supplier),
-            joinedload(Purchase.lines).joinedload(PurchaseLine.product),
-            joinedload(Purchase.lines).joinedload(PurchaseLine.variant),
-        )
-        .filter(Purchase.id == purchase_id)
-        .one()
-    )
-    return _purchase_out(purchase)
+    return _purchase_out(_reload_purchase(db, purchase_id))
 
 
 @router.post("/{purchase_id}/cancel", response_model=PurchaseOut)
 def cancel_purchase(
     purchase_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(*WRITE_ROLES)),
+    user: User = Depends(require_roles(*WRITE_ROLES)),
 ) -> PurchaseOut:
-    purchase = db.get(Purchase, purchase_id)
+    """Cancel draft or confirmed purchase.
+
+    Confirmed: reverse stock ↑, purge supplier cari + linked kasa/banka, mark cancelled.
+    Draft: status only. BH_IMPORT refused.
+    """
+    purchase = (
+        db.query(Purchase)
+        .options(joinedload(Purchase.lines))
+        .filter(Purchase.id == purchase_id)
+        .first()
+    )
     if not purchase:
         raise HTTPException(status_code=404, detail="Satın alma bulunamadı")
-    if purchase.status == "confirmed":
-        raise HTTPException(
-            status_code=400,
-            detail="Onaylı satın alma iptal edilemez (stok/borç geri alınmaz)",
-        )
     if purchase.status == "cancelled":
         raise HTTPException(status_code=400, detail="Zaten iptal edilmiş")
+
+    _refuse_bh_purchase(db, purchase)
+
+    if purchase.status == "confirmed":
+        _apply_stock_decrease(
+            db,
+            purchase,
+            user.id,
+            reason="purchase_cancel",
+            note_label="Alış iptal ",
+        )
+        _purge_purchase_ledger(db, purchase)
+
     purchase.status = "cancelled"
     purchase.updated_at = datetime.utcnow()
     db.commit()
-    purchase = (
-        db.query(Purchase)
-        .options(
-            joinedload(Purchase.supplier),
-            joinedload(Purchase.lines).joinedload(PurchaseLine.product),
-            joinedload(Purchase.lines).joinedload(PurchaseLine.variant),
-        )
-        .filter(Purchase.id == purchase_id)
-        .one()
+
+    from app.services.audit import write_audit
+
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="purchase",
+        entity_id=purchase_id,
+        detail={
+            "purchase_number": purchase.purchase_number,
+            "status": "cancelled",
+            "ledger_purged": True,
+        },
     )
-    return _purchase_out(purchase)
+    return _purchase_out(_reload_purchase(db, purchase_id))
 
 
 @router.delete("/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -440,8 +608,6 @@ def delete_purchase(
     user: User = Depends(require_roles("admin", "muhasebe")),
 ) -> None:
     """Delete purchase; if confirmed, reverse stock and purge supplier + finance legs."""
-    from app.models.finance import CashMovement, BankMovement
-    from app.models.product import Product, ProductVariant, StockMovement
     from app.services.audit import write_audit
 
     purchase = (
@@ -453,58 +619,18 @@ def delete_purchase(
     if not purchase:
         raise HTTPException(status_code=404, detail="Satın alma bulunamadı")
 
-    # Purge supplier movements + linked kasa/banka
-    movs = (
-        db.query(SupplierMovement)
-        .filter(SupplierMovement.purchase_id == purchase.id)
-        .all()
-    )
-    for mov in movs:
-        for m in (
-            db.query(CashMovement)
-            .filter(CashMovement.supplier_movement_id == mov.id)
-            .all()
-        ):
-            db.delete(m)
-        for m in (
-            db.query(BankMovement)
-            .filter(BankMovement.supplier_movement_id == mov.id)
-            .all()
-        ):
-            db.delete(m)
-        db.delete(mov)
+    _refuse_bh_purchase(db, purchase)
+
+    _purge_purchase_ledger(db, purchase)
 
     if purchase.status == "confirmed":
-        for line in purchase.lines or []:
-            qty = int(line.quantity or 0)
-            if qty <= 0 or not line.product_id:
-                continue
-            product = db.get(Product, line.product_id)
-            if not product:
-                continue
-            variant = db.get(ProductVariant, line.variant_id) if line.variant_id else None
-            if variant and variant.product_id == product.id:
-                before = int(variant.stock_qty or 0)
-                after = before - qty
-                variant.stock_qty = after
-            else:
-                before = int(product.stock_qty or 0)
-                after = before - qty
-                product.stock_qty = after
-            db.add(
-                StockMovement(
-                    product_id=product.id,
-                    variant_id=variant.id if variant else None,
-                    direction="decrease",
-                    quantity=qty,
-                    qty_before=before,
-                    qty_after=after,
-                    reason="purchase_cancel",
-                    note=f"Alış silindi {purchase.purchase_number}",
-                    warehouse=getattr(product, "warehouse", None) or "Ana Depo",
-                    created_by_user_id=user.id,
-                )
-            )
+        _apply_stock_decrease(
+            db,
+            purchase,
+            user.id,
+            reason="purchase_cancel",
+            note_label="Alış silindi ",
+        )
 
     number = purchase.purchase_number
     db.delete(purchase)

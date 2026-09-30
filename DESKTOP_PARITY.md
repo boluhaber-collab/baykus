@@ -329,7 +329,7 @@ Hâlâ bilinçli dışı: BizimHesap canlı, Selenium WA Desktop, DPAPI / postgr
 | Tedarikçi detay (`tedarikci_detay_penceresi`) | `/suppliers/[id]` — kimlik+not · bakiye kartları · Alış / Ödeme / Ekstre / Borç-Alacak Fişi / Kartı Düzenle · ekstre + alışlar | done |
 | Ürün kart / varyant (`urun_kartlari_varyant_paneli`) | `/products/[id]` — KPI Alış/Satış/Toplam stok/Stok değeri · tıklanınca «Tüm Stoklar» (qty>0) · varsayılan varyant/depo tablosu stoğu olanlar + «Tüm varyantlar» · BHV: gizli (`displaySku`) · önceki satış/alış · edit formu tüm varyantlar | done |
 | Sipariş detay toolbar (`siparis_detay_penceresi_ac`) | `/orders/[id]` — tek toolbar: Durum · Tasarım · WA · İş Emri PDF · Tahsilat · Yazdır (+ yaşam çizgisi/düzenle) | done |
-| Satın alma detay | `/purchases/[id]` — özet kartlar · kalem tablosu + dip toplam · Onay/Ödeme/Fiş/Ekstre/Yazdır CTA | done |
+| Satın alma detay | `/purchases/[id]` — özet kartlar · kalem tablosu + dip toplam · Onay/Düzenle/İptal Et/Ödeme/Fiş/Ekstre/Yazdır · onaylı iptal→stok+cari+finans ters · BH_IMPORT refuse | done |
 | Global kısayollar | `useBaykusHotkeys` (AppShell): Ctrl+S / F1 → `[data-baykus-save]` · F2 → `/sales/retail/new` · Escape → geri | done |
 
 API: `GET /api/products/{id}/warehouse-stocks`. Alembic yok.
