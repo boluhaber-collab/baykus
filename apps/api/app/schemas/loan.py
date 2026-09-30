@@ -16,7 +16,9 @@ class LoanInstallmentOut(BaseModel):
     paid_at: datetime | None = None
     payment_method: str | None = None
     cash_register_id: int | None = None
+    cash_register_name: str | None = None
     bank_account_id: int | None = None
+    bank_account_name: str | None = None
     notes: str | None = None
 
     model_config = {"from_attributes": True}
@@ -93,5 +95,24 @@ class LoanInstallmentPay(BaseModel):
     @classmethod
     def validate_method(cls, v: str) -> str:
         if v not in ("nakit", "banka", "none"):
+            raise ValueError("payment_method: nakit | banka | none")
+        return v
+
+
+class LoanInstallmentUpdate(BaseModel):
+    """Edit unpaid plan fields and/or paid payment (account/method) with finance reverse."""
+
+    due_date: date | None = None
+    amount: Decimal | None = Field(default=None, gt=0)
+    notes: str | None = None
+    payment_method: str | None = None
+    cash_register_id: int | None = None
+    bank_account_id: int | None = None
+    post_finance: bool = True
+
+    @field_validator("payment_method")
+    @classmethod
+    def validate_method(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("nakit", "banka", "none"):
             raise ValueError("payment_method: nakit | banka | none")
         return v

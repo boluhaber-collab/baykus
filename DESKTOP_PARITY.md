@@ -65,7 +65,7 @@ Her satır: **Masaüstü yaprak** → **Web rota** → durum.
 | Günlük Kasa | `/finance/cash` | done (batch 10 maliyet/kâr gerçek maliyet) |
 | Açık Bakiyeler | `/finance/open-balances` | done |
 | Hesaplarım | `/finance/banks` | done |
-| Krediler | `/finance/loans` + detay | done (batch 10 ödeme planı/alarm/Ödeme Yap) |
+| Krediler | `/finance/loans` + detay | done (ödeme planı/alarm/Ödeme Yap + hesap seçimi · İptal/Düzenle) |
 | Masraflar | `/finance/expenses` | done |
 | Demirbaşlar | `/finance/assets` | done (batch 10 demirbaş alanları + PDF) |
 
@@ -234,7 +234,7 @@ Bilinçli boşluklar (karşılaştırmalı kontrol için): BizimHesap canlı syn
 | Özellik | Web | Durum |
 |---------|-----|-------|
 | Kasa Özeti Maliyet | `GET /api/finance/cash/daily` — satır maliyeti = ürün `cost` veya `purchase_price` × adet; Brüt/Net + sipariş satırı Maliyet/Kâr | done |
-| Krediler ödeme planı | `/finance/loans` kart listesi (KALAN / BU AY / geciken) + detay ÖDEME TARİHLERİ · **Ödeme Yap** → kasa/banka · son ödeme alarmı | done |
+| Krediler ödeme planı | `/finance/loans` kart listesi (KALAN / BU AY / geciken) + detay ÖDEME TARİHLERİ · **Ödeme Yap** → seçilen kasa/banka · ödenen satırda hesap adı · **Düzenle** / **İptal Et** (kasa/banka cascade reverse) · son ödeme alarmı | done |
 | Demirbaşlar | `/finance/assets` — Seri No · Güncel Değer · Durum · Bakım · filtre · **PDF Rapor** (`/api/finance/assets/report/pdf`) | done |
 | Fihrist | `/directory` — Müşteri / Tedarikçi / Kişi sekmeleri · Yenile/Senkron · arama · düzenle | done |
 | WhatsApp Takip | `/whatsapp/track` — aday listesi · tür filtresi · şablon · önizleme · **wa.me** (Selenium yok) | done |

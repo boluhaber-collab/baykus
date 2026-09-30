@@ -1122,7 +1122,9 @@ export type LoanInstallment = {
   paid_at?: string | null;
   payment_method?: string | null;
   cash_register_id?: number | null;
+  cash_register_name?: string | null;
   bank_account_id?: number | null;
+  bank_account_name?: string | null;
   notes?: string | null;
 };
 
