@@ -35,6 +35,8 @@ export type AccountDetailLedgerProps = {
   title: string;
   subtitle?: string | null;
   accountType?: string | null;
+  /** Soft-disabled — show Pasif chip; excluded from pickers/dashboard. */
+  inactive?: boolean;
   balance: number;
   actions: ReactNode;
   /** Inline panel under actions (forms). */
@@ -265,6 +267,7 @@ export default function AccountDetailLedger({
   title,
   subtitle,
   accountType,
+  inactive,
   balance,
   actions,
   panel,
@@ -307,6 +310,11 @@ export default function AccountDetailLedger({
             {accountType ? (
               <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-700">
                 {accountType}
+              </span>
+            ) : null}
+            {inactive ? (
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-slate-200 text-slate-600">
+                Pasif
               </span>
             ) : null}
           </div>

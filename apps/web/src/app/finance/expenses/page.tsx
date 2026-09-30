@@ -71,7 +71,7 @@ export default function ExpensesPage() {
       const [e, c, regs, bankList] = await Promise.all([
         apiFetch<Expense[]>(`/api/finance/expenses?${params}`),
         apiFetch<ExpenseCategory[]>("/api/finance/expenses/categories"),
-        apiFetch<CashRegister[]>("/api/finance/cash"),
+        apiFetch<CashRegister[]>("/api/finance/cash?active=true"),
         apiFetch<BankAccount[]>("/api/finance/banks?active=true"),
       ]);
       const activeRegs = regs.filter((r) => r.is_active !== false);

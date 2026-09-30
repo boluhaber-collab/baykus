@@ -45,7 +45,7 @@ from app.schemas.finance import (
     TransferOut,
 )
 
-from app.utils.bh_note import sanitize_display_note
+from app.utils.bh_note import merge_bh_preserved_note, sanitize_display_note
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -159,6 +159,8 @@ def _register_out(db: Session, reg: CashRegister) -> CashRegisterOut:
 
 
 def _bank_out(db: Session, acc: BankAccount) -> BankAccountOut:
+    # Never leak raw BH_IMPORT sync markers to UI — DB still keeps them.
+    display_notes = sanitize_display_note(acc.notes) or None
     return BankAccountOut(
         id=acc.id,
         name=acc.name,
@@ -168,7 +170,7 @@ def _bank_out(db: Session, acc: BankAccount) -> BankAccountOut:
         currency=acc.currency or "TRY",
         opening_balance=_dec(acc.opening_balance),
         is_active=bool(acc.is_active),
-        notes=acc.notes,
+        notes=display_notes,
         balance=_bank_balance(db, acc),
         created_at=acc.created_at,
         updated_at=acc.updated_at,
@@ -715,8 +717,12 @@ def cash_daily_panel(
 def list_cash_registers(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ_ROLES)),
+    active: bool | None = None,
 ) -> list[CashRegisterOut]:
-    regs = db.query(CashRegister).order_by(CashRegister.id).all()
+    q = db.query(CashRegister)
+    if active is not None:
+        q = q.filter(CashRegister.is_active.is_(active))
+    regs = q.order_by(CashRegister.id).all()
     return [_register_out(db, r) for r in regs]
 
 
@@ -904,7 +910,11 @@ def list_banks(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ_ROLES)),
     active: bool | None = None,
+    active_only: bool | None = Query(default=None),
 ) -> list[BankAccountOut]:
+    # active_only is a legacy alias used by some pickers (same as active=true)
+    if active is None and active_only is True:
+        active = True
     q = db.query(BankAccount)
     if active is not None:
         q = q.filter(BankAccount.is_active.is_(active))
@@ -963,6 +973,13 @@ def update_bank(
         data["currency"] = data["currency"].upper()
     if "name" in data and data["name"]:
         data["name"] = data["name"].strip()
+    if "institution" in data:
+        inst = data["institution"]
+        data["institution"] = inst.strip() if isinstance(inst, str) and inst.strip() else None
+    if "account_type" in data and data["account_type"]:
+        data["account_type"] = str(data["account_type"]).strip() or "Banka"
+    if "notes" in data:
+        data["notes"] = merge_bh_preserved_note(acc.notes, data.get("notes"))
     for k, v in data.items():
         setattr(acc, k, v)
     acc.updated_at = datetime.utcnow()

@@ -129,8 +129,8 @@ export default function SplitPaymentRows({
     (async () => {
       try {
         const [c, b] = await Promise.all([
-          apiFetch<CashRegister[]>("/api/finance/cash"),
-          apiFetch<BankAccount[]>("/api/finance/banks?active_only=true"),
+          apiFetch<CashRegister[]>("/api/finance/cash?active=true"),
+          apiFetch<BankAccount[]>("/api/finance/banks?active=true"),
         ]);
         if (cancelled) return;
         setCashRegs(c.filter((x) => x.is_active !== false));

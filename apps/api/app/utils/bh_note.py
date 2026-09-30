@@ -184,3 +184,58 @@ def sanitize_aciklama(note: Any, fallback: str = "") -> str:
     if not parsed.get("is_bh"):
         return sanitize_display_note(note, fallback=fallback)
     return fallback
+
+
+def extract_bh_meta_segments(note: Any) -> list[str]:
+    """Keep BH sync / import metadata segments; drop free-text and Hareket= payload fields."""
+    raw = decode_html_entities(note).strip()
+    if not raw:
+        return []
+    if is_bh_marker_only(raw):
+        return [raw]
+    parts = [p.strip() for p in raw.split("|") if p.strip()]
+    meta: list[str] = []
+    for p in parts:
+        pu = p.upper()
+        if pu.startswith("BH_IMPORT:") or pu.startswith("BH_FROM_STOCK:"):
+            meta.append(p)
+            continue
+        if _MARKER_ONLY_RE.match(p) or _HEX_GUID_RE.match(p):
+            meta.append(p)
+            continue
+        eq = p.find("=")
+        if 0 < eq < 24:
+            key = p[:eq].strip().lower()
+            # Account-level import metadata (GUID / live balance) — preserve
+            if key in ("bh guid", "bh_guid", "guid", "live_bal", "live_balance", "kaynak", "source"):
+                meta.append(p)
+                continue
+            if key.replace(" ", "") in ("bhguid",):
+                meta.append(p)
+                continue
+            # Movement payload keys — not account notes meta
+            continue
+        # free text — not meta
+    return meta
+
+
+def merge_bh_preserved_note(existing: Any, incoming: Any) -> str | None:
+    """Merge user-edited human note with existing BH_IMPORT metadata (never drop sync tags).
+
+    DB keeps ``BH_IMPORT:…`` for idempotent re-import. UI sends sanitized human text only.
+    """
+    meta = extract_bh_meta_segments(existing)
+    human = sanitize_display_note(incoming, fallback="").strip()
+    # If incoming still contains BH tokens (raw paste), prefer sanitize of incoming for human
+    # and also pull any new meta from incoming
+    incoming_meta = extract_bh_meta_segments(incoming)
+    if incoming_meta and not meta:
+        meta = incoming_meta
+    elif incoming_meta:
+        # Prefer existing meta order; ignore duplicate incoming meta
+        pass
+    if meta and human:
+        return " | ".join(meta + [human])
+    if meta:
+        return " | ".join(meta)
+    return human or None

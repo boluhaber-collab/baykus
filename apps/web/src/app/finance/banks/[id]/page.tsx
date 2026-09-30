@@ -11,7 +11,7 @@ import {
   BankMovement,
   apiFetch,
 } from "@/lib/api";
-import { BANK_HAREKET_LABELS } from "@/lib/bhNote";
+import { BANK_HAREKET_LABELS, sanitizeDisplayNote } from "@/lib/bhNote";
 
 type Panel = "none" | "update" | "in" | "out";
 
@@ -29,9 +29,11 @@ export default function BankDetailPage() {
   // Update form
   const [editName, setEditName] = useState("");
   const [editInstitution, setEditInstitution] = useState("");
+  const [editAccountType, setEditAccountType] = useState("Banka");
   const [editIban, setEditIban] = useState("");
   const [editOpening, setEditOpening] = useState("0");
   const [editNotes, setEditNotes] = useState("");
+  const [editActive, setEditActive] = useState(true);
 
   // Para giriş/çıkış
   const [formAmount, setFormAmount] = useState("");
@@ -50,10 +52,12 @@ export default function BankDetailPage() {
       setMovements(movs);
       setEditName(acc.name || "");
       setEditInstitution(acc.institution || "");
+      setEditAccountType(acc.account_type || "Banka");
       setEditIban(acc.iban || "");
       setEditOpening(String(acc.opening_balance ?? 0));
-      // Keep BH tags; show raw notes for edit (user can adjust free text carefully)
-      setEditNotes(acc.notes || "");
+      // API already strips BH_IMPORT; sanitize again for safety
+      setEditNotes(sanitizeDisplayNote(acc.notes) || "");
+      setEditActive(acc.is_active !== false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
@@ -80,9 +84,11 @@ export default function BankDetailPage() {
         body: JSON.stringify({
           name: editName.trim(),
           institution: editInstitution.trim() || null,
+          account_type: editAccountType.trim() || "Banka",
           iban: editIban.trim() || null,
           opening_balance: Number(editOpening || 0),
           notes: editNotes.trim() || null,
+          is_active: editActive,
         }),
       });
       setOkMsg("Hesap güncellendi");
@@ -135,15 +141,41 @@ export default function BankDetailPage() {
       <form onSubmit={onUpdate} className="rounded border bg-white p-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
         <div className="sm:col-span-2 lg:col-span-3 font-semibold text-slate-800">Hesap Güncelle</div>
         <label className="text-xs">
-          <span className="text-baykus-muted block mb-0.5">Hesap Adı</span>
-          <input required className="bk-input" value={editName} onChange={(e) => setEditName(e.target.value)} />
+          <span className="text-baykus-muted block mb-0.5">Hesap Türü</span>
+          <select className="bk-input" value={editAccountType} onChange={(e) => setEditAccountType(e.target.value)}>
+            <option value="Banka">Banka</option>
+            <option value="POS">POS</option>
+            <option value="Kredi Kartı">Kredi Kartı</option>
+            <option value="Şirket Ortağı">Şirket Ortağı</option>
+          </select>
         </label>
         <label className="text-xs">
-          <span className="text-baykus-muted block mb-0.5">Kurum</span>
-          <input className="bk-input" value={editInstitution} onChange={(e) => setEditInstitution(e.target.value)} />
+          <span className="text-baykus-muted block mb-0.5">
+            {editAccountType === "Şirket Ortağı" ? "Hesap Grubu" : "Banka / Kurum"}
+          </span>
+          <input
+            className="bk-input"
+            value={editInstitution}
+            onChange={(e) => setEditInstitution(e.target.value)}
+            placeholder={editAccountType === "Şirket Ortağı" ? "Şirket Ortakları" : "Örn. VakıfBank"}
+          />
         </label>
         <label className="text-xs">
-          <span className="text-baykus-muted block mb-0.5">IBAN</span>
+          <span className="text-baykus-muted block mb-0.5">
+            {editAccountType === "Şirket Ortağı" ? "Ortak Adı" : "Hesap Adı"}
+          </span>
+          <input
+            required
+            className="bk-input"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            placeholder={editAccountType === "Şirket Ortağı" ? "Örn. Engin KARAGÖZ" : "Örn. 6972"}
+          />
+        </label>
+        <label className="text-xs">
+          <span className="text-baykus-muted block mb-0.5">
+            {editAccountType === "Şirket Ortağı" ? "Kimlik / Referans" : "IBAN"}
+          </span>
           <input className="bk-input font-mono" value={editIban} onChange={(e) => setEditIban(e.target.value)} />
         </label>
         <label className="text-xs">
@@ -156,9 +188,26 @@ export default function BankDetailPage() {
             onChange={(e) => setEditOpening(e.target.value)}
           />
         </label>
-        <label className="text-xs sm:col-span-2">
+        <label className="text-xs flex items-center gap-2 self-end pb-1">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={editActive}
+            onChange={(e) => setEditActive(e.target.checked)}
+          />
+          <span className="text-slate-700">
+            {editActive ? "Aktif" : "Pasif"}
+            <span className="text-baykus-muted font-normal"> — pasif hesap seçicilerde ve Ana Sayfa bakiyesinde gizlenir</span>
+          </span>
+        </label>
+        <label className="text-xs sm:col-span-2 lg:col-span-3">
           <span className="text-baykus-muted block mb-0.5">Not</span>
-          <input className="bk-input" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+          <input
+            className="bk-input"
+            value={editNotes}
+            onChange={(e) => setEditNotes(e.target.value)}
+            placeholder="İsteğe bağlı açıklama (aktarım etiketleri gösterilmez)"
+          />
         </label>
         <div className="flex items-end gap-2">
           <button type="submit" disabled={busy} className="bk-btn bk-btn-primary text-xs">
@@ -216,8 +265,11 @@ export default function BankDetailPage() {
         breadcrumbHref="/finance/banks"
         breadcrumbLabel="Hesaplarım"
         title={account?.name || "…"}
-        subtitle={account?.iban || account?.institution || null}
+        subtitle={
+          [account?.institution, account?.iban].filter(Boolean).join(" · ") || null
+        }
         accountType={account?.account_type || null}
+        inactive={account?.is_active === false}
         balance={Number(account?.balance ?? 0)}
         error={error}
         okMsg={okMsg}

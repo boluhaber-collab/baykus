@@ -41,7 +41,7 @@ export default function LoanDetailPage() {
     try {
       const [loanData, regs, bankList] = await Promise.all([
         apiFetch<Loan>(`/api/loans/${id}`),
-        apiFetch<CashRegister[]>("/api/finance/cash"),
+        apiFetch<CashRegister[]>("/api/finance/cash?active=true"),
         apiFetch<BankAccount[]>("/api/finance/banks?active=true"),
       ]);
       const activeRegs = regs.filter((r) => r.is_active !== false);

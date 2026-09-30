@@ -28,6 +28,7 @@ export default function CashDetailPage() {
 
   const [editName, setEditName] = useState("");
   const [editOpening, setEditOpening] = useState("0");
+  const [editActive, setEditActive] = useState(true);
 
   const [formAmount, setFormAmount] = useState("");
   const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -48,6 +49,7 @@ export default function CashDetailPage() {
       if (reg) {
         setEditName(reg.name || "");
         setEditOpening(String(reg.opening_balance ?? 0));
+        setEditActive(reg.is_active !== false);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
@@ -75,6 +77,7 @@ export default function CashDetailPage() {
         body: JSON.stringify({
           name: editName.trim(),
           opening_balance: Number(editOpening || 0),
+          is_active: editActive,
         }),
       });
       setOkMsg("Kasa güncellendi");
@@ -130,7 +133,7 @@ export default function CashDetailPage() {
       <form onSubmit={onUpdate} className="rounded border bg-white p-3 grid gap-2 sm:grid-cols-3 text-sm">
         <div className="sm:col-span-3 font-semibold">Kasa Güncelle</div>
         <label className="text-xs">
-          <span className="text-baykus-muted block mb-0.5">Ad</span>
+          <span className="text-baykus-muted block mb-0.5">Kasa Adı</span>
           <input required className="bk-input" value={editName} onChange={(e) => setEditName(e.target.value)} />
         </label>
         <label className="text-xs">
@@ -143,7 +146,19 @@ export default function CashDetailPage() {
             onChange={(e) => setEditOpening(e.target.value)}
           />
         </label>
-        <div className="flex items-end gap-2">
+        <label className="text-xs flex items-center gap-2 self-end pb-1">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={editActive}
+            onChange={(e) => setEditActive(e.target.checked)}
+          />
+          <span className="text-slate-700">
+            {editActive ? "Aktif" : "Pasif"}
+            <span className="text-baykus-muted font-normal"> — pasif kasa seçicilerde ve Ana Sayfa bakiyesinde gizlenir</span>
+          </span>
+        </label>
+        <div className="flex items-end gap-2 sm:col-span-3">
           <button type="submit" disabled={busy} className="bk-btn bk-btn-primary text-xs">
             {busy ? "…" : "Kaydet"}
           </button>
@@ -214,6 +229,7 @@ export default function CashDetailPage() {
         title={register?.name || "…"}
         subtitle="Kasa"
         accountType="Kasa"
+        inactive={register?.is_active === false}
         balance={Number(register?.balance ?? 0)}
         error={error || (!register && !error ? "" : !register ? "Kasa bulunamadı" : "")}
         okMsg={okMsg}

@@ -60,7 +60,7 @@ export default function VirmanModal({
         let accs = banksProp;
         if (!regs || !accs) {
           const [c, b] = await Promise.all([
-            apiFetch<CashRegister[]>("/api/finance/cash"),
+            apiFetch<CashRegister[]>("/api/finance/cash?active=true"),
             apiFetch<BankAccount[]>("/api/finance/banks?active=true"),
           ]);
           regs = c;
