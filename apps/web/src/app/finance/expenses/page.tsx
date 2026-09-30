@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
+import { BankAccount, CashRegister, Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { useDateSort } from "@/hooks/useDateSort";
@@ -34,6 +34,8 @@ function periodFrom(key: string): string | "" {
 export default function ExpensesPage() {
   const [items, setItems] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [cashRegs, setCashRegs] = useState<CashRegister[]>([]);
+  const [banks, setBanks] = useState<BankAccount[]>([]);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [period, setPeriod] = useState("92");
@@ -51,6 +53,8 @@ export default function ExpensesPage() {
     due_date: "",
     document_no: "",
     payment_method: "nakit",
+    cash_register_id: "",
+    bank_account_id: "",
     note: "",
     post_immediately: true,
   });
@@ -64,13 +68,26 @@ export default function ExpensesPage() {
       if (statusFilter !== "Tümü") params.set("status_filter", statusFilter);
       if (q.trim()) params.set("q", q.trim());
       params.set("limit", "2000");
-      const [e, c] = await Promise.all([
+      const [e, c, regs, bankList] = await Promise.all([
         apiFetch<Expense[]>(`/api/finance/expenses?${params}`),
         apiFetch<ExpenseCategory[]>("/api/finance/expenses/categories"),
+        apiFetch<CashRegister[]>("/api/finance/cash"),
+        apiFetch<BankAccount[]>("/api/finance/banks?active=true"),
       ]);
+      const activeRegs = regs.filter((r) => r.is_active !== false);
+      const activeBanks = bankList.filter((b) => b.is_active !== false);
       setItems(e);
       setCategories(c);
-      setForm((f) => (!f.category_id && c.length ? { ...f, category_id: String(c[0].id) } : f));
+      setCashRegs(activeRegs);
+      setBanks(activeBanks);
+      setForm((f) => ({
+        ...f,
+        category_id: f.category_id || (c.length ? String(c[0].id) : ""),
+        cash_register_id:
+          f.cash_register_id || (activeRegs.length ? String(activeRegs[0].id) : ""),
+        bank_account_id:
+          f.bank_account_id || (activeBanks.length ? String(activeBanks[0].id) : ""),
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Yükleme hatası");
     }
@@ -149,6 +166,14 @@ export default function ExpensesPage() {
     e.preventDefault();
     setError("");
     setMsg("");
+    if (form.payment_method === "banka" && !form.bank_account_id) {
+      setError("Banka ödemesi için hesap seçin");
+      return;
+    }
+    if (form.payment_method === "nakit" && !form.cash_register_id && cashRegs.length > 0) {
+      setError("Nakit ödeme için kasa seçin");
+      return;
+    }
     try {
       await apiFetch("/api/finance/expenses", {
         method: "POST",
@@ -159,6 +184,14 @@ export default function ExpensesPage() {
           due_date: form.due_date || null,
           document_no: form.document_no || null,
           payment_method: form.payment_method,
+          cash_register_id:
+            form.payment_method === "nakit" && form.cash_register_id
+              ? Number(form.cash_register_id)
+              : null,
+          bank_account_id:
+            form.payment_method === "banka" && form.bank_account_id
+              ? Number(form.bank_account_id)
+              : null,
           note: form.note || null,
           post_immediately: form.post_immediately,
         }),
@@ -398,6 +431,37 @@ export default function ExpensesPage() {
           <option value="nakit">Kasa (Nakit)</option>
           <option value="banka">Banka</option>
         </select>
+        {form.payment_method === "nakit" ? (
+          <select
+            className="bk-input"
+            value={form.cash_register_id}
+            onChange={(e) => setForm({ ...form, cash_register_id: e.target.value })}
+            required
+          >
+            <option value="">Kasa seçin</option>
+            {cashRegs.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+                {typeof r.balance === "number" ? ` (${formatMoney(r.balance)})` : ""}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select
+            className="bk-input"
+            value={form.bank_account_id}
+            onChange={(e) => setForm({ ...form, bank_account_id: e.target.value })}
+            required
+          >
+            <option value="">Banka / hesap seçin</option>
+            {banks.map((b) => (
+              <option key={b.id} value={b.id}>
+                {(b.account_type ? `${b.account_type} · ` : "") + b.name}
+                {typeof b.balance === "number" ? ` (${formatMoney(b.balance)})` : ""}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           className="bk-input md:col-span-2"
           placeholder="Not"
@@ -500,7 +564,11 @@ export default function ExpensesPage() {
                   <td className="text-xs">{e.document_no || "—"}</td>
                   <td className="text-xs">{e.due_date || "—"}</td>
                   <td className="font-medium text-sm">{e.category_name || "—"}</td>
-                  <td className="text-xs">{e.payment_method === "banka" ? "Banka" : "Kasa"}</td>
+                  <td className="text-xs">
+                    {e.payment_method === "banka"
+                      ? e.bank_account_name || "Banka"
+                      : e.cash_register_name || "Kasa"}
+                  </td>
                   <td className="text-right tabular-nums font-semibold">{formatMoney(Number(e.amount))}</td>
                   <td className="text-xs">{e.payment_method}</td>
                   <td>

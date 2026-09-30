@@ -990,7 +990,9 @@ export type Expense = {
   payment_method: string;
   note?: string | null;
   cash_register_id?: number | null;
+  cash_register_name?: string | null;
   bank_account_id?: number | null;
+  bank_account_name?: string | null;
   is_posted: boolean;
   status_label?: string | null;
   created_by_user_id?: number | null;

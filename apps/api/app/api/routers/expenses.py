@@ -35,7 +35,23 @@ def _status_label(e: Expense) -> str:
     return "Ödenecek"
 
 
-def _out(e: Expense) -> ExpenseOut:
+def _account_names(db: Session, e: Expense) -> tuple[str | None, str | None]:
+    cash_name = None
+    bank_name = None
+    if e.cash_register_id:
+        reg = db.get(CashRegister, e.cash_register_id)
+        cash_name = reg.name if reg else None
+    if e.bank_account_id:
+        acc = db.get(BankAccount, e.bank_account_id)
+        bank_name = acc.name if acc else None
+    return cash_name, bank_name
+
+
+def _out(e: Expense, db: Session | None = None) -> ExpenseOut:
+    cash_name = None
+    bank_name = None
+    if db is not None:
+        cash_name, bank_name = _account_names(db, e)
     return ExpenseOut(
         id=e.id,
         category_id=e.category_id,
@@ -47,7 +63,9 @@ def _out(e: Expense) -> ExpenseOut:
         payment_method=e.payment_method,
         note=e.note,
         cash_register_id=e.cash_register_id,
+        cash_register_name=cash_name,
         bank_account_id=e.bank_account_id,
+        bank_account_name=bank_name,
         is_posted=e.is_posted,
         status_label=_status_label(e),
         created_by_user_id=e.created_by_user_id,
@@ -82,12 +100,10 @@ def post_to_ledger(db: Session, expense: Expense, user: User) -> None:
         expense.cash_register_id = reg.id
         expense.cash_movement_id = mov.id
     else:
-        acc = (
-            db.get(BankAccount, expense.bank_account_id)
-            if expense.bank_account_id
-            else db.query(BankAccount).filter(BankAccount.is_active.is_(True)).first()
-        )
-        if not acc:
+        if not expense.bank_account_id:
+            raise HTTPException(status_code=400, detail="Banka hesabı seçilmelidir")
+        acc = db.get(BankAccount, expense.bank_account_id)
+        if not acc or not acc.is_active:
             raise HTTPException(status_code=400, detail="Aktif banka hesabı bulunamadı")
         mov = BankMovement(
             bank_account_id=acc.id,
@@ -200,7 +216,7 @@ def list_expenses(
     if date_to:
         query = query.filter(Expense.expense_date <= date_to)
     rows = query.order_by(Expense.expense_date.desc(), Expense.id.desc()).offset(skip).limit(limit).all()
-    out = [_out(r) for r in rows]
+    out = [_out(r, db) for r in rows]
     if status_filter and status_filter != "Tümü":
         out = [r for r in out if r.status_label == status_filter]
     if q:
@@ -215,6 +231,8 @@ def list_expenses(
                     str(r.note or ""),
                     str(r.document_no or ""),
                     str(r.payment_method or ""),
+                    str(r.cash_register_name or ""),
+                    str(r.bank_account_name or ""),
                 ]
             ).casefold()
         ]
@@ -232,6 +250,21 @@ def create_expense(
         raise HTTPException(status_code=400, detail="Gider kategorisi bulunamadı")
     if payload.payment_method not in EXPENSE_PAYMENT_METHODS:
         raise HTTPException(status_code=400, detail="Geçersiz ödeme yöntemi")
+    cash_register_id = payload.cash_register_id
+    bank_account_id = payload.bank_account_id
+    if payload.payment_method == "nakit":
+        bank_account_id = None
+        if cash_register_id:
+            reg = db.get(CashRegister, cash_register_id)
+            if not reg or not reg.is_active:
+                raise HTTPException(status_code=400, detail="Kasa bulunamadı")
+    else:
+        cash_register_id = None
+        if not bank_account_id:
+            raise HTTPException(status_code=400, detail="Banka hesabı seçilmelidir")
+        acc = db.get(BankAccount, bank_account_id)
+        if not acc or not acc.is_active:
+            raise HTTPException(status_code=400, detail="Banka hesabı bulunamadı")
     expense = Expense(
         category_id=payload.category_id,
         amount=Decimal(str(payload.amount)),
@@ -240,8 +273,8 @@ def create_expense(
         document_no=(payload.document_no.strip() if payload.document_no else None),
         payment_method=payload.payment_method,
         note=payload.note,
-        cash_register_id=payload.cash_register_id,
-        bank_account_id=payload.bank_account_id,
+        cash_register_id=cash_register_id,
+        bank_account_id=bank_account_id,
         created_by_user_id=user.id,
     )
     db.add(expense)
@@ -255,7 +288,7 @@ def create_expense(
         .filter(Expense.id == expense.id)
         .first()
     )
-    return _out(expense)
+    return _out(expense, db)
 
 
 @router.post("/{expense_id}/post", response_model=ExpenseOut)
@@ -273,7 +306,7 @@ def post_expense_endpoint(
     if not expense:
         raise HTTPException(status_code=404, detail="Gider bulunamadı")
     if expense.is_posted:
-        return _out(expense)
+        return _out(expense, db)
     post_to_ledger(db, expense, user)
     db.commit()
     expense = (
@@ -282,7 +315,7 @@ def post_expense_endpoint(
         .filter(Expense.id == expense_id)
         .first()
     )
-    return _out(expense)
+    return _out(expense, db)
 
 
 @router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)

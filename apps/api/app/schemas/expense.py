@@ -62,7 +62,9 @@ class ExpenseOut(BaseModel):
     payment_method: str
     note: str | None
     cash_register_id: int | None
+    cash_register_name: str | None = None
     bank_account_id: int | None
+    bank_account_name: str | None = None
     is_posted: bool
     status_label: str | None = None  # Ödenmiş | Ödenecek | Gecikmiş
     created_by_user_id: int | None
