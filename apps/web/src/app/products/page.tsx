@@ -7,6 +7,13 @@ import { DashboardSummary, Product, apiFetch, formatMoney, stockBadgeClass } fro
 import { displaySku } from "@/lib/productLabel";
 import { HubActionsBar, HubSection, HubTabs } from "@/components/hub/HubChrome";
 import StatusFooter from "@/components/StatusFooter";
+import StockDetailFilters from "@/components/StockDetailFilters";
+import {
+  EMPTY_STOCK_FILTERS,
+  StockFilterFacets,
+  StockFilterState,
+  stockFiltersToProductQuery,
+} from "@/lib/stockFilters";
 
 type Tab = "urunler" | "kritik" | "rapor";
 
@@ -44,6 +51,16 @@ function ProductsHubPageInner() {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [showBulkImageStub, setShowBulkImageStub] = useState(false);
+  const [stockFilters, setStockFilters] = useState<StockFilterState>({
+    ...EMPTY_STOCK_FILTERS,
+    inStockOnly: false,
+  });
+  const [facets, setFacets] = useState<StockFilterFacets>({
+    colors: [],
+    sizes: [],
+    printTypes: [],
+    warehouses: [],
+  });
 
   const criticalOnly = tab === "kritik";
 
@@ -58,24 +75,43 @@ function ProductsHubPageInner() {
       if (productType) params.set("type", productType);
       if (criticalOnly) params.set("critical_only", "true");
       if (activeFilter === "active") params.set("active_only", "true");
+      const sf = stockFiltersToProductQuery(stockFilters);
+      for (const [k, v] of Object.entries(sf)) params.set(k, v);
       const qs = params.toString();
-      const [data, cats, brs, dash] = await Promise.all([
+      const [data, cats, brs, dash, facetRaw] = await Promise.all([
         apiFetch<Product[]>(`/api/products${qs ? `?${qs}` : ""}`),
         apiFetch<string[]>("/api/products/categories"),
         apiFetch<string[]>("/api/products/brands").catch(() => [] as string[]),
         apiFetch<DashboardSummary>("/api/dashboard/summary").catch(() => null),
+        apiFetch<{
+          colors: string[];
+          sizes: string[];
+          print_types: string[];
+          warehouses: string[];
+        }>("/api/products/variant-facets").catch(() => ({
+          colors: [],
+          sizes: [],
+          print_types: [],
+          warehouses: [],
+        })),
       ]);
       setItems(data);
       setCategories(cats);
       setBrands(brs);
       setSummary(dash);
+      setFacets({
+        colors: facetRaw.colors || [],
+        sizes: facetRaw.sizes || [],
+        printTypes: facetRaw.print_types || [],
+        warehouses: facetRaw.warehouses || [],
+      });
       setSelected({});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     } finally {
       setLoading(false);
     }
-  }, [q, category, brand, productType, criticalOnly, activeFilter]);
+  }, [q, category, brand, productType, criticalOnly, activeFilter, stockFilters]);
 
   useEffect(() => {
     load();
@@ -344,6 +380,7 @@ function ProductsHubPageInner() {
                 setCategory("");
                 setBrand("");
                 setProductType("");
+                setStockFilters({ ...EMPTY_STOCK_FILTERS, inStockOnly: false });
               }}
               className="bk-btn bk-btn-ghost"
             >
@@ -353,6 +390,13 @@ function ProductsHubPageInner() {
               Ara
             </button>
           </div>
+
+          <StockDetailFilters
+            value={stockFilters}
+            onChange={setStockFilters}
+            facets={facets}
+            defaults={{ inStockOnly: false }}
+          />
 
           <div className="bk-table-wrap">
             <table className="bk-table bk-product-list-table">

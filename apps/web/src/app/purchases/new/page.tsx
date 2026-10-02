@@ -12,6 +12,13 @@ import {
   formatMoney,
 } from "@/lib/api";
 import { productOptionLabel } from "@/lib/productLabel";
+import StockDetailFilters from "@/components/StockDetailFilters";
+import {
+  EMPTY_STOCK_FILTERS,
+  StockFilterState,
+  collectFacetOptions,
+  filterStockRows,
+} from "@/lib/stockFilters";
 
 type LineForm = {
   description: string;
@@ -37,6 +44,7 @@ function NewPurchaseForm() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productDetails, setProductDetails] = useState<Record<number, ProductDetail>>({});
+  const [lineFilters, setLineFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
   const [supplierId, setSupplierId] = useState(presetSupplier);
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
@@ -450,12 +458,30 @@ function NewPurchaseForm() {
                 + Satır ekle
               </button>
             </div>
+            {(() => {
+              const allLoaded = Object.values(productDetails).flatMap((d) => d?.variants || []);
+              const facets = collectFacetOptions(allLoaded);
+              return (
+                <StockDetailFilters
+                  value={lineFilters}
+                  onChange={setLineFilters}
+                  facets={facets}
+                  hideWarehouse
+                  defaults={{ inStockOnly: true }}
+                />
+              );
+            })()}
             {lines.map((line, idx) => {
               const allVariants = productDetails[Number(line.product_id)]?.variants || [];
-              // In-stock only (sale/retail picker parity); keep current selection if zero
-              const variants = allVariants.filter(
-                (v) => Number(v.stock_qty ?? 0) > 0 || String(v.id) === String(line.variant_id),
-              );
+              // BH detailed filters; keep current selection even if filtered out
+              let variants = filterStockRows(allVariants, lineFilters);
+              if (
+                line.variant_id &&
+                !variants.some((v) => String(v.id) === String(line.variant_id))
+              ) {
+                const cur = allVariants.find((v) => String(v.id) === String(line.variant_id));
+                if (cur) variants = [cur, ...variants];
+              }
               return (
                 <div key={idx} className="rounded-lg border border-slate-100 p-3 space-y-2">
                   <div className="grid sm:grid-cols-2 gap-2">
@@ -485,11 +511,17 @@ function NewPurchaseForm() {
                         onChange={(e) => onVariantChange(idx, e.target.value)}
                       >
                         <option value="">
-                          {variants.length ? "Seçin" : allVariants.length ? "Stoğu olan yok" : "—"}
+                          {variants.length
+                            ? "Seçin"
+                            : allVariants.length
+                              ? "Filtrelere uyan yok"
+                              : "—"}
                         </option>
                         {variants.map((v) => (
                           <option key={v.id} value={v.id}>
-                            {v.name} (stok: {v.stock_qty})
+                            {[v.size, v.color, v.print_type, v.name].filter(Boolean).join(" / ") ||
+                              v.name}{" "}
+                            (stok: {v.stock_qty})
                           </option>
                         ))}
                       </select>

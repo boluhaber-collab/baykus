@@ -394,17 +394,22 @@ def warehouse_stock(
     warehouse_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ)),
+    include_zero: bool = Query(default=False, description="Sıfır stok satırlarını da getir"),
+    color: str | None = Query(default=None),
+    size: str | None = Query(default=None),
+    print_type: str | None = Query(default=None),
+    sku: str | None = Query(default=None),
+    q: str | None = Query(default=None),
 ) -> list[dict]:
     row = db.get(Warehouse, warehouse_id)
     if not row:
         raise HTTPException(status_code=404, detail="Depo bulunamadı")
 
     # Prefer warehouse_stocks
-    balances = (
-        db.query(WarehouseStock)
-        .filter(WarehouseStock.warehouse == row.name, WarehouseStock.quantity > 0)
-        .all()
-    )
+    bal_q = db.query(WarehouseStock).filter(WarehouseStock.warehouse == row.name)
+    if not include_zero:
+        bal_q = bal_q.filter(WarehouseStock.quantity > 0)
+    balances = bal_q.all()
     out: list[dict] = []
     if balances:
         for b in balances:
@@ -423,6 +428,9 @@ def warehouse_stock(
                         "name": f"{product.name} / {v.name}",
                         "stock_qty": int(b.quantity or 0),
                         "warehouse": row.name,
+                        "color": v.color,
+                        "size": v.size,
+                        "print_type": v.print_type,
                     }
                 )
             else:
@@ -434,42 +442,74 @@ def warehouse_stock(
                         "name": product.name,
                         "stock_qty": int(b.quantity or 0),
                         "warehouse": row.name,
+                        "color": None,
+                        "size": None,
+                        "print_type": None,
                     }
                 )
-        out.sort(key=lambda x: x["name"])
-        return out
-
-    # Legacy: products tagged with this warehouse
-    products = (
-        db.query(Product)
-        .filter(Product.warehouse == row.name)
-        .order_by(Product.name)
-        .all()
-    )
-    for p in products:
-        if p.variants:
-            for v in p.variants:
+    else:
+        # Legacy: products tagged with this warehouse
+        products = (
+            db.query(Product)
+            .filter(Product.warehouse == row.name)
+            .order_by(Product.name)
+            .all()
+        )
+        for p in products:
+            if p.variants:
+                for v in p.variants:
+                    qty = int(v.stock_qty or 0)
+                    if not include_zero and qty <= 0:
+                        continue
+                    out.append(
+                        {
+                            "product_id": p.id,
+                            "variant_id": v.id,
+                            "sku": v.sku,
+                            "name": f"{p.name} / {v.name}",
+                            "stock_qty": qty,
+                            "warehouse": row.name,
+                            "color": v.color,
+                            "size": v.size,
+                            "print_type": v.print_type,
+                        }
+                    )
+            else:
+                qty = int(p.stock_qty or 0)
+                if not include_zero and qty <= 0:
+                    continue
                 out.append(
                     {
                         "product_id": p.id,
-                        "variant_id": v.id,
-                        "sku": v.sku,
-                        "name": f"{p.name} / {v.name}",
-                        "stock_qty": int(v.stock_qty or 0),
+                        "variant_id": None,
+                        "sku": p.sku,
+                        "name": p.name,
+                        "stock_qty": qty,
                         "warehouse": row.name,
+                        "color": None,
+                        "size": None,
+                        "print_type": None,
                     }
                 )
-        else:
-            out.append(
-                {
-                    "product_id": p.id,
-                    "variant_id": None,
-                    "sku": p.sku,
-                    "name": p.name,
-                    "stock_qty": int(p.stock_qty or 0),
-                    "warehouse": row.name,
-                }
-            )
+
+    def _match(item: dict) -> bool:
+        if color and (item.get("color") or "").strip().lower() != color.strip().lower():
+            return False
+        if size and (item.get("size") or "").strip().lower() != size.strip().lower():
+            return False
+        if print_type and (item.get("print_type") or "").strip().lower() != print_type.strip().lower():
+            return False
+        needle = (sku or q or "").strip().lower()
+        if needle:
+            hay = " ".join(
+                str(item.get(k) or "") for k in ("sku", "name", "color", "size", "print_type")
+            ).lower()
+            if needle not in hay:
+                return False
+        return True
+
+    out = [i for i in out if _match(i)]
+    out.sort(key=lambda x: x["name"])
     return out
 
 

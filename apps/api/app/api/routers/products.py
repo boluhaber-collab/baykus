@@ -7,10 +7,12 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
+from sqlalchemy import or_, and_, exists
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
 from app.models.product import DEFAULT_WAREHOUSE, Product, ProductVariant, StockMovement
+from app.models.warehouse import Warehouse, WarehouseStock
 from app.models.price_list import PriceList, PriceListItem
 from app.models.user import User
 from app.services.audit import write_audit
@@ -186,6 +188,12 @@ def list_products(
     product_type: str | None = Query(default=None, alias="type"),
     critical_only: bool = Query(default=False),
     active_only: bool = Query(default=False),
+    color: str | None = Query(default=None, description="Varyant renk filtresi"),
+    size: str | None = Query(default=None, description="Varyant beden filtresi"),
+    print_type: str | None = Query(default=None, description="Varyant baskı filtresi"),
+    sku: str | None = Query(default=None, description="Ürün veya varyant SKU (kısmi)"),
+    warehouse: str | None = Query(default=None, description="Depo adı"),
+    in_stock_only: bool = Query(default=False, description="Yalnızca stoğu > 0 olanlar"),
     skip: int = 0,
     limit: int = 200,
 ) -> list[ProductListItem]:
@@ -206,10 +214,58 @@ def list_products(
         query = query.filter(Product.product_type == product_type)
     if active_only:
         query = query.filter(Product.is_active.is_(True))
+
+    # BizimHesap-style detailed stock filters (renk/beden/baskı/SKU/depo/stokta)
+    needs_variant = bool(color or size or print_type or (sku and sku.strip()))
+    if needs_variant:
+        vconds = []
+        if color:
+            vconds.append(ProductVariant.color.ilike(color.strip()))
+        if size:
+            vconds.append(ProductVariant.size.ilike(size.strip()))
+        if print_type:
+            vconds.append(ProductVariant.print_type.ilike(print_type.strip()))
+        if sku and sku.strip():
+            like_sku = f"%{sku.strip()}%"
+            vconds.append(
+                or_(
+                    ProductVariant.sku.ilike(like_sku),
+                    ProductVariant.name.ilike(like_sku),
+                )
+            )
+        variant_exists = exists().where(
+            and_(ProductVariant.product_id == Product.id, *vconds)
+        )
+        if sku and sku.strip():
+            like_sku = f"%{sku.strip()}%"
+            query = query.filter(
+                or_(variant_exists, Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
+            )
+        else:
+            query = query.filter(variant_exists)
+    elif sku and sku.strip():
+        like_sku = f"%{sku.strip()}%"
+        query = query.filter(
+            or_(Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
+        )
+
+    if warehouse and warehouse.strip():
+        wh = warehouse.strip()
+        wh_exists = exists().where(
+            and_(
+                WarehouseStock.product_id == Product.id,
+                WarehouseStock.warehouse == wh,
+                WarehouseStock.quantity > 0,
+            )
+        )
+        query = query.filter(or_(Product.warehouse == wh, wh_exists))
+
     products = query.order_by(Product.id.desc()).offset(skip).limit(limit).all()
     items = [_list_item(p) for p in products]
     if critical_only:
         items = [i for i in items if i.is_critical]
+    if in_stock_only:
+        items = [i for i in items if (i.total_stock or i.stock_qty or 0) > 0 or i.product_type == "hizmet"]
     return items
 
 
@@ -241,6 +297,50 @@ def list_brands(
         .all()
     )
     return [r[0] for r in rows if r[0]]
+
+
+@router.get("/variant-facets")
+def variant_facets(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+) -> dict:
+    """Distinct renk / beden / baskı / depo values for stock filter dropdowns (BH parity)."""
+
+    def _distinct(col):
+        rows = (
+            db.query(col)
+            .filter(col.isnot(None), col != "")
+            .distinct()
+            .order_by(col)
+            .all()
+        )
+        return [r[0] for r in rows if r[0] and str(r[0]).strip()]
+
+    colors = _distinct(ProductVariant.color)
+    sizes = _distinct(ProductVariant.size)
+    print_types = _distinct(ProductVariant.print_type)
+    wh_rows = (
+        db.query(Warehouse.name)
+        .filter(Warehouse.is_active.is_(True))
+        .order_by(Warehouse.name)
+        .all()
+    )
+    warehouses = [r[0] for r in wh_rows if r[0]]
+    if not warehouses:
+        wh2 = (
+            db.query(WarehouseStock.warehouse)
+            .filter(WarehouseStock.warehouse.isnot(None), WarehouseStock.warehouse != "")
+            .distinct()
+            .order_by(WarehouseStock.warehouse)
+            .all()
+        )
+        warehouses = [r[0] for r in wh2 if r[0]]
+    return {
+        "colors": colors,
+        "sizes": sizes,
+        "print_types": print_types,
+        "warehouses": warehouses,
+    }
 
 
 @router.get("/stock-summary")
@@ -812,11 +912,17 @@ def product_warehouse_stocks(
     for r in rows:
         variant_name = None
         variant_sku = None
+        color = None
+        size = None
+        print_type = None
         if r.variant_id:
             v = db.get(ProductVariant, r.variant_id)
             if v:
                 variant_name = v.name
                 variant_sku = v.sku
+                color = v.color
+                size = v.size
+                print_type = v.print_type
         out.append(
             {
                 "warehouse": r.warehouse,
@@ -825,6 +931,9 @@ def product_warehouse_stocks(
                 "variant_name": variant_name,
                 "variant_sku": variant_sku,
                 "quantity": int(r.quantity or 0),
+                "color": color,
+                "size": size,
+                "print_type": print_type,
             }
         )
     if not out:
@@ -840,6 +949,9 @@ def product_warehouse_stocks(
                         "variant_name": v.name,
                         "variant_sku": v.sku,
                         "quantity": int(v.stock_qty or 0),
+                        "color": v.color,
+                        "size": v.size,
+                        "print_type": v.print_type,
                     }
                 )
         else:
@@ -851,6 +963,9 @@ def product_warehouse_stocks(
                     "variant_name": None,
                     "variant_sku": None,
                     "quantity": int(product.stock_qty or 0),
+                    "color": None,
+                    "size": None,
+                    "print_type": None,
                 }
             )
     return out

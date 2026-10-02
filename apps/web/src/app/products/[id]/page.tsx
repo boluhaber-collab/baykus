@@ -16,6 +16,13 @@ import StatusFooter from "@/components/StatusFooter";
 import { parseProductDescription } from "@/lib/productMeta";
 import { displaySku } from "@/lib/productLabel";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import StockDetailFilters from "@/components/StockDetailFilters";
+import {
+  EMPTY_STOCK_FILTERS,
+  StockFilterState,
+  collectFacetOptions,
+  filterStockRows,
+} from "@/lib/stockFilters";
 
 type WarehouseStockRow = {
   warehouse: string;
@@ -23,6 +30,9 @@ type WarehouseStockRow = {
   variant_name?: string | null;
   variant_sku?: string | null;
   quantity: number;
+  color?: string | null;
+  size?: string | null;
+  print_type?: string | null;
 };
 
 type PriceRow = {
@@ -58,7 +68,7 @@ export default function ProductDetailPage() {
   const [editing, setEditing] = useState(false);
   const [priceLists, setPriceLists] = useState<ProductPriceListRef[]>([]);
   const [warehouseStocks, setWarehouseStocks] = useState<WarehouseStockRow[]>([]);
-  const [showAllVariants, setShowAllVariants] = useState(false);
+  const [stockFilters, setStockFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
   const [stockModalOpen, setStockModalOpen] = useState(false);
   const [historyLite, setHistoryLite] = useState<ProductHistoryLite | null>(null);
 
@@ -123,16 +133,45 @@ export default function ProductDetailPage() {
   const humanSku = product ? displaySku(product.sku) : null;
   const movements: StockMovement[] = product?.recent_movements || [];
 
+  const variantFacets = useMemo(() => {
+    const fromVariants = collectFacetOptions(product?.variants || []);
+    const fromWh = collectFacetOptions(warehouseStocks);
+    return {
+      colors: Array.from(new Set([...fromVariants.colors, ...fromWh.colors])).sort((a, b) =>
+        a.localeCompare(b, "tr"),
+      ),
+      sizes: Array.from(new Set([...fromVariants.sizes, ...fromWh.sizes])).sort((a, b) =>
+        a.localeCompare(b, "tr"),
+      ),
+      printTypes: Array.from(new Set([...fromVariants.printTypes, ...fromWh.printTypes])).sort(
+        (a, b) => a.localeCompare(b, "tr"),
+      ),
+      warehouses: fromWh.warehouses.length
+        ? fromWh.warehouses
+        : collectFacetOptions(
+            (product?.variants || []).map((v) => ({
+              ...v,
+              warehouse: product?.warehouse || "Ana Depo",
+            })),
+          ).warehouses,
+    };
+  }, [product?.variants, product?.warehouse, warehouseStocks]);
+
   const visibleVariants = useMemo(() => {
     const all = product?.variants || [];
-    if (showAllVariants) return all;
-    return all.filter((v) => Number(v.stock_qty) > 0);
-  }, [product?.variants, showAllVariants]);
+    return filterStockRows(all, stockFilters);
+  }, [product?.variants, stockFilters]);
 
   const visibleWarehouseStocks = useMemo(() => {
-    if (showAllVariants) return warehouseStocks;
-    return warehouseStocks.filter((w) => Number(w.quantity) > 0);
-  }, [warehouseStocks, showAllVariants]);
+    return filterStockRows(
+      warehouseStocks.map((w) => ({
+        ...w,
+        sku: w.variant_sku || undefined,
+        stock_qty: w.quantity,
+      })),
+      stockFilters,
+    );
+  }, [warehouseStocks, stockFilters]);
 
   /** BizimHesap "Tüm Stoklar" — only warehouses+variants with qty>0 */
   const inStockRows = useMemo(
@@ -420,18 +459,9 @@ export default function ProductDetailPage() {
             <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-3">
                 <h2 className="font-semibold text-sm text-slate-800">Varyant Stokları</h2>
-                <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-300"
-                    checked={showAllVariants}
-                    onChange={(e) => setShowAllVariants(e.target.checked)}
-                  />
-                  Tüm varyantlar
-                  {!showAllVariants && zeroVariantCount > 0 ? (
-                    <span className="text-slate-400">({zeroVariantCount} sıfır gizli)</span>
-                  ) : null}
-                </label>
+                {stockFilters.inStockOnly && zeroVariantCount > 0 ? (
+                  <span className="text-xs text-slate-400">({zeroVariantCount} sıfır gizli)</span>
+                ) : null}
               </div>
               <div className="text-xs text-slate-500 flex gap-3">
                 <span>Satış: {formatMoney(Number(product.base_price))}</span>
@@ -445,6 +475,13 @@ export default function ProductDetailPage() {
                   Tüm Stoklar
                 </button>
               </div>
+            </div>
+            <div className="px-3 pt-2">
+              <StockDetailFilters
+                value={stockFilters}
+                onChange={setStockFilters}
+                facets={variantFacets}
+              />
             </div>
             {product.variants?.length > 0 ? (
               visibleVariants.length > 0 ? (
@@ -505,7 +542,7 @@ export default function ProductDetailPage() {
                   <button
                     type="button"
                     className="text-baykus-primary hover:underline"
-                    onClick={() => setShowAllVariants(true)}
+                    onClick={() => setStockFilters((f) => ({ ...f, inStockOnly: false }))}
                   >
                     Tüm varyantları göster
                   </button>
@@ -564,7 +601,7 @@ export default function ProductDetailPage() {
                       <td colSpan={3} className="text-center text-baykus-muted py-4">
                         {warehouseStocks.length === 0
                           ? "Depo stok satırı yok"
-                          : "Stoğu olan depo/varyant yok — «Tüm varyantlar» ile sıfırları gösterin"}
+                          : "Stoğu olan depo/varyant yok — «Stokta olanlar» işaretini kaldırın"}
                       </td>
                     </tr>
                   )}

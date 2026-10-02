@@ -5,6 +5,13 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { displaySku } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
+import StockDetailFilters from "@/components/StockDetailFilters";
+import {
+  EMPTY_STOCK_FILTERS,
+  StockFilterState,
+  collectFacetOptions,
+  filterStockRows,
+} from "@/lib/stockFilters";
 
 type Warehouse = {
   id: number;
@@ -25,6 +32,9 @@ type StockRow = {
   name: string;
   stock_qty: number;
   warehouse: string;
+  color?: string | null;
+  size?: string | null;
+  print_type?: string | null;
 };
 
 const empty = { name: "", code: "", address: "", notes: "", is_active: true, is_default: false };
@@ -42,6 +52,7 @@ export default function WarehousesPage() {
   const [transferNote, setTransferNote] = useState("");
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
+  const [stockFilters, setStockFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
 
   const load = useCallback(async () => {
     setError("");
@@ -59,6 +70,12 @@ export default function WarehousesPage() {
   const targets = useMemo(
     () => items.filter((w) => w.name !== selected?.name && w.is_active),
     [items, selected],
+  );
+
+  const stockFacets = useMemo(() => collectFacetOptions(stock), [stock]);
+  const filteredStock = useMemo(
+    () => filterStockRows(stock, stockFilters),
+    [stock, stockFilters],
   );
 
   async function submit(e: FormEvent) {
@@ -108,8 +125,12 @@ export default function WarehousesPage() {
     setSelected(w);
     setShowTransfer(false);
     setPick(null);
+    setStockFilters({ ...EMPTY_STOCK_FILTERS });
     try {
-      setStock(await apiFetch<StockRow[]>(`/api/stock/warehouses/${w.id}/stock`));
+      // include_zero so client-side «Stokta olanlar» toggle can reveal zeros
+      setStock(
+        await apiFetch<StockRow[]>(`/api/stock/warehouses/${w.id}/stock?include_zero=true`),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Stok yüklenemedi");
     }
@@ -121,7 +142,7 @@ export default function WarehousesPage() {
       setError("Bu depoda transfer edilecek ürün bulunmuyor.");
       return;
     }
-    const first = row || stock[0];
+    const first = row || filteredStock[0] || stock[0];
     setPick(first);
     setTransferQty("1");
     setToWarehouse(targets[0]?.name || "");
@@ -355,7 +376,12 @@ export default function WarehousesPage() {
       {selected && (
         <div className="space-y-2 pb-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">{selected.name} — stok</h3>
+            <h3 className="text-sm font-semibold">
+              {selected.name} — stok
+              <span className="ml-2 text-xs font-normal text-baykus-muted">
+                ({filteredStock.length}/{stock.length})
+              </span>
+            </h3>
             <button
               type="button"
               className="rounded-lg bg-[#ef4444] text-white px-3 py-1.5 text-xs font-bold shadow-sm"
@@ -364,20 +390,32 @@ export default function WarehousesPage() {
               ↗ Depolar Arası Transfer
             </button>
           </div>
+          <StockDetailFilters
+            value={stockFilters}
+            onChange={setStockFilters}
+            facets={stockFacets}
+            hideWarehouse
+          />
           <div className="bk-table-wrap">
             <table className="bk-table">
               <thead>
                 <tr>
                   <th>SKU</th>
+                  <th>Beden</th>
+                  <th>Renk</th>
+                  <th>Baskı</th>
                   <th>Ürün / Varyant</th>
                   <th className="text-right">Adet</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {stock.map((s) => (
+                {filteredStock.map((s) => (
                   <tr key={`${s.product_id}-${s.variant_id}`}>
                     <td className="font-mono text-xs">{displaySku(s.sku) || "—"}</td>
+                    <td className="text-xs">{s.size || "—"}</td>
+                    <td className="text-xs">{s.color || "—"}</td>
+                    <td className="text-xs">{s.print_type || "—"}</td>
                     <td>{s.name}</td>
                     <td className="text-right tabular-nums">{s.stock_qty}</td>
                     <td className="text-right">
@@ -391,10 +429,12 @@ export default function WarehousesPage() {
                     </td>
                   </tr>
                 ))}
-                {stock.length === 0 && (
+                {filteredStock.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="text-center text-baykus-muted py-6">
-                      Bu depoda ürün yok
+                    <td colSpan={7} className="text-center text-baykus-muted py-6">
+                      {stock.length === 0
+                        ? "Bu depoda ürün yok"
+                        : "Filtrelere uyan satır yok"}
                     </td>
                   </tr>
                 )}

@@ -18,6 +18,13 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
+import StockDetailFilters from "@/components/StockDetailFilters";
+import {
+  EMPTY_STOCK_FILTERS,
+  StockFilterState,
+  collectFacetOptions,
+  filterStockRows,
+} from "@/lib/stockFilters";
 
 type SaleType = "perakende" | "yeni" | "kayitli" | "internet" | "teklif";
 
@@ -125,6 +132,7 @@ function CreateSaleInner() {
     depo: string;
     whStocks: Record<string, number>;
   } | null>(null);
+  const [pickFilters, setPickFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
   const [prevPrices, setPrevPrices] = useState<{ lineKey: string; productId: number; productName: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -227,6 +235,7 @@ function CreateSaleInner() {
       const depo = detail.warehouse || defaultDepo;
       const whStocks = await loadWhStocks(Number(pid));
       if (variants.length > 1) {
+        setPickFilters({ ...EMPTY_STOCK_FILTERS });
         setVariantPick({ lineKey, product: prod, detail, variants, depo, whStocks });
         updateLine(lineKey, {
           product_id: pid,
@@ -824,41 +833,67 @@ function CreateSaleInner() {
                 ))}
               </select>
             </div>
-            <div className="max-h-72 overflow-auto p-2 space-y-1">
-              {(() => {
-                const inStock = variantPick.variants.filter(
-                  (v) => stockForVariantAtDepo(v, variantPick.depo, variantPick.whStocks) > 0,
-                );
-                if (!inStock.length) {
-                  return (
-                    <p className="text-sm text-baykus-muted px-2 py-6 text-center">
-                      Bu depoda stoğu olan varyant yok.
-                    </p>
-                  );
-                }
-                return inStock.map((v) => {
-                  const stock = stockForVariantAtDepo(v, variantPick.depo, variantPick.whStocks);
-                  return (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => confirmVariant(v)}
-                      className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-baykus-primary hover:bg-sky-50 transition"
-                    >
-                      <div className="text-sm font-medium">
-                        {[v.color, v.size, v.name].filter(Boolean).join(" / ") || v.sku || `Varyant #${v.id}`}
-                      </div>
-                      <div className="text-xs text-baykus-muted flex justify-between mt-0.5">
-                        <span>
-                          Stok ({variantPick.depo}): {stock}
-                        </span>
-                        <span className="font-semibold text-baykus-text">{formatMoney(Number(v.price || 0))}</span>
-                      </div>
-                    </button>
-                  );
-                });
-              })()}
-            </div>
+            {(() => {
+              const withStock = variantPick.variants.map((v) => ({
+                ...v,
+                stock_qty: stockForVariantAtDepo(v, variantPick.depo, variantPick.whStocks),
+                warehouse: variantPick.depo,
+              }));
+              const facets = {
+                ...collectFacetOptions(withStock),
+                warehouses: warehouses.length
+                  ? warehouses.map((w) => w.name)
+                  : [variantPick.depo].filter(Boolean),
+              };
+              const filtered = filterStockRows(withStock, {
+                ...pickFilters,
+                warehouse: "", // depo already chosen above
+              });
+              return (
+                <>
+                  <StockDetailFilters
+                    compact
+                    hideWarehouse
+                    value={pickFilters}
+                    onChange={setPickFilters}
+                    facets={facets}
+                  />
+                  <div className="max-h-72 overflow-auto p-2 space-y-1">
+                    {!filtered.length ? (
+                      <p className="text-sm text-baykus-muted px-2 py-6 text-center">
+                        Filtrelere uyan / stoğu olan varyant yok.
+                      </p>
+                    ) : (
+                      filtered.map((v) => {
+                        const stock = Number(v.stock_qty || 0);
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => confirmVariant(v)}
+                            className="w-full text-left rounded-lg border border-slate-200 px-3 py-2 hover:border-baykus-primary hover:bg-sky-50 transition"
+                          >
+                            <div className="text-sm font-medium">
+                              {[v.color, v.size, v.print_type, v.name].filter(Boolean).join(" / ") ||
+                                v.sku ||
+                                `Varyant #${v.id}`}
+                            </div>
+                            <div className="text-xs text-baykus-muted flex justify-between mt-0.5">
+                              <span>
+                                Stok ({variantPick.depo}): {stock}
+                              </span>
+                              <span className="font-semibold text-baykus-text">
+                                {formatMoney(Number(v.price || 0))}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

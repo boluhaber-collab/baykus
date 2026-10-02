@@ -649,3 +649,19 @@ Masaüstü `reports.py` + `pdf_logo_ekle` / `pdf_modern_baslik` / `pdf_modern_ku
 | Tedarikçi fiş | `GET /api/suppliers/{id}/voucher-pdf` | done |
 
 Fallback logo: `apps/api/app/static/300x100logo.png`. Settings: `form_logo_dosyasi`, `pdf_alt_baslik`, `web_adresi`.
+
+## Batch 29 — Detaylı stok filtreleri (BizimHesap parity) (2026-10-02)
+
+Kaynak: BizimHesap ürün/varyant UX (renk · beden · baskı · SKU · stokta · depo); canlı sync yok.
+
+| Alan | Web | Durum |
+|------|-----|-------|
+| Ortak filtre UI | `StockDetailFilters` + `lib/stockFilters.ts` | done |
+| Ürün listesi | `/products` — renk/beden/baskı/SKU/depo/stokta · API `variant-facets` + list query | done |
+| Ürün detay Varyant Stokları | `/products/[id]` — aynı filtreler; Depo Bazlı Stok senkron | done |
+| Depo stok | `/stock/warehouses` — filtre + beden/renk/baskı kolonları · `include_zero` | done |
+| Satış / teklif varyant picker | `/sales/create` modal | done |
+| Perakende varyant picker | `/sales/retail/new` modal | done |
+| Alış varyant select | `/purchases/new` kalemler üstü filtre | done |
+| API | `GET /api/products` color/size/print_type/sku/warehouse/in_stock_only · `GET /api/products/variant-facets` · warehouse stock enrich | done |
+
