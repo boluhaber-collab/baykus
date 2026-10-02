@@ -41,27 +41,30 @@ export default function BanksPage() {
   const load = useCallback(async () => {
     setError("");
     try {
+      // Default: active only. Checkbox "Pasif hesapları da göster" fetches full list.
+      const q = showPassive ? "" : "?active=true";
       const [banks, regs] = await Promise.all([
-        apiFetch<BankAccount[]>("/api/finance/banks"),
-        apiFetch<CashRegister[]>("/api/finance/cash"),
+        apiFetch<BankAccount[]>(`/api/finance/banks${q}`),
+        apiFetch<CashRegister[]>(`/api/finance/cash${q}`),
       ]);
       setAccounts(banks);
       setCash(regs);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
-  }, []);
+  }, [showPassive]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  // Belt-and-suspenders: never show passive when checkbox is off (handles stale state).
   const visibleCash = useMemo(
-    () => (showPassive ? cash : cash.filter((r) => r.is_active !== false)),
+    () => (showPassive ? cash : cash.filter((r) => r.is_active)),
     [cash, showPassive],
   );
   const visibleBanks = useMemo(
-    () => (showPassive ? accounts : accounts.filter((a) => a.is_active !== false)),
+    () => (showPassive ? accounts : accounts.filter((a) => a.is_active)),
     [accounts, showPassive],
   );
 
@@ -348,8 +351,8 @@ export default function BanksPage() {
           setOkMsg(msg);
           void load();
         }}
-        cash={cash}
-        banks={accounts}
+        cash={cash.filter((r) => r.is_active)}
+        banks={accounts.filter((a) => a.is_active)}
       />
 
       <StatusFooter onRefresh={load} />

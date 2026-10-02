@@ -613,7 +613,7 @@ Hâlâ bilinçli dışı (OOS): BizimHesap canlı sync; alış create formunda �
 
 | Item | Route / API | Status |
 |------|-------------|--------|
-| Hesaplarım BH layout | `/finance/banks` — + Yeni Hesap Ekle · Pasif toggle · kategori kartları (Kasa/Banka/POS/Ortak/Kart/Veresiye) · cyan header + toplam | done |
+| Hesaplarım BH layout | `/finance/banks` — + Yeni Hesap Ekle · default aktif-only (`?active=true`) · “Pasif hesapları da göster” · kategori kartları (Kasa/Banka/POS/Ortak/Kart/Veresiye) · cyan header + toplam | done |
 | Finans index | `/finance` → redirect `/finance/banks` | done |
 | Para Transferi / Virman | `VirmanModal` on Hesaplarım + account detail; `POST /api/finance/transfers` (cash↔bank, bank↔bank, **cash↔cash**) | done |
 | Kasa ekle | `POST /api/finance/cash` | done |

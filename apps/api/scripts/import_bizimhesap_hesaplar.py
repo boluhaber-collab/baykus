@@ -504,6 +504,7 @@ def upsert_cash_register(db) -> Any:
 
 def upsert_bank_account(db, acc: dict[str, Any]) -> tuple[Any, str]:
     from app.models.finance import BankAccount
+    from app.services.bh_portal_kpis import is_oos_bank_account
 
     tag = f"{BH_NOTE_PREFIX}{acc['key']}"
     existing = None
@@ -538,6 +539,9 @@ def upsert_bank_account(db, acc: dict[str, Any]) -> tuple[Any, str]:
         else:
             atype = "Banka"
 
+    # OOS accounts (FON HESABI etc.) stay/become passive so Hesaplarım hides them by default.
+    active = not is_oos_bank_account(acc.get("name"), notes)
+
     if existing:
         existing.name = acc["name"][:150]
         existing.account_type = atype
@@ -546,7 +550,7 @@ def upsert_bank_account(db, acc: dict[str, Any]) -> tuple[Any, str]:
             existing.iban = acc["iban"][:34]
         existing.currency = "TRY"
         existing.opening_balance = Decimal("0.00")
-        existing.is_active = True
+        existing.is_active = active
         existing.notes = notes[:2000]
         return existing, "updated"
 
@@ -557,7 +561,7 @@ def upsert_bank_account(db, acc: dict[str, Any]) -> tuple[Any, str]:
         iban=(acc.get("iban") or None),
         currency="TRY",
         opening_balance=Decimal("0.00"),
-        is_active=True,
+        is_active=active,
         notes=notes[:2000],
     )
     db.add(row)
