@@ -276,6 +276,24 @@ def _month_net_profit(db: Session, month_start: datetime) -> float:
     return _f(_dec(revenue) - _dec(purchase_cost) - _dec(expenses))
 
 
+
+def _month_expenses(db: Session, month_start: datetime) -> float:
+    from datetime import date as date_cls
+    from calendar import monthrange
+
+    from app.models.expense import Expense
+
+    today = date_cls.today()
+    _, last = monthrange(today.year, today.month)
+    month_end = date_cls(today.year, today.month, last)
+    expenses = (
+        db.query(func.coalesce(func.sum(Expense.amount), 0))
+        .filter(Expense.expense_date >= month_start.date(), Expense.expense_date <= month_end)
+        .scalar()
+    )
+    return _f(expenses)
+
+
 def _delivery_counts(db: Session) -> tuple[int, int, int]:
     """due_today, due_soon (1-3 days), overdue open deliveries."""
     from datetime import date as date_cls, timedelta
@@ -627,6 +645,8 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
     loan_items = _loan_dues(db, within_days=7)
     collections = _collections_today(db, today_start, tomorrow)
     month_profit = _month_net_profit(db, month_start)
+    month_expenses = _month_expenses(db, month_start)
+    month_sales = _f(month_row[1])  # local Baykuş satışları (BH overlay ayrı)
 
     open_workshop = sum(
         int(s.count)
@@ -688,7 +708,7 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         top_selling_product = None
 
     # Live kasa/banka ALWAYS from local cash_movements / bank_movements.
-    # BH portal cache is only used for month ciro / net kâr labels — never for
+    # BH portal cache is only used for month ciro / masraf / net kâr labels — never for
     # cash/bank tiles, otherwise Baykuş satış/tahsilat would not move Ana Sayfa.
     month_revenue = _f(month_row[1])
     cash_out = _f(cash_total)
@@ -702,6 +722,8 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
             month_revenue = _f(bh["orders_month_revenue"])
         if bh.get("month_net_profit") is not None:
             month_profit = _f(bh["month_net_profit"])
+        if bh.get("month_expenses") is not None:
+            month_expenses = _f(bh["month_expenses"])
         if bh.get("month_label"):
             month_label = str(bh["month_label"])
 
@@ -716,6 +738,8 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         internet_sales_today_revenue=_f(net_row[1]),
         internet_sales_today_count=int(net_row[0] or 0),
         month_net_profit=month_profit,
+        month_sales=month_sales,
+        month_expenses=month_expenses,
         month_label=month_label,
         critical_stock_count=critical_count,
         low_stock_items=low_items,

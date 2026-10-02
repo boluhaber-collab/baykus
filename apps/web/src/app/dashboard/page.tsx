@@ -135,6 +135,22 @@ export default function DashboardPage() {
   );
 
   const monthName = data?.month_label || todayLabel.split(" ")[1] || "";
+  const MONTH_LOCATIVE: Record<string, string> = {
+    Ocak: "Ocak'ta",
+    Şubat: "Şubat'ta",
+    Mart: "Mart'ta",
+    Nisan: "Nisan'da",
+    Mayıs: "Mayıs'ta",
+    Haziran: "Haziran'da",
+    Temmuz: "Temmuz'da",
+    Ağustos: "Ağustos'ta",
+    Eylül: "Eylül'de",
+    Ekim: "Ekim'de",
+    Kasım: "Kasım'da",
+    Aralık: "Aralık'ta",
+  };
+  const monthSalesLabel = `${MONTH_LOCATIVE[monthName] || (monthName ? `${monthName}'de` : "Bu ay")} yapılan satışlar`;
+  const monthExpensesLabel = monthName ? `${monthName} ayı masrafları` : "Ay masrafları";
   const fmtUsd = (n: number) =>
     n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -292,14 +308,18 @@ export default function DashboardPage() {
 
       {/* KPI cards — masaüstü: tutar / etiket */}
       {data && (
-        <div className="bk-kpi-strip">
+        <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
           <Link href="/reports/sales" className="bk-dash-kpi" style={{ backgroundColor: "#2563eb" }}>
             <div className="amt">{formatMoney(Number(data.orders_month_revenue))}</div>
             <div className="lbl">{monthName} Cirosu</div>
           </Link>
-          <Link href="/reports/profit" className="bk-dash-kpi" style={{ backgroundColor: "#15803d" }}>
-            <div className="amt">{formatMoney(Number(data.month_net_profit ?? 0))}</div>
-            <div className="lbl">{monthName} Net Kâr</div>
+          <Link href="/sales" className="bk-dash-kpi" style={{ backgroundColor: "#15803d" }}>
+            <div className="amt">{formatMoney(Number(data.month_sales ?? data.orders_month_revenue ?? 0))}</div>
+            <div className="lbl">{monthSalesLabel}</div>
+          </Link>
+          <Link href="/finance/expenses" className="bk-dash-kpi" style={{ backgroundColor: "#7c3aed" }}>
+            <div className="amt">{formatMoney(Number(data.month_expenses ?? 0))}</div>
+            <div className="lbl">{monthExpensesLabel}</div>
           </Link>
           <Link href="/finance/cash" className="bk-dash-kpi" style={{ backgroundColor: "#f59e0b" }}>
             <div className="amt">{formatMoney(Number(data.cash_balance))}</div>

@@ -245,6 +245,8 @@ export type DashboardSummary = {
   internet_sales_today_revenue?: number;
   internet_sales_today_count?: number;
   month_net_profit?: number;
+  month_sales?: number;
+  month_expenses?: number;
   month_label?: string;
   critical_stock_count: number;
   low_stock_items: DashboardLowStock[];

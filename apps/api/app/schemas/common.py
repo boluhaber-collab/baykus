@@ -112,6 +112,8 @@ class DashboardSummary(BaseModel):
     internet_sales_today_revenue: float = 0.0
     internet_sales_today_count: int = 0
     month_net_profit: float = 0.0
+    month_sales: float = 0.0
+    month_expenses: float = 0.0
     month_label: str = ""
 
     # Stock / assets

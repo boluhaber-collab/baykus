@@ -401,7 +401,7 @@ Kaynak ekran görüntüleri: `docs/parity-shots/{sidebar,ana-sayfa,direkt-satisl
 | Özellik | Web | Durum |
 |---------|-----|-------|
 | Sidebar navy + branding | `#151b26` · logo · «baykuş / Baskı Takip Sistemi» · `tek` satırlarda sağ `+` · aktif sol bar · footer Engin KARAKÖZ | done |
-| Ana Sayfa KPI / uyarı | `bk-dash-kpi` (tutar üstte) · `bk-alert-bar` · panel başlık `#151b26` · yoğunluk | done |
+| Ana Sayfa KPI / uyarı | `bk-dash-kpi` (tutar üstte) · dinamik ay: Cirosu · yapılan satışlar · ayı masrafları · Kasa · Banka · `bk-alert-bar` · panel başlık `#151b26` · yoğunluk | done |
 | Direkt Satışlar | `bk-kpi-strip` + ikon · 3× `bk-cta-huge` (perakende / yeni / kayıtlı) · masaüstü renkleri `#c2185b` | done |
 | Perakende Satış Gir | başlık+breadcrumb · Kaydet/Geri PERAKENDE içinde · `bk-btn-desktop-red/orange` · LabelFrame densitesi | done |
 | Kanban / Yaşam çizgisi | `bk-kanban-col` navy head + accent · kart densitesi · StatusFooter · Üretim Akış CTA | done |
