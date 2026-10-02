@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
-from sqlalchemy import func
+from sqlalchemy import and_, exists, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
@@ -23,7 +23,8 @@ from app.models.finance import (
     CashMovement,
 )
 from app.models.order import ORDER_STATUSES, Order
-from app.models.product import Product
+from app.models.product import Product, ProductVariant
+from app.models.warehouse import WarehouseStock
 from app.models.supplier import Purchase, Supplier, SupplierMovement
 from app.models.user import User
 
@@ -455,13 +456,82 @@ def stock_report(
     critical_only: bool = Query(default=False),
     value_basis: Literal["cost", "sale"] = Query(default="cost"),
     format: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    brand: str | None = Query(default=None),
+    product_type: str | None = Query(default=None, alias="type"),
+    active_only: bool = Query(default=True),
+    color: str | None = Query(default=None),
+    size: str | None = Query(default=None),
+    print_type: str | None = Query(default=None),
+    sku: str | None = Query(default=None),
+    warehouse: str | None = Query(default=None),
+    in_stock_only: bool = Query(default=True),
 ):
-    products = (
-        db.query(Product)
-        .options(joinedload(Product.variants))
-        .order_by(Product.name)
-        .all()
-    )
+    """Stok Değeri / Depo Durumu — BH product stock-value list filters."""
+    query = db.query(Product).options(joinedload(Product.variants))
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.filter(
+            (Product.name.ilike(like))
+            | (Product.sku.ilike(like))
+            | (Product.brand.ilike(like))
+            | (Product.category.ilike(like))
+        )
+    if category:
+        query = query.filter(Product.category == category)
+    if brand:
+        query = query.filter(Product.brand == brand)
+    if product_type:
+        query = query.filter(Product.product_type == product_type)
+    if active_only:
+        query = query.filter(Product.is_active.is_(True))
+
+    needs_variant = bool(color or size or print_type or (sku and sku.strip()))
+    if needs_variant:
+        vconds = []
+        if color:
+            vconds.append(ProductVariant.color.ilike(color.strip()))
+        if size:
+            vconds.append(ProductVariant.size.ilike(size.strip()))
+        if print_type:
+            vconds.append(ProductVariant.print_type.ilike(print_type.strip()))
+        if sku and sku.strip():
+            like_sku = f"%{sku.strip()}%"
+            vconds.append(
+                or_(
+                    ProductVariant.sku.ilike(like_sku),
+                    ProductVariant.name.ilike(like_sku),
+                )
+            )
+        variant_exists = exists().where(
+            and_(ProductVariant.product_id == Product.id, *vconds)
+        )
+        if sku and sku.strip():
+            like_sku = f"%{sku.strip()}%"
+            query = query.filter(
+                or_(variant_exists, Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
+            )
+        else:
+            query = query.filter(variant_exists)
+    elif sku and sku.strip():
+        like_sku = f"%{sku.strip()}%"
+        query = query.filter(
+            or_(Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
+        )
+
+    if warehouse and warehouse.strip():
+        wh = warehouse.strip()
+        wh_exists = exists().where(
+            and_(
+                WarehouseStock.product_id == Product.id,
+                WarehouseStock.warehouse == wh,
+                WarehouseStock.quantity > 0,
+            )
+        )
+        query = query.filter(or_(Product.warehouse == wh, wh_exists))
+
+    products = query.order_by(Product.name).all()
 
     rows_out: list[dict] = []
     total_qty = 0
@@ -473,10 +543,24 @@ def stock_report(
         threshold = p.critical_stock_threshold or 0
         unit_cost = _dec(p.cost) if _dec(p.cost) > 0 else _dec(p.purchase_price)
         unit_sale = _dec(p.base_price)
+        row_wh = (warehouse.strip() if warehouse and warehouse.strip() else None) or p.warehouse
 
         if p.variants:
             for v in p.variants:
+                if color and (v.color or "").strip().lower() != color.strip().lower():
+                    continue
+                if size and (v.size or "").strip().lower() != size.strip().lower():
+                    continue
+                if print_type and (v.print_type or "").strip().lower() != print_type.strip().lower():
+                    continue
+                if sku and sku.strip():
+                    needle = sku.strip().lower()
+                    hay = f"{v.sku or ''} {v.name or ''} {p.sku or ''} {p.name or ''}".lower()
+                    if needle not in hay:
+                        continue
                 qty = int(v.stock_qty or 0)
+                if in_stock_only and qty <= 0:
+                    continue
                 is_crit = qty < threshold
                 v_sale = _dec(v.price) if _dec(v.price) > 0 else unit_sale
                 val_cost = unit_cost * qty
@@ -497,7 +581,11 @@ def stock_report(
                         "variant_id": v.id,
                         "variant_name": v.name,
                         "category": p.category,
-                        "warehouse": p.warehouse,
+                        "brand": p.brand,
+                        "warehouse": row_wh,
+                        "color": v.color,
+                        "size": v.size,
+                        "print_type": v.print_type,
                         "qty": qty,
                         "threshold": threshold,
                         "is_critical": is_crit,
@@ -510,7 +598,16 @@ def stock_report(
                     }
                 )
         else:
+            if color or size or print_type:
+                continue
             qty = int(p.stock_qty or 0)
+            if in_stock_only and qty <= 0 and p.product_type != "hizmet":
+                continue
+            if sku and sku.strip():
+                needle = sku.strip().lower()
+                hay = f"{p.sku or ''} {p.name or ''}".lower()
+                if needle not in hay:
+                    continue
             is_crit = qty < threshold
             val_cost = unit_cost * qty
             val_sale = unit_sale * qty
@@ -530,7 +627,11 @@ def stock_report(
                     "variant_id": None,
                     "variant_name": None,
                     "category": p.category,
-                    "warehouse": p.warehouse,
+                    "brand": p.brand,
+                    "warehouse": row_wh,
+                    "color": None,
+                    "size": None,
+                    "print_type": None,
                     "qty": qty,
                     "threshold": threshold,
                     "is_critical": is_crit,
@@ -543,20 +644,25 @@ def stock_report(
                 }
             )
 
+    filtered_value = sum((_dec(r["value"]) for r in rows_out), Decimal("0"))
     summary = {
         "row_count": len(rows_out),
-        "total_qty": total_qty if not critical_only else sum(r["qty"] for r in rows_out),
-        "total_value_cost": _f(total_value_cost),
-        "total_value_sale": _f(total_value_sale),
-        "total_value": _f(total_value_cost if value_basis == "cost" else total_value_sale),
-        "critical_count": critical_count,
+        "total_qty": sum(r["qty"] for r in rows_out),
+        "total_value_cost": _f(sum((_dec(r["unit_cost"]) * r["qty"] for r in rows_out), Decimal("0"))),
+        "total_value_sale": _f(sum((_dec(r["unit_sale"]) * r["qty"] for r in rows_out), Decimal("0"))),
+        "total_value": _f(filtered_value),
+        "critical_count": sum(1 for r in rows_out if r["is_critical"]),
         "value_basis": value_basis,
         "critical_only": critical_only,
+        "in_stock_only": in_stock_only,
+        "active_only": active_only,
         "assumptions": [
+            "BH Stok Değeri filtreleri: aktif, kategori, marka, tür, renk/beden/baskı, depo, SKU, stokta.",
             "Maliyet birimi: product.cost; yoksa purchase_price.",
             "Satış birimi: varyant.price (varsa) yoksa product.base_price.",
             "Kritik: qty < critical_stock_threshold.",
             "Değer = miktar × birim (seçilen baz).",
+            "Varsayılan: aktif ürünler + stokta olanlar (BH ürün stok listesi).",
         ],
     }
 
@@ -566,6 +672,10 @@ def stock_report(
             "Ürün",
             "Varyant",
             "Kategori",
+            "Marka",
+            "Renk",
+            "Beden",
+            "Baskı",
             "Depo",
             "Miktar",
             "Eşik",
@@ -581,6 +691,10 @@ def stock_report(
                 r["name"],
                 r["variant_name"] or "",
                 r["category"] or "",
+                r.get("brand") or "",
+                r.get("color") or "",
+                r.get("size") or "",
+                r.get("print_type") or "",
                 r["warehouse"] or "",
                 r["qty"],
                 r["threshold"],

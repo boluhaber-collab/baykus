@@ -665,3 +665,14 @@ Kaynak: BizimHesap ürün/varyant UX (renk · beden · baskı · SKU · stokta �
 | Alış varyant select | `/purchases/new` kalemler üstü filtre | done |
 | API | `GET /api/products` color/size/print_type/sku/warehouse/in_stock_only · `GET /api/products/variant-facets` · warehouse stock enrich | done |
 
+## Batch 30 — Ana Sayfa Stok Değeri + BH stok/değer filtreleri (2026-10-02)
+
+Kaynak: BH newportal KPI (`lblInventory` → `/web/ngn/rep/ngninventorystatusreport?rc=1`); ürün listesi filtreleri (`docs/parity-shots/product-list-*.png`) + `StockDetailFilters`. Canlı BH alt sayfalar abonelik bitişi (402 / portal redirect) nedeniyle scrape edilemedi; kart hedef URL + kayıtlı HTML + ürün listesi ekran görüntüleri kullanıldı.
+
+| Alan | Web | Durum |
+|------|-----|-------|
+| Ana Sayfa KPI | Ciro · Masraflar · **Stok Değeri** (tıklanınca `/reports/stock`) · satışlar · kasa · banka | done |
+| Stok Değeri sayfası | `/reports/stock` — Aktif/Tümü · kategori · marka · tür · Ara + renk/beden/baskı/depo/SKU/stokta · değer baz | done |
+| API | `GET /api/reports/stock` — active_only · q · category · brand · type · color/size/print_type/sku/warehouse/in_stock_only | done |
+| PERFORMANS / VARLIKLAR | Stok Değeri linkleri `/reports/stock` | done |
+

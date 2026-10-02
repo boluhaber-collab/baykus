@@ -306,20 +306,24 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* KPI cards — masaüstü: tutar / etiket */}
+      {/* KPI cards — BH: Ciro · Masraflar · Stok Değeri (+ satışlar/kasa/banka) */}
       {data && (
-        <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
-          <Link href="/reports/sales" className="bk-dash-kpi" style={{ backgroundColor: "#2563eb" }}>
+        <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
+          <Link href="/reports/sales" className="bk-dash-kpi" style={{ backgroundColor: "#7c3aed" }}>
             <div className="amt">{formatMoney(Number(data.orders_month_revenue))}</div>
             <div className="lbl">{monthName} Cirosu</div>
+          </Link>
+          <Link href="/finance/expenses" className="bk-dash-kpi" style={{ backgroundColor: "#dc2626" }}>
+            <div className="amt">{formatMoney(Number(data.month_expenses ?? 0))}</div>
+            <div className="lbl">{monthExpensesLabel}</div>
+          </Link>
+          <Link href="/reports/stock" className="bk-dash-kpi" style={{ backgroundColor: "#2563eb" }}>
+            <div className="amt">{formatMoney(Number(data.stock_value ?? 0))}</div>
+            <div className="lbl">Stok Değeri</div>
           </Link>
           <Link href="/sales" className="bk-dash-kpi" style={{ backgroundColor: "#15803d" }}>
             <div className="amt">{formatMoney(Number(data.month_sales ?? data.orders_month_revenue ?? 0))}</div>
             <div className="lbl">{monthSalesLabel}</div>
-          </Link>
-          <Link href="/finance/expenses" className="bk-dash-kpi" style={{ backgroundColor: "#7c3aed" }}>
-            <div className="amt">{formatMoney(Number(data.month_expenses ?? 0))}</div>
-            <div className="lbl">{monthExpensesLabel}</div>
           </Link>
           <Link href="/finance/cash" className="bk-dash-kpi" style={{ backgroundColor: "#f59e0b" }}>
             <div className="amt">{formatMoney(Number(data.cash_balance))}</div>
@@ -471,8 +475,10 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-baykus-muted border-t border-baykus-line pt-2">
                   Geciken Teslim: {data.overdue_deliveries_count ?? 0} | Bugün Teslim:{" "}
-                  {data.due_today_count ?? 0} | Stok Değeri:{" "}
-                  {formatMoney(Number(data.stock_value ?? 0))}
+                  {data.due_today_count ?? 0} |{" "}
+                  <Link href="/reports/stock" className="font-semibold text-baykus-primary hover:underline">
+                    Stok Değeri: {formatMoney(Number(data.stock_value ?? 0))}
+                  </Link>
                 </div>
               </div>
             </div>
