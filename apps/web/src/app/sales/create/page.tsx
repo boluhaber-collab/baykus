@@ -119,7 +119,8 @@ function CreateSaleInner() {
   const [channel, setChannel] = useState<string>("internet");
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [veresiye, setVeresiye] = useState(false);
+  // Kayıtlı müşteri: varsayılan veresiye (kapora yok → Sipariş Alındı, kasa/banka yok).
+  const [veresiye, setVeresiye] = useState(mappedInitial === "kayitli");
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [productQ, setProductQ] = useState("");
@@ -141,6 +142,12 @@ function CreateSaleInner() {
   useEffect(() => {
     setSaleType(normalizeType(search.get("type")));
   }, [search]);
+
+  // Tip değişince: kayıtlı → veresiye açık; perakende/yeni → kapora alanı hazır
+  useEffect(() => {
+    setVeresiye(saleType === "kayitli");
+    setPayRows([]);
+  }, [saleType]);
 
   useEffect(() => {
     Promise.all([
@@ -425,7 +432,7 @@ function CreateSaleInner() {
       setMsg(
         paidNow
           ? "Satış tamamlandı · stok↓ · cari + kasa/banka işlendi"
-          : "Satış kaydedildi · veresiye (sipariş akışı)",
+          : "Satış kaydedildi · Sipariş Alındı · cari borç (kasa/banka yok)",
       );
       router.push(paidNow ? `/customers/${cid}` : `/orders/${created.id}`);
     } catch (err) {
@@ -766,13 +773,13 @@ function CreateSaleInner() {
                 checked={veresiye}
                 onChange={(e) => setVeresiye(e.target.checked)}
               />
-              Veresiye (kapora yok · cari borç + stok↓)
+              Veresiye / sonra tahsilat (kapora yok · kasa/banka yok · cari borç + stok↓)
             </label>
             {!veresiye && (
               <SplitPaymentRows
                 expectedTotal={linesTotal}
                 mode="tahsilat"
-                autoFill
+                autoFill={false}
                 dense
                 onChange={setPayRows}
               />
@@ -789,9 +796,9 @@ function CreateSaleInner() {
                 Kalan: <strong className="tabular-nums text-red-700">{formatMoney(remaining)}</strong>
               </div>
               <div className="text-[10px] text-baykus-muted">
-                {veresiye
-                  ? "Veresiye: kapora yok · cari borç + stok↓"
-                  : "Çoklu kasa/banka kapora · stok↓"}
+                {veresiye || payAmountNum <= 0
+                  ? "Ödeme yok → Sipariş Alındı · cari borç + stok↓ · kasa/banka işlenmez (tahsilatı sonra girin)"
+                  : "Kapora > 0 → kasa/banka tahsilat + Teslim Edildi"}
               </div>
             </div>
           </fieldset>

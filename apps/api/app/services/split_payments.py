@@ -181,7 +181,10 @@ def post_finance_lines(
     bank_type = "deposit" if direction == "in" else "withdrawal"
     n = 0
     for idx, line in enumerate(lines, start=1):
-        amt = line["amount"]
+        amt = _dec(line.get("amount"))
+        # Never create kasa/banka rows for zero/empty payments (unpaid / deferred sales).
+        if amt <= 0:
+            continue
         line_note = note if len(lines) == 1 else f"{note} ({idx}/{len(lines)})"
         # finance_method=bank with no bank_account_id used to fall through to cash
         # because bank_account_id was None — honor method/prefer instead.

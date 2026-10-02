@@ -559,7 +559,8 @@ def create_order(
 
     _apply_sale_side_effects(db, order, user)
 
-    # Kapora / split deposit
+    # Kapora / split deposit — only when explicit payment amount > 0.
+    # Unpaid / deferred (Sipariş Alındı, veresiye): cari sale debit only; do NOT touch kasa/banka.
     from datetime import date as date_cls
     from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
 
@@ -574,8 +575,19 @@ def create_order(
             finance_method="cash",
             method="kapora",
         )
+    else:
+        deposit_lines = []
 
-    if deposit_lines and order.deposit_amount and order.deposit_amount > 0:
+    # Drop any zero/empty lines; unpaid sales must not invent cash movements.
+    deposit_lines = [ln for ln in (deposit_lines or []) if _dec(ln.get("amount")) > 0]
+    dep_paid = lines_total(deposit_lines) if deposit_lines else Decimal("0")
+    if dep_paid <= 0:
+        deposit_lines = []
+        order.deposit_amount = Decimal("0")
+    elif order.deposit_amount <= 0:
+        order.deposit_amount = dep_paid
+
+    if deposit_lines and dep_paid > 0:
         note = f"Kapora {order.order_number}"
         mov_date = date_cls.today()
         for idx, line in enumerate(deposit_lines, start=1):
@@ -620,7 +632,7 @@ def create_order(
             )
 
     # Paid retail-style (kapora/tahsilat): skip workflow → Teslim Edildi + tasarım onay
-    paid = bool(deposit_lines) and order.deposit_amount and order.deposit_amount > 0
+    paid = bool(deposit_lines) and dep_paid > 0
     if paid and order.status != "Sipariş İptali":
         if order.status != "Teslim Edildi":
             order.status = "Teslim Edildi"
