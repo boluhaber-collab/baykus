@@ -18,7 +18,36 @@ const PERIODS = [
 
 const STATUS_CHIPS = ["Tümü", "Ödenmiş", "Ödenecek", "Gecikmiş"] as const;
 
+
 const MASRAF_GRUPLARI = ["Araç Giderleri", "İşletme Giderleri", "Mali Giderler", "Personel Giderleri", "Diğer Giderler"] as const;
+
+function categoryGroup(c: ExpenseCategory): string {
+  return c.group_name || "İşletme Giderleri";
+}
+
+/** BizimHesap-style: parent optgroup labels, child name only under each. */
+function groupCategories(cats: ExpenseCategory[]): { group: string; items: ExpenseCategory[] }[] {
+  const active = cats.filter((c) => c.is_active !== false);
+  const map = new Map<string, ExpenseCategory[]>();
+  for (const c of active) {
+    const g = categoryGroup(c);
+    const list = map.get(g) || [];
+    list.push(c);
+    map.set(g, list);
+  }
+  const ordered: { group: string; items: ExpenseCategory[] }[] = [];
+  for (const g of MASRAF_GRUPLARI) {
+    const items = map.get(g);
+    if (items?.length) {
+      ordered.push({ group: g, items: [...items].sort((a, b) => a.name.localeCompare(b.name, "tr")) });
+      map.delete(g);
+    }
+  }
+  for (const [g, items] of [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "tr"))) {
+    ordered.push({ group: g, items: [...items].sort((a, b) => a.name.localeCompare(b.name, "tr")) });
+  }
+  return ordered;
+}
 
 function periodFrom(key: string): string | "" {
   const today = new Date();
@@ -313,7 +342,7 @@ export default function ExpensesPage() {
               </thead>
               <tbody>
                 {MASRAF_GRUPLARI.flatMap((g) => {
-                  const items = categories.filter((c) => (c.group_name || "İşletme Giderleri") === g);
+                  const items = categories.filter((c) => categoryGroup(c) === g);
                   return [
                     <tr key={`g-${g}`} className="bg-slate-100">
                       <td colSpan={4} className="font-bold text-slate-700">
@@ -332,7 +361,7 @@ export default function ExpensesPage() {
                             onClick={() => {
                               setEditCatId(c.id);
                               setCatName(c.name);
-                              setCatGroup(c.group_name || "İşletme Giderleri");
+                              setCatGroup(categoryGroup(c));
                               setCatDesc(c.description || "");
                             }}
                           >
@@ -350,7 +379,7 @@ export default function ExpensesPage() {
                   ];
                 })}
                 {categories
-                  .filter((c) => !MASRAF_GRUPLARI.includes((c.group_name || "İşletme Giderleri") as (typeof MASRAF_GRUPLARI)[number]))
+                  .filter((c) => !MASRAF_GRUPLARI.includes(categoryGroup(c) as (typeof MASRAF_GRUPLARI)[number]))
                   .map((c) => (
                     <tr key={c.id}>
                       <td>
@@ -386,12 +415,17 @@ export default function ExpensesPage() {
           value={form.category_id}
           onChange={(e) => setForm({ ...form, category_id: e.target.value })}
           required
+          title="Ana masraf grubu altında alt kalem"
         >
-          <option value="">Masraf kalemi</option>
-          {categories.filter((c) => c.is_active !== false).map((c) => (
-            <option key={c.id} value={c.id}>
-              {(c.group_name || "İşletme Giderleri") + " / " + c.name}
-            </option>
+          <option value="">Masraf kalemi seçin</option>
+          {groupCategories(categories).map((g) => (
+            <optgroup key={g.group} label={g.group}>
+              {g.items.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
         <input
@@ -563,7 +597,12 @@ export default function ExpensesPage() {
                   <td className="text-xs whitespace-nowrap">{e.expense_date}</td>
                   <td className="text-xs">{e.document_no || "—"}</td>
                   <td className="text-xs">{e.due_date || "—"}</td>
-                  <td className="font-medium text-sm">{e.category_name || "—"}</td>
+                  <td className="font-medium text-sm">
+                    <div>{e.category_name || "—"}</div>
+                    {e.category_group_name ? (
+                      <div className="text-[10px] font-normal text-slate-400">{e.category_group_name}</div>
+                    ) : null}
+                  </td>
                   <td className="text-xs">
                     {e.payment_method === "banka"
                       ? e.bank_account_name || "Banka"

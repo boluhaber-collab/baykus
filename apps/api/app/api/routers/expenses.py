@@ -56,6 +56,7 @@ def _out(e: Expense, db: Session | None = None) -> ExpenseOut:
         id=e.id,
         category_id=e.category_id,
         category_name=e.category.name if e.category else None,
+        category_group_name=(e.category.group_name if e.category else None),
         amount=e.amount,
         expense_date=e.expense_date,
         due_date=getattr(e, "due_date", None),
@@ -126,7 +127,11 @@ def list_categories(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*READ)),
 ) -> list[ExpenseCategoryOut]:
-    rows = db.query(ExpenseCategory).order_by(ExpenseCategory.name).all()
+    rows = (
+        db.query(ExpenseCategory)
+        .order_by(ExpenseCategory.group_name.asc(), ExpenseCategory.name.asc())
+        .all()
+    )
     return [ExpenseCategoryOut.model_validate(r) for r in rows]
 
 
@@ -228,6 +233,7 @@ def list_expenses(
             in " ".join(
                 [
                     str(r.category_name or ""),
+                    str(r.category_group_name or ""),
                     str(r.note or ""),
                     str(r.document_no or ""),
                     str(r.payment_method or ""),

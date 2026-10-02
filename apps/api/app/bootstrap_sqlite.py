@@ -85,6 +85,16 @@ def bootstrap() -> None:
             if "group_name" not in eccols:
                 conn.execute(text("ALTER TABLE expense_categories ADD COLUMN group_name VARCHAR(100) DEFAULT 'İşletme Giderleri'"))
                 print("  + expense_categories.group_name")
+            else:
+                # Backfill null/blank parent groups so UI optgroups work (BizimHesap hierarchy)
+                r = conn.execute(
+                    text(
+                        "UPDATE expense_categories SET group_name = 'İşletme Giderleri' "
+                        "WHERE group_name IS NULL OR TRIM(group_name) = ''"
+                    )
+                )
+                if r.rowcount:
+                    print(f"  ~ expense_categories.group_name backfill ({r.rowcount})")
         if "expenses" in insp.get_table_names():
             ecols = {c["name"] for c in insp.get_columns("expenses")}
             if "due_date" not in ecols:

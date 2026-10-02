@@ -55,6 +55,7 @@ class ExpenseOut(BaseModel):
     id: int
     category_id: int
     category_name: str | None = None
+    category_group_name: str | None = None
     amount: Decimal
     expense_date: date
     due_date: date | None = None

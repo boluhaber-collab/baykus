@@ -983,6 +983,7 @@ export type Expense = {
   id: number;
   category_id: number;
   category_name?: string | null;
+  category_group_name?: string | null;
   amount: number;
   expense_date: string;
   due_date?: string | null;
