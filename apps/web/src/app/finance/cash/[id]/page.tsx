@@ -12,6 +12,7 @@ import {
   apiFetch,
 } from "@/lib/api";
 import { CASH_HAREKET_LABELS } from "@/lib/bhNote";
+import { localToday } from "@/lib/dates";
 
 type Panel = "none" | "update" | "in" | "out";
 
@@ -31,7 +32,7 @@ export default function CashDetailPage() {
   const [editActive, setEditActive] = useState(true);
 
   const [formAmount, setFormAmount] = useState("");
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formDate, setFormDate] = useState(() => localToday());
   const [formNote, setFormNote] = useState("");
   const [formTypeOut, setFormTypeOut] = useState<"odeme" | "gider">("odeme");
 

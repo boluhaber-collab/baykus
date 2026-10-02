@@ -402,11 +402,15 @@ def _purge_order_ledger(db: Session, order: Order, user: User, *, restore_stock:
         db.delete(p)
 
 
-def _apply_sale_side_effects(db: Session, order: Order, user: User) -> None:
+def _apply_sale_side_effects(
+    db: Session, order: Order, user: User, mov_date: date | None = None
+) -> None:
     """Stok düşümü (stoklu varyant/ürün) + cari satış hareketi."""
     from datetime import date as date_cls
     from app.models.customer import CariMovement
     from app.models.product import Product, ProductVariant, StockMovement
+
+    mov_date = mov_date or date_cls.today()
 
     # 1) Stok
     for line in order.lines:
@@ -464,7 +468,7 @@ def _apply_sale_side_effects(db: Session, order: Order, user: User) -> None:
                 movement_type="sale",
                 debit=order.total_amount,
                 credit=Decimal("0"),
-                movement_date=date_cls.today(),
+                movement_date=mov_date,
                 order_id=order.id,
                 note=f"Satış {order.order_number}",
             )
@@ -557,11 +561,18 @@ def create_order(
     db.flush()
     _replace_lines(order, payload.lines)
 
-    _apply_sale_side_effects(db, order, user)
+    # İşlem tarihi: explicit movement_date, else delivery_date, else bugün (geçmiş tarih serbest)
+    from datetime import date as date_cls
+    mov_date = (
+        getattr(payload, "movement_date", None)
+        or getattr(payload, "delivery_date", None)
+        or date_cls.today()
+    )
+
+    _apply_sale_side_effects(db, order, user, mov_date=mov_date)
 
     # Kapora / split deposit — only when explicit payment amount > 0.
     # Unpaid / deferred (Sipariş Alındı, veresiye): cari sale debit only; do NOT touch kasa/banka.
-    from datetime import date as date_cls
     from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
 
     deposit_lines = normalize_payment_lines(payments=getattr(payload, "payments", None))
@@ -589,7 +600,6 @@ def create_order(
 
     if deposit_lines and dep_paid > 0:
         note = f"Kapora {order.order_number}"
-        mov_date = date_cls.today()
         for idx, line in enumerate(deposit_lines, start=1):
             line_note = note if len(deposit_lines) == 1 else f"{note} ({idx}/{len(deposit_lines)})"
             method = line.get("method") or ("eft" if line.get("bank_account_id") else "kapora")
@@ -643,7 +653,7 @@ def create_order(
         ):
             order.design_status = "Onaylandı"
         if not order.delivery_date:
-            order.delivery_date = date_cls.today()
+            order.delivery_date = mov_date
         if not order.design_approved_at:
             order.design_approved_at = datetime.utcnow()
 

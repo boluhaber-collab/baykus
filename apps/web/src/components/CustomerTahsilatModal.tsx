@@ -7,6 +7,7 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
+import { localToday } from "@/lib/dates";
 
 type Props = {
   customerId: number;
@@ -26,7 +27,7 @@ export default function CustomerTahsilatModal({
   onSaved,
 }: Props) {
   const [note, setNote] = useState("Müşteri tahsilatı");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => localToday());
   const [applyOrders, setApplyOrders] = useState(true);
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [busy, setBusy] = useState(false);
@@ -36,7 +37,7 @@ export default function CustomerTahsilatModal({
   useEffect(() => {
     if (!open) return;
     setNote("Müşteri tahsilatı");
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(localToday());
     setApplyOrders(true);
     setError("");
     setPayRows([]);

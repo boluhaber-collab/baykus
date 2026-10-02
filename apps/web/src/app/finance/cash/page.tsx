@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { localToday } from "@/lib/dates";
 
 const CASH_TYPES = [
   { value: "tahsilat", label: "Tahsilat" },
@@ -23,7 +24,7 @@ const CASH_TYPES = [
 ];
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 export default function CashPage() {

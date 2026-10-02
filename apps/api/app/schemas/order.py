@@ -68,6 +68,8 @@ class OrderCreate(BaseModel):
     notes: str | None = None
     due_date: date | None = None
     delivery_date: date | None = None
+    # Satış / tahsilat işlem tarihi — geçmiş tarih serbest (boş = bugün)
+    movement_date: date | None = None
     channel: str = "mağaza"
     design_status: str = DEFAULT_DESIGN_STATUS
     design_notes: str | None = None
@@ -199,6 +201,7 @@ class PaymentCreate(BaseModel):
     amount: Decimal | None = Field(default=None, gt=0)
     method: str = Field(default="nakit", max_length=50)
     notes: str | None = None
+    # Geçmiş tarihli tahsilat serbest; None = şimdi
     paid_at: datetime | None = None
     post_to_cari: bool = True
     post_to_finance: bool = True

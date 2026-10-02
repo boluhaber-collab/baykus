@@ -18,6 +18,7 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
+import { localToday } from "@/lib/dates";
 import StockDetailFilters from "@/components/StockDetailFilters";
 import {
   EMPTY_STOCK_FILTERS,
@@ -118,6 +119,7 @@ function CreateSaleInner() {
   const [newCompany, setNewCompany] = useState("");
   const [channel, setChannel] = useState<string>("internet");
   const [notes, setNotes] = useState("");
+  const [saleDate, setSaleDate] = useState(() => localToday());
   const [dueDate, setDueDate] = useState("");
   // Kayıtlı müşteri: varsayılan veresiye (kapora yok → Sipariş Alındı, kasa/banka yok).
   const [veresiye, setVeresiye] = useState(mappedInitial === "kayitli");
@@ -421,7 +423,8 @@ function CreateSaleInner() {
           channel: orderChannel,
           design_status: paidNow ? "Onaylandı" : "Bekliyor",
           due_date: dueDate || null,
-          delivery_date: paidNow ? dueDate || new Date().toISOString().slice(0, 10) : null,
+          delivery_date: paidNow ? dueDate || saleDate || localToday() : null,
+          movement_date: saleDate || localToday(),
           deposit_amount: amount > 0 ? amount : 0,
           discount_amount: 0,
           lines: payloadLines,
@@ -587,6 +590,17 @@ function CreateSaleInner() {
               </div>
             )}
 
+            {saleType !== "teklif" && (
+              <div>
+                <label className="block text-[11px] text-baykus-muted mb-0.5">İşlem tarihi</label>
+                <input
+                  type="date"
+                  className="bk-input"
+                  value={saleDate}
+                  onChange={(e) => setSaleDate(e.target.value)}
+                />
+              </div>
+            )}
             <div>
               <label className="block text-[11px] text-baykus-muted mb-0.5">
                 {saleType === "teklif" ? "Geçerlilik" : "Teslim tarihi"}

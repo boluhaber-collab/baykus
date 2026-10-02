@@ -12,6 +12,7 @@ import {
   apiFetch,
 } from "@/lib/api";
 import { BANK_HAREKET_LABELS, sanitizeDisplayNote } from "@/lib/bhNote";
+import { localToday } from "@/lib/dates";
 
 type Panel = "none" | "update" | "in" | "out";
 
@@ -37,7 +38,7 @@ export default function BankDetailPage() {
 
   // Para giriş/çıkış
   const [formAmount, setFormAmount] = useState("");
-  const [formDate, setFormDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [formDate, setFormDate] = useState(() => localToday());
   const [formNote, setFormNote] = useState("");
 
   const load = useCallback(async () => {

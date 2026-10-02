@@ -1,4 +1,3 @@
-  const [pickFilters, setPickFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
 "use client";
 
 import Link from "next/link";
@@ -17,6 +16,7 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
+import { localToday } from "@/lib/dates";
 import StockDetailFilters from "@/components/StockDetailFilters";
 import {
   EMPTY_STOCK_FILTERS,
@@ -40,10 +40,7 @@ type CartLine = {
 };
 
 function todayDateInput(): string {
-  const d = new Date();
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
+  return localToday();
 }
 
 function nowTime(): string {
@@ -69,6 +66,7 @@ export default function PerakendeSatisGirPage() {
     detail: ProductDetail;
     variants: ProductVariant[];
   } | null>(null);
+  const [pickFilters, setPickFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
 
   const loadMeta = useCallback(async () => {
     try {
@@ -236,6 +234,7 @@ export default function PerakendeSatisGirPage() {
           design_status: "Bekliyor",
           due_date: delivered ? tarih : null,
           delivery_date: delivered ? tarih : null,
+          movement_date: tarih || localToday(),
           deposit_amount: tahsilatNum > 0 ? tahsilatNum : 0,
           discount_amount: 0,
           lines: cart.map((l) => ({

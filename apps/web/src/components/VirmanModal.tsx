@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { BankAccount, CashRegister, apiFetch, formatMoney } from "@/lib/api";
+import { localToday } from "@/lib/dates";
 
 export type VirmanAccountRef =
   | { kind: "cash"; id: number; name: string; balance: number }
@@ -40,7 +41,7 @@ export default function VirmanModal({
   const [fromKey, setFromKey] = useState("");
   const [toKey, setToKey] = useState("");
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => localToday());
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -51,7 +52,7 @@ export default function VirmanModal({
     setError("");
     setAmount("");
     setNote("");
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(localToday());
     let cancelled = false;
 
     async function ensureAccounts() {

@@ -20,6 +20,7 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
+import { localToday } from "@/lib/dates";
 import CustomerDevirModal from "@/components/CustomerDevirModal";
 import StatementPdfDateModal from "@/components/StatementPdfDateModal";
 import StatusFooter from "@/components/StatusFooter";
@@ -53,7 +54,7 @@ export default function CustomerDetailPage() {
 
   const [payType, setPayType] = useState<"payment" | "deposit" | "adjustment" | "sale">("payment");
   const [payAmount, setPayAmount] = useState("");
-  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(() => localToday());
   const [payNote, setPayNote] = useState("");
   const [paySide, setPaySide] = useState<"debit" | "credit">("credit");
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);

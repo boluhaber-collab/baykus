@@ -23,9 +23,10 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
+import { dateToPaidAt, localToday } from "@/lib/dates";
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 function fmtDt(v?: string | null): string {
@@ -49,6 +50,7 @@ export default function OrderDetailPage() {
   const [uploading, setUploading] = useState(false);
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [payNotes, setPayNotes] = useState("");
+  const [payDate, setPayDate] = useState(() => localToday());
   const [postCari, setPostCari] = useState(true);
   const [postFinance, setPostFinance] = useState(true);
   const [payBusy, setPayBusy] = useState(false);
@@ -278,6 +280,7 @@ export default function OrderDetailPage() {
           amount,
           method: payments.length > 1 ? "çoklu" : payments[0]!.method || "nakit",
           notes: payNotes.trim() || null,
+          paid_at: dateToPaidAt(payDate),
           post_to_cari: postCari,
           post_to_finance: postFinance,
           payments,
@@ -285,6 +288,7 @@ export default function OrderDetailPage() {
       });
       setOrder(updated);
       setPayNotes("");
+      setPayDate(localToday());
       setPayRows([]);
       setPayResetKey((k) => k + 1);
       setOkMsg("Tahsilat kaydedildi");
@@ -593,6 +597,15 @@ export default function OrderDetailPage() {
                 <span className="text-xs text-baykus-muted">
                   Kalan {formatMoney(Number(order.remaining_amount))}
                 </span>
+              </div>
+              <div>
+                <label className="block text-[11px] text-baykus-muted mb-1">Tarih</label>
+                <input
+                  type="date"
+                  className="bk-input max-w-[11rem]"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value)}
+                />
               </div>
               <SplitPaymentRows
                 key={payResetKey}

@@ -23,6 +23,7 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
+import { localToday } from "@/lib/dates";
 import {
   belgeFromNote, detailFromBhNote, hareketLabel, isBhImportNote, sanitizeDisplayNote,
 } from "@/lib/bhNote";
@@ -47,7 +48,7 @@ export default function SupplierDetailPage() {
 
   const [payType, setPayType] = useState<"payment" | "adjustment" | "purchase">("payment");
   const [payAmount, setPayAmount] = useState("");
-  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(() => localToday());
   const [payNote, setPayNote] = useState("");
   const [paySide, setPaySide] = useState<"debit" | "credit">("credit");
   const [postFinance, setPostFinance] = useState(true);
@@ -320,7 +321,7 @@ export default function SupplierDetailPage() {
       const p = new URLSearchParams({
         tip,
         amount: String(amount),
-        date: new Date().toISOString().slice(0, 10),
+        date: localToday(),
         note: "Hesap ekstresi",
       });
       await downloadPdf(
