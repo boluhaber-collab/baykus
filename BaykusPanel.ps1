@@ -1,5 +1,7 @@
 ﻿# Baykus kontrol paneli — gizli konsollarla API+Web yonetimi (WinForms)
 # Çift tık: Baykus.bat / Baykus.vbs (CMD penceresi açmaz)
+# Yeni Sürüm Oluştur: Masaüstü\Baykus_Guncelleme.zip (baykus.db ve uploads yok)
+# Güncelle: zip'i yedek alıp uygular; işyeri verisini geri yazar.
 # UTF-8: script must be saved with BOM so Windows PowerShell 5.1 parses Turkish correctly.
 try {
   chcp 65001 > $null
@@ -354,97 +356,460 @@ function Restore-BaykusData([string]$YedekDir) {
   }
 }
 
-function Invoke-BaykusUpdate {
-  $stamp = Get-Date -Format 'yyyyMMdd_HHmm'
-  $yedekDir = Join-Path $Root "Yedekler\once_guncelle_$stamp"
-  New-Item -ItemType Directory -Force -Path (Join-Path $yedekDir 'apps\api\uploads') | Out-Null
-  $db = Join-Path $Root 'apps\api\baykus.db'
-  if (Test-Path $db) {
-    Copy-Item $db (Join-Path $yedekDir 'apps\api\baykus.db') -Force
+function Test-RealBaykusRuntime([string]$RuntimeRoot) {
+  if (-not $RuntimeRoot) { return $false }
+  $py = Join-Path $RuntimeRoot 'python\python.exe'
+  $node = Join-Path $RuntimeRoot 'node\node.exe'
+  return ((Test-Path -LiteralPath $py) -or (Test-Path -LiteralPath $node))
+}
+
+function Get-BaykusDesktopPath {
+  $desktop = [Environment]::GetFolderPath('Desktop')
+  if ($desktop -and (Test-Path -LiteralPath $desktop)) { return $desktop }
+  $fallback = Join-Path $env:USERPROFILE 'Desktop'
+  if (Test-Path -LiteralPath $fallback) { return $fallback }
+  return $desktop
+}
+
+function Find-BaykusUpdatePackage {
+  # Adaylar: kurulum klasoru, Masaustu, USB kok. Birden fazla zip varsa en yenisi.
+  $desktop = Get-BaykusDesktopPath
+  $zipName = 'Baykus_Guncelleme.zip'
+  $dirName = 'Baykus_Guncelleme'
+  $zips = New-Object System.Collections.Generic.List[string]
+  $dirs = New-Object System.Collections.Generic.List[string]
+  [void]$zips.Add((Join-Path $Root $zipName))
+  [void]$dirs.Add((Join-Path $Root $dirName))
+  if ($desktop) {
+    [void]$zips.Add((Join-Path $desktop $zipName))
+    [void]$dirs.Add((Join-Path $desktop $dirName))
   }
-  $uploads = Join-Path $Root 'apps\api\uploads'
-  if (Test-Path $uploads) {
-    Copy-Item (Join-Path $uploads '*') (Join-Path $yedekDir 'apps\api\uploads') -Recurse -Force -ErrorAction SilentlyContinue
+  try {
+    foreach ($drive in [System.IO.DriveInfo]::GetDrives()) {
+      if (-not $drive.IsReady) { continue }
+      if ($drive.DriveType -ne [System.IO.DriveType]::Removable) { continue }
+      [void]$zips.Add((Join-Path $drive.Name $zipName))
+      [void]$dirs.Add((Join-Path $drive.Name $dirName))
+    }
+  } catch { }
+  $bestZip = $null
+  $bestTime = [datetime]::MinValue
+  foreach ($z in $zips) {
+    if (-not $z) { continue }
+    if (-not (Test-Path -LiteralPath $z -PathType Leaf)) { continue }
+    $wt = (Get-Item -LiteralPath $z).LastWriteTime
+    if ($wt -ge $bestTime) { $bestTime = $wt; $bestZip = $z }
+  }
+  if ($bestZip) { return [pscustomobject]@{ Kind = 'zip'; Path = $bestZip } }
+  $bestDir = $null
+  $bestDirTime = [datetime]::MinValue
+  foreach ($d in $dirs) {
+    if (-not $d) { continue }
+    $marker = Join-Path $d 'BAYKUS_GUNCELLEME.marker'
+    if (-not (Test-Path -LiteralPath $marker)) { continue }
+    $wt = (Get-Item -LiteralPath $marker).LastWriteTime
+    if ($wt -ge $bestDirTime) { $bestDirTime = $wt; $bestDir = $d }
+  }
+  if ($bestDir) { return [pscustomobject]@{ Kind = 'dir'; Path = $bestDir } }
+  return $null
+}
+
+function Resolve-BaykusUpdateRoot([string]$Extracted) {
+  $marker = Join-Path $Extracted 'BAYKUS_GUNCELLEME.marker'
+  if (Test-Path -LiteralPath $marker) { return $Extracted }
+  if (Test-Path -LiteralPath (Join-Path $Extracted 'apps\api')) { return $Extracted }
+  $subs = @(Get-ChildItem -LiteralPath $Extracted -Directory -ErrorAction SilentlyContinue)
+  foreach ($s in $subs) {
+    if (Test-Path -LiteralPath (Join-Path $s.FullName 'BAYKUS_GUNCELLEME.marker')) { return $s.FullName }
+    if (Test-Path -LiteralPath (Join-Path $s.FullName 'apps\api')) { return $s.FullName }
+  }
+  return $null
+}
+
+function Expand-BaykusUpdateZip([string]$ZipPath, [string]$Dest) {
+  New-Item -ItemType Directory -Force -Path $Dest | Out-Null
+  $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+  if (Test-Path -LiteralPath $tar) {
+    & $tar -xf $ZipPath -C $Dest
+    if ($LASTEXITCODE -eq 0) { return }
+  }
+  Expand-Archive -LiteralPath $ZipPath -DestinationPath $Dest -Force
+}
+
+function Copy-BaykusUpdateTree([string]$Src, [string]$Dst) {
+  # Kod + (varsa) tasinabilir runtime + node_modules. Veri ve isyeri ayari HARIC.
+  $xd = @('uploads', 'Yedekler', '.git', '__pycache__', '.pytest_cache', '.ruff_cache', 'backups', '.venv', 'venv')
+  $srcRuntime = Join-Path $Src 'runtime'
+  if (-not (Test-RealBaykusRuntime $srcRuntime)) { $xd += 'runtime' }
+  $xf = @('baykus.db', 'baykus.db-journal', '.env', '.env.local', 'Baykus_Guncelleme.zip')
+  $roboArgs = @($Src, $Dst, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/nc', '/ns', '/np', '/XD') + $xd + @('/XF') + $xf
+  & robocopy @roboArgs | Out-Null
+  return [int]$LASTEXITCODE
+}
+
+function Clear-BaykusGenerated {
+  $next = Join-Path $Root 'apps\web\.next'
+  if (Test-Path -LiteralPath $next) {
+    Remove-Item -LiteralPath $next -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  $api = Join-Path $Root 'apps\api'
+  if (Test-Path -LiteralPath $api) {
+    Get-ChildItem -LiteralPath $api -Recurse -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
+      ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+}
+
+function Invoke-BaykusGitUpdate([string]$YedekDir) {
+  $git = Get-Command git -ErrorAction SilentlyContinue
+  if (-not $git) {
+    Start-BaykusServices
+    [System.Windows.Forms.MessageBox]::Show(".git var ama git PATH'te yok. Yedek alındı; veritabanına dokunulmadı.", 'Güncelle', 'OK', 'Error') | Out-Null
+    return
+  }
+  Push-Location $Root
+  try {
+    git diff --quiet --exit-code 2>$null
+    $dirty = ($LASTEXITCODE -ne 0)
+    git diff --cached --quiet --exit-code 2>$null
+    if ($LASTEXITCODE -ne 0) { $dirty = $true }
+    if ($dirty) {
+      Start-BaykusServices
+      [System.Windows.Forms.MessageBox]::Show("Çalışma alanı kirli; git pull güvenli değil.`nYedek: $YedekDir`nVeritabanına dokunulmadı.", 'Güncelle', 'OK', 'Warning') | Out-Null
+      return
+    }
+    git pull --ff-only origin main
+    if ($LASTEXITCODE -ne 0) {
+      Restore-BaykusData $YedekDir
+      Start-BaykusServices
+      [System.Windows.Forms.MessageBox]::Show("git pull başarısız. Veritabanı yedekten korundu.`n$YedekDir", 'Güncelle', 'OK', 'Error') | Out-Null
+      return
+    }
+  } finally { Pop-Location }
+  Clear-BaykusGenerated
+  Restore-BaykusData $YedekDir
+  Start-BaykusServices
+  [System.Windows.Forms.MessageBox]::Show(
+    "Güncelleme tamam (git). baykus.db ve uploads korundu.`nYedek: $YedekDir`nServisler yeniden başlatıldı.",
+    'Güncelle', 'OK', 'Information') | Out-Null
+}
+
+function Invoke-BaykusUpdate {
+  $pkg = Find-BaykusUpdatePackage
+  if (-not $pkg) {
+    $dlg = New-Object System.Windows.Forms.OpenFileDialog
+    $dlg.Title = 'Baykus_Guncelleme.zip seçin (masaüstü, USB veya bu klasör)'
+    $dlg.Filter = 'Güncelleme paketi (*.zip)|*.zip|Tüm dosyalar (*.*)|*.*'
+    $dlg.FileName = 'Baykus_Guncelleme.zip'
+    $desktop = Get-BaykusDesktopPath
+    if ($desktop) { $dlg.InitialDirectory = $desktop }
+    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK -and $dlg.FileName) {
+      $pkg = @{ Kind = 'zip'; Path = $dlg.FileName }
+    }
+  }
+  if (-not $pkg) {
+    $gitDir = Join-Path $Root '.git'
+    if (Test-Path -LiteralPath $gitDir) {
+      $useGit = [System.Windows.Forms.MessageBox]::Show(
+        "Baykus_Guncelleme.zip bulunamadı.`n`nGit ile güncellensin mi (git pull)?`nbaykus.db ve uploads korunur.",
+        'Güncelle', 'YesNo', 'Question')
+      if ($useGit -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+      $stampGit = Get-Date -Format 'yyyyMMdd_HHmm'
+      $yedekGit = Join-Path $Root "Yedekler\once_guncelle_$stampGit"
+      New-Item -ItemType Directory -Force -Path (Join-Path $yedekGit 'apps\api\uploads') | Out-Null
+      Stop-BaykusServices
+      $dbGit = Join-Path $Root 'apps\api\baykus.db'
+      if (Test-Path -LiteralPath $dbGit) {
+        try { Copy-Item -LiteralPath $dbGit -Destination (Join-Path $yedekGit 'apps\api\baykus.db') -Force -ErrorAction Stop }
+        catch {
+          Start-BaykusServices
+          [System.Windows.Forms.MessageBox]::Show("Yedek alınamadı. Güncelleme iptal.`n$($_.Exception.Message)", 'Güncelle', 'OK', 'Error') | Out-Null
+          return
+        }
+      }
+      $upGit = Join-Path $Root 'apps\api\uploads'
+      if (Test-Path -LiteralPath $upGit) {
+        Copy-Item (Join-Path $upGit '*') (Join-Path $yedekGit 'apps\api\uploads') -Recurse -Force -ErrorAction SilentlyContinue
+      }
+      Invoke-BaykusGitUpdate $yedekGit
+      return
+    }
+    [System.Windows.Forms.MessageBox]::Show(
+      "Güncelleme paketi bulunamadı.`n`nBaykus_Guncelleme.zip dosyasını masaüstüne, USB'ye veya bu klasöre koyup tekrar deneyin.`nHiçbir dosya değişmedi.",
+      'Güncelle', 'OK', 'Information') | Out-Null
+    return
   }
 
-  $gitDir = Join-Path $Root '.git'
-  if (Test-Path $gitDir) {
-    $git = Get-Command git -ErrorAction SilentlyContinue
-    if (-not $git) {
-      [System.Windows.Forms.MessageBox]::Show(".git var ama git PATH'te yok. Yedek alındı; DB dokunulmadı.", 'Güncelle', 'OK', 'Error') | Out-Null
-      return
-    }
-    Push-Location $Root
-    try {
-      git diff --quiet --exit-code 2>$null
-      $dirty = ($LASTEXITCODE -ne 0)
-      git diff --cached --quiet --exit-code 2>$null
-      if ($LASTEXITCODE -ne 0) { $dirty = $true }
-      $untracked = git ls-files --others --exclude-standard 2>$null
-      if ($untracked) { $dirty = $true }
-      if ($dirty) {
-        [System.Windows.Forms.MessageBox]::Show("Çalışma alanı kirli; git pull güvenli değil.`nYedek: $yedekDir`nDB dokunulmadı.", 'Güncelle', 'OK', 'Warning') | Out-Null
+  $pkgPath = [string]$pkg.Path
+  $ask = [System.Windows.Forms.MessageBox]::Show(
+    "Paket bulundu:`n$pkgPath`n`nÖnce yedek alınacak.`nKod ve runtime güncellenecek.`nbaykus.db ve uploads ASLA ezilmez.`nServisler durup yeniden başlayacak.`n`nDevam edilsin mi?",
+    'Güncelle', 'YesNo', 'Question')
+  if ($ask -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+  $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+  $lblHint.Text = 'Servisler durduruluyor, yedek alınıyor...'
+  [System.Windows.Forms.Application]::DoEvents()
+
+  $stamp = Get-Date -Format 'yyyyMMdd_HHmm'
+  $yedekDir = Join-Path $Root "Yedekler\once_guncelle_$stamp"
+  $extract = $null
+  try {
+    New-Item -ItemType Directory -Force -Path (Join-Path $yedekDir 'apps\api\uploads') | Out-Null
+    Stop-BaykusServices
+    Start-Sleep -Milliseconds 600
+
+    $db = Join-Path $Root 'apps\api\baykus.db'
+    if (Test-Path -LiteralPath $db) {
+      try {
+        Copy-Item -LiteralPath $db -Destination (Join-Path $yedekDir 'apps\api\baykus.db') -Force -ErrorAction Stop
+      } catch {
+        Start-BaykusServices
+        [System.Windows.Forms.MessageBox]::Show(
+          "baykus.db yedeklenemedi. Güncelleme İPTAL.`nVeritabanına dokunulmadı.`n$($_.Exception.Message)",
+          'Güncelle', 'OK', 'Error') | Out-Null
         return
       }
-      git pull --ff-only
-      if ($LASTEXITCODE -ne 0) {
-        Restore-BaykusData $yedekDir
-        [System.Windows.Forms.MessageBox]::Show("git pull başarısız. DB yedekten korundu.`n$yedekDir", 'Güncelle', 'OK', 'Error') | Out-Null
+    }
+    $uploads = Join-Path $Root 'apps\api\uploads'
+    if (Test-Path -LiteralPath $uploads) {
+      Copy-Item (Join-Path $uploads '*') (Join-Path $yedekDir 'apps\api\uploads') -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    $lblHint.Text = 'Güncelleme paketi uygulanıyor...'
+    [System.Windows.Forms.Application]::DoEvents()
+
+    $src = $null
+    if ([string]$pkg.Kind -eq 'zip') {
+      $extract = Join-Path $env:TEMP ("baykus_guncelle_zip_" + $stamp)
+      if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue }
+      try {
+        Expand-BaykusUpdateZip $pkgPath $extract
+      } catch {
+        Start-BaykusServices
+        [System.Windows.Forms.MessageBox]::Show("Zip açılamadı.`n$($_.Exception.Message)`nVeritabanına dokunulmadı.", 'Güncelle', 'OK', 'Error') | Out-Null
         return
       }
-    } finally { Pop-Location }
-  } else {
-    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dlg.Description = 'Yeni paket klasörünü seçin (içinde apps\api olmalı). Bu klasörün ÜZERİNE değil, AYRI çıkarılmış zip.'
-    $dlg.ShowNewFolderButton = $false
-    if ($dlg.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
-      [System.Windows.Forms.MessageBox]::Show("İptal. Yedek alındı:`n$yedekDir", 'Güncelle', 'OK', 'Information') | Out-Null
+      $src = Resolve-BaykusUpdateRoot $extract
+    } else {
+      $src = $pkgPath
+    }
+    if (-not $src -or -not (Test-Path -LiteralPath (Join-Path $src 'apps\api'))) {
+      Start-BaykusServices
+      [System.Windows.Forms.MessageBox]::Show('Pakette apps\api yok. Güncelleme iptal. Veritabanına dokunulmadı.', 'Güncelle', 'OK', 'Error') | Out-Null
       return
     }
-    $src = $dlg.SelectedPath
-    if (-not (Test-Path (Join-Path $src 'apps\api'))) {
-      $found = Get-ChildItem $src -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'apps\api') } | Select-Object -First 1
-      if ($found) { $src = $found.FullName }
-    }
-    if (-not (Test-Path (Join-Path $src 'apps\api'))) {
-      [System.Windows.Forms.MessageBox]::Show('Kaynakta apps\api yok.', 'Güncelle', 'OK', 'Error') | Out-Null
-      return
+    $markerPath = Join-Path $src 'BAYKUS_GUNCELLEME.marker'
+    if (-not (Test-Path -LiteralPath $markerPath)) {
+      $warn = [System.Windows.Forms.MessageBox]::Show(
+        "Bu pakette BAYKUS_GUNCELLEME işareti yok.`nYine de uygulansın mı?`n`nbaykus.db ve uploads yine de korunur.",
+        'Güncelle', 'YesNo', 'Warning')
+      if ($warn -ne [System.Windows.Forms.DialogResult]::Yes) {
+        Start-BaykusServices
+        [System.Windows.Forms.MessageBox]::Show("İptal. Yedek duruyor:`n$yedekDir", 'Güncelle', 'OK', 'Information') | Out-Null
+        return
+      }
     }
     $srcFull = [System.IO.Path]::GetFullPath($src).TrimEnd('\')
     $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd('\')
     if ($srcFull -ieq $rootFull) {
-      [System.Windows.Forms.MessageBox]::Show('Kaynak ile hedef aynı klasör olamaz.', 'Güncelle', 'OK', 'Error') | Out-Null
+      Start-BaykusServices
+      [System.Windows.Forms.MessageBox]::Show('Kaynak ile kurulum aynı klasör olamaz.', 'Güncelle', 'OK', 'Error') | Out-Null
       return
     }
-    $xd = @('node_modules', '.venv', 'runtime', 'Yedekler', '.git', 'uploads', '.next', '__pycache__', '.pytest_cache')
-    $xf = @('baykus.db', 'baykus.db-journal', '.env', '.env.local')
-    $args = @($src, $Root, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/nc', '/ns', '/np', '/XD') + $xd + @('/XF') + $xf
-    & robocopy @args | Out-Null
-    if ($LASTEXITCODE -ge 8) {
+
+    $rc = Copy-BaykusUpdateTree $src $Root
+    if ($rc -ge 8) {
       Restore-BaykusData $yedekDir
-      [System.Windows.Forms.MessageBox]::Show("Kod kopyalama başarısız. DB yedekten korundu.`n$yedekDir", 'Güncelle', 'OK', 'Error') | Out-Null
+      Start-BaykusServices
+      [System.Windows.Forms.MessageBox]::Show("Kod kopyalanamadı (robocopy $rc). Veritabanı yedekten korundu.`n$yedekDir", 'Güncelle', 'OK', 'Error') | Out-Null
       return
     }
+    $lblHint.Text = 'Python paketleri kontrol ediliyor...'
+    [System.Windows.Forms.Application]::DoEvents()
+    $pyNow = Get-BaykusPython
+    $reqNow = Join-Path $Root 'apps\api\requirements.txt'
+    if ($pyNow -and (Test-Path -LiteralPath $reqNow)) {
+      try { & $pyNow -m pip install -r $reqNow --disable-pip-version-check --timeout 60 --no-warn-script-location 2>&1 | Out-Null } catch { }
+    }
+    Clear-BaykusGenerated
+    Restore-BaykusData $yedekDir
+    Start-BaykusServices
+    [System.Windows.Forms.MessageBox]::Show(
+      "Güncelleme tamam.`nbaykus.db ve uploads korundu (yedekten geri yazıldı).`nYedek: $yedekDir`nServisler yeniden başlatıldı.`n`nYeni düğmeler için paneli kapatıp Baykus.bat ile bir kez yeniden açın.",
+      'Güncelle', 'OK', 'Information') | Out-Null
+  } finally {
+    if ($extract -and (Test-Path -LiteralPath $extract)) {
+      Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    $lblHint.Text = 'CMD penceresi açılmaz. Durum her 2 sn yenilenir.'
+  }
+}
+
+function Invoke-BaykusNewRelease {
+  $ask = [System.Windows.Forms.MessageBox]::Show(
+    "Masaüstüne Baykus_Guncelleme.zip hazırlanacak.`n`nPakette güncel kod ve (varsa) taşınabilir runtime olur.`nİşyeri baykus.db ve uploads PAKETE GİRMEZ.`n`nDevam edilsin mi?",
+    'Yeni Sürüm', 'YesNo', 'Question')
+  if ($ask -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+
+  $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+  $lblHint.Text = 'Son kod kontrol ediliyor...'
+  [System.Windows.Forms.Application]::DoEvents()
+
+  $sha = ''
+  $subject = ''
+  $gitDir = Join-Path $Root '.git'
+  if (Test-Path -LiteralPath $gitDir) {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) {
+      $form.Cursor = [System.Windows.Forms.Cursors]::Default
+      [System.Windows.Forms.MessageBox]::Show('git bulunamadı. Paket oluşturulmadı.', 'Yeni Sürüm', 'OK', 'Error') | Out-Null
+      return
+    }
+    Push-Location $Root
+    try {
+      $branch = (git rev-parse --abbrev-ref HEAD 2>$null | Out-String).Trim()
+      git diff --quiet --exit-code 2>$null
+      $dirty = ($LASTEXITCODE -ne 0)
+      git diff --cached --quiet --exit-code 2>$null
+      if ($LASTEXITCODE -ne 0) { $dirty = $true }
+      if ($dirty -or ($branch -and $branch -ne 'main')) {
+        $form.Cursor = [System.Windows.Forms.Cursors]::Default
+        $why = 'Kaydedilmemiş kod değişikliği var.'
+        if ($branch -and $branch -ne 'main') { $why = "Dal main değil ($branch)." }
+        $go = [System.Windows.Forms.MessageBox]::Show(
+          "$why`nYine de bu klasördeki dosyalarla paket oluşturulsun mu?`n(git pull yapılmayacak)",
+          'Yeni Sürüm', 'YesNo', 'Warning')
+        if ($go -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+      } else {
+        $lblHint.Text = 'main dalından son kod alınıyor...'
+        [System.Windows.Forms.Application]::DoEvents()
+        $pullOut = git pull --ff-only origin main 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+          $form.Cursor = [System.Windows.Forms.Cursors]::Default
+          $go = [System.Windows.Forms.MessageBox]::Show(
+            "Son kod alınamadı.`n$pullOut`n`nMevcut dosyalarla paket oluşturulsun mu?",
+            'Yeni Sürüm', 'YesNo', 'Warning')
+          if ($go -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+          $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        }
+      }
+      $sha = (git rev-parse --short HEAD 2>$null | Out-String).Trim()
+      $subject = (git log -1 --format=%s 2>$null | Out-String).Trim()
+    } finally { Pop-Location }
   }
 
-  # deps (best-effort)
-  $py = Get-BaykusPython
-  $req = Join-Path $Root 'apps\api\requirements.txt'
-  if ($py -and (Test-Path $req)) {
-    try { & $py -m pip install -r $req --no-warn-script-location 2>&1 | Out-Null } catch { }
-  }
-  $pkg = Join-Path $Root 'apps\web\package.json'
-  if (Test-Path $pkg) {
-    $npmCmd = Get-BaykusNpm
-    Push-Location (Join-Path $Root 'apps\web')
-    try { & cmd.exe /c "`"$npmCmd`" install --no-audit --no-fund" 2>&1 | Out-Null } catch { }
-    finally { Pop-Location }
-  }
+  $lblHint.Text = 'Güncelleme paketi hazırlanıyor... Bu işlem birkaç dakika sürebilir.'
+  [System.Windows.Forms.Application]::DoEvents()
 
-  Restore-BaykusData $yedekDir
-  [System.Windows.Forms.MessageBox]::Show(
-    "Güncelleme tamam. baykus.db korundu.`nYedek: $yedekDir`nGerekirse Durdur / Başlat yapın.",
-    'Güncelle', 'OK', 'Information') | Out-Null
+  $desktop = Get-BaykusDesktopPath
+  if (-not $desktop) {
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    [System.Windows.Forms.MessageBox]::Show('Masaüstü klasörü bulunamadı.', 'Yeni Sürüm', 'OK', 'Error') | Out-Null
+    return
+  }
+  $zipPath = Join-Path $desktop 'Baykus_Guncelleme.zip'
+  $stage = Join-Path $env:TEMP ('baykus_surum_' + (Get-Date -Format 'yyyyMMdd_HHmmss'))
+  try {
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+    $xd = @('.git', 'tmp', 'Yedekler', '__pycache__', '.pytest_cache', '.next', '.turbo', '.ruff_cache', 'uploads', 'backups', '.venv', 'venv', 'packaging')
+    $rootRuntime = Join-Path $Root 'runtime'
+    $skipRuntime = -not (Test-RealBaykusRuntime $rootRuntime)
+    if ($skipRuntime) { $xd += 'runtime' }
+    $xf = @('baykus.db', 'baykus.db-journal', '.env', '.env.local', '*.zip', '*.tgz', '*.log')
+    $roboArgs = @($Root, $stage, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/nc', '/ns', '/np', '/XD') + $xd + @('/XF') + $xf
+    & robocopy @roboArgs | Out-Null
+    if ([int]$LASTEXITCODE -ge 8) {
+      [System.Windows.Forms.MessageBox]::Show("Dosyalar pakete kopyalanamadı (robocopy $LASTEXITCODE).", 'Yeni Sürüm', 'OK', 'Error') | Out-Null
+      return
+    }
+
+    if (-not (Test-RealBaykusRuntime (Join-Path $stage 'runtime'))) {
+      $foundRt = $null
+      $deskDirs = @(Get-ChildItem -LiteralPath $desktop -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'Baykus_Tasinabilir*' })
+      foreach ($d in $deskDirs) {
+        $candidate = Join-Path $d.FullName 'runtime'
+        if (Test-RealBaykusRuntime $candidate) { $foundRt = $candidate; break }
+      }
+      if ($foundRt) {
+        & robocopy $foundRt (Join-Path $stage 'runtime') /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+      }
+    }
+
+    $hasRuntime = Test-RealBaykusRuntime (Join-Path $stage 'runtime')
+    $hasNm = Test-Path -LiteralPath (Join-Path $stage 'apps\web\node_modules')
+    $rtFlag = 'yok'
+    if ($hasRuntime) { $rtFlag = 'var' }
+    $nmFlag = 'yok'
+    if ($hasNm) { $nmFlag = 'var' }
+    $when = Get-Date -Format 'yyyy-MM-dd HH:mm'
+    $marker = @"
+BAYKUS_GUNCELLEME
+tur=guncelleme
+tarih=$when
+git=$sha
+konu=$subject
+runtime=$rtFlag
+node_modules=$nmFlag
+db=YOK
+uploads=YOK
+not=İşyeri baykus.db ve uploads bu pakette yoktur. Güncelle yedek alır, kodu ve runtime kopyalar, veriyi geri yazar.
+"@
+    $enc = New-Object System.Text.UTF8Encoding $true
+    [System.IO.File]::WriteAllText((Join-Path $stage 'BAYKUS_GUNCELLEME.marker'), $marker.Trim() + "`r`n", $enc)
+    $oku = @"
+BAYKUŞ GÜNCELLEME PAKETİ
+========================
+Bu pakette işyeri veritabanı YOKTUR.
+baykus.db ve uploads kopyalanmaz.
+
+İşyerinde:
+1) Bu zip dosyasını masaüstüne veya USB köküne koyun.
+   Adı aynen kalsın: Baykus_Guncelleme.zip
+2) Baykuş panelini açın (Baykus.bat).
+3) Güncelle düğmesine basın.
+
+Elle dosya kopyalamayın. Panel yedek alır, kodu günceller, defteri geri koyar.
+"@
+    [System.IO.File]::WriteAllText((Join-Path $stage 'OKU_GUNCELLEME.txt'), $oku.Trim() + "`r`n", $enc)
+
+    if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+    $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+    if (-not (Test-Path -LiteralPath $tar)) {
+      [System.Windows.Forms.MessageBox]::Show('tar.exe bulunamadı. Zip oluşturulamadı.', 'Yeni Sürüm', 'OK', 'Error') | Out-Null
+      return
+    }
+    Push-Location $stage
+    try {
+      & $tar -a -c -f $zipPath *
+      if ($LASTEXITCODE -ne 0) {
+        [System.Windows.Forms.MessageBox]::Show("Zip oluşturulamadı (tar $LASTEXITCODE).", 'Yeni Sürüm', 'OK', 'Error') | Out-Null
+        return
+      }
+    } finally { Pop-Location }
+
+    if (-not (Test-Path -LiteralPath $zipPath)) {
+      [System.Windows.Forms.MessageBox]::Show('Zip yazılmadı.', 'Yeni Sürüm', 'OK', 'Error') | Out-Null
+      return
+    }
+    $rtMsg = 'Taşınabilir runtime pakete girdi.'
+    if (-not $hasRuntime) {
+      $rtMsg = "Bu bilgisayarda taşınabilir runtime (runtime\python veya runtime\node) yok.`nPakete kod girdi. İşyerindeki runtime silinmez, yerinde kalır."
+    }
+    $nmMsg = 'Web paketleri (node_modules) pakete girdi.'
+    if (-not $hasNm) { $nmMsg = 'node_modules bulunamadı; işyerindeki eskisi durur.' }
+    [System.Windows.Forms.MessageBox]::Show(
+      "Güncelleme paketi hazır:`n$zipPath`n`n$rtMsg`n$nmMsg`nbaykus.db ve uploads pakette YOK.`n`nZip'i USB'ye veya işyeri masaüstüne kopyalayın.`nİşyerinde panelden Güncelle'ye basın.",
+      'Yeni Sürüm', 'OK', 'Information') | Out-Null
+  } catch {
+    [System.Windows.Forms.MessageBox]::Show("Paket oluşturulamadı:`n$($_.Exception.Message)", 'Yeni Sürüm', 'OK', 'Error') | Out-Null
+  } finally {
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    $lblHint.Text = 'CMD penceresi açılmaz. Durum her 2 sn yenilenir.'
+  }
 }
 
 function Invoke-BaykusKurulum {
@@ -459,7 +824,7 @@ function Invoke-BaykusKurulum {
 # ---------- UI ----------
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Baykuş Kontrol Paneli'
-$form.Size = New-Object System.Drawing.Size(420, 360)
+$form.Size = New-Object System.Drawing.Size(440, 448)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
@@ -469,25 +834,25 @@ $form.Font = New-Object System.Drawing.Font('Segoe UI', 10)
 $title = New-Object System.Windows.Forms.Label
 $title.Text = 'Baykuş Baskı — Kontrol'
 $title.Location = New-Object System.Drawing.Point(16, 12)
-$title.Size = New-Object System.Drawing.Size(370, 24)
+$title.Size = New-Object System.Drawing.Size(400, 24)
 $title.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
 $form.Controls.Add($title)
 
 $lblApi = New-Object System.Windows.Forms.Label
 $lblApi.Location = New-Object System.Drawing.Point(16, 48)
-$lblApi.Size = New-Object System.Drawing.Size(370, 22)
+$lblApi.Size = New-Object System.Drawing.Size(400, 22)
 $lblApi.Text = 'API (8000): ...'
 $form.Controls.Add($lblApi)
 
 $lblWeb = New-Object System.Windows.Forms.Label
 $lblWeb.Location = New-Object System.Drawing.Point(16, 72)
-$lblWeb.Size = New-Object System.Drawing.Size(370, 22)
+$lblWeb.Size = New-Object System.Drawing.Size(400, 22)
 $lblWeb.Text = 'Web (3000): ...'
 $form.Controls.Add($lblWeb)
 
 $lblHint = New-Object System.Windows.Forms.Label
 $lblHint.Location = New-Object System.Drawing.Point(16, 98)
-$lblHint.Size = New-Object System.Drawing.Size(370, 20)
+$lblHint.Size = New-Object System.Drawing.Size(400, 30)
 $lblHint.ForeColor = [System.Drawing.Color]::DimGray
 $lblHint.Text = 'CMD penceresi açılmaz. Durum her 2 sn yenilenir.'
 $form.Controls.Add($lblHint)
@@ -501,18 +866,19 @@ function New-Btn([string]$Text, [int]$X, [int]$Y, [int]$W = 180) {
   return $b
 }
 
-$btnStart = New-Btn 'Başlat' 16 130
-$btnStop = New-Btn 'Durdur' 210 130
-$btnBrowser = New-Btn 'Tarayıcıyı Aç' 16 176
-$btnBackup = New-Btn 'Yedek Al' 210 176
-$btnUpdate = New-Btn 'Güncelle' 16 222
-$btnKurulum = New-Btn 'Kurulum' 210 222
+$btnStart = New-Btn 'Başlat' 16 140
+$btnStop = New-Btn 'Durdur' 220 140
+$btnBrowser = New-Btn 'Tarayıcıyı Aç' 16 186
+$btnBackup = New-Btn 'Yedek Al' 220 186
+$btnUpdate = New-Btn 'Güncelle' 16 232
+$btnKurulum = New-Btn 'Kurulum' 220 232
+$btnRelease = New-Btn 'Yeni Sürüm Oluştur' 16 278 394
 
 $hasKurulum = Test-Path (Join-Path $Root 'kurulum.bat')
 $btnKurulum.Enabled = $hasKurulum
 if (-not $hasKurulum) { $btnKurulum.Text = 'Kurulum (yok)' }
 
-$btnTray = New-Btn 'Tepsiye Küçült' 16 268 374
+$btnTray = New-Btn 'Tepsiye Küçült' 16 324 394
 
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray.Text = 'Baykuş'
@@ -566,12 +932,21 @@ $btnBackup.Add_Click({
   try { Invoke-BaykusBackup } finally { $btnBackup.Enabled = $true }
 })
 $btnUpdate.Add_Click({
-  $r = [System.Windows.Forms.MessageBox]::Show(
-    'Güncellemeden önce yedek alınacak; baykus.db ASLA ezilmez. Devam?',
-    'Güncelle', 'YesNo', 'Question')
-  if ($r -ne [System.Windows.Forms.DialogResult]::Yes) { return }
   $btnUpdate.Enabled = $false
-  try { Invoke-BaykusUpdate } finally { $btnUpdate.Enabled = $true }
+  try { Invoke-BaykusUpdate } finally {
+    $btnUpdate.Enabled = $true
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    $lblHint.Text = 'CMD penceresi açılmaz. Durum her 2 sn yenilenir.'
+    Update-StatusLabels
+  }
+})
+$btnRelease.Add_Click({
+  $btnRelease.Enabled = $false
+  try { Invoke-BaykusNewRelease } finally {
+    $btnRelease.Enabled = $true
+    $form.Cursor = [System.Windows.Forms.Cursors]::Default
+    $lblHint.Text = 'CMD penceresi açılmaz. Durum her 2 sn yenilenir.'
+  }
 })
 $btnKurulum.Add_Click({ Invoke-BaykusKurulum })
 

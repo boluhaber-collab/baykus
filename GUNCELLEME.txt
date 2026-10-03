@@ -20,42 +20,47 @@ Taşınabilir paket ve sade kurulum paketi AYNI kuralı kullanır.
          USB'den "hepsini üzerine yaz" YASAK.
 
 --------------------------------------------------------------------------------
-2) İŞYERİNDE KOD GÜNCELLEME
+2) İŞYERİNDE KOD GÜNCELLEME (tek tık)
 --------------------------------------------------------------------------------
-  İşyeri klasöründe guncelle.bat'a çift tıklayın.
-  (Alternatif: Baykus.bat kontrol panelinden «Güncelle» — aynı koruma kuralları.)
+  Güncelleme bilgisayarında panelden «Yeni Sürüm Oluştur».
+  Masaüstüne Baykus_Guncelleme.zip iner.
+  Zip'te kod ve (varsa) taşınabilir runtime vardır.
+  baykus.db ve uploads ZIP'E GİRMEZ.
 
-  Script sırası:
-    1) Yedek → Yedekler\once_guncelle_YYYYMMDD_HHMM\  (db + uploads)
-    2a) Git varsa: git pull --ff-only (çatışmada DURUR)
-    2b) Git yoksa (taşınabilir / USB): yeni zip'i AYRI klasöre çıkarın,
-        script kaynak yolu sorar. baykus.db, uploads, .venv, node_modules,
-        runtime, .env KOPYALANMAZ.
-    3) Gerekirse pip / npm
-    4) Yedekteki baykus.db + uploads GERİ YAZILIR
-       Ekran: "Veritabanina dokunulmadi"
+  Zip'i USB köküne veya işyeri masaüstüne koyun.
+  Adı aynen: Baykus_Guncelleme.zip
+  İşyerinde Baykus.bat → «Güncelle». Elle dosya kopyalamayın.
 
-  Kirli / elle değiştirilmiş dosya varsa git pull YAPILMAZ.
+  Güncelle sırası:
+    1) Servisler durur. Yedek → Yedekler\once_guncelle_YYYYMMDD_HHMM\
+    2) Zip aranır: kurulum klasörü, Masaüstü, USB.
+       Yoksa dosya penceresi açılır. Birden fazla zip varsa en yenisi.
+    3) Kod ve runtime kopyalanır. baykus.db, uploads, .env KOPYALANMAZ.
+       Pakette taşınabilir runtime yoksa işyerindeki runtime SİLİNMEZ.
+    4) Yedekteki baykus.db + uploads GERİ YAZILIR.
+    5) Servisler yeniden başlar.
+
+  Zip yoksa ve klasör git ise: git pull --ff-only (kirliyse DURUR).
   Elle tüm klasörü silip yapıştırmayın.
 
 --------------------------------------------------------------------------------
 3) USB İLE KOD GÜNCELLEME (elle, script yoksa)
 --------------------------------------------------------------------------------
+  Normal yol bölüm 2'dir (Baykus_Guncelleme.zip + Güncelle). Aşağısı yedek plandır.
   DAHİL ET (üzerine yazılabilir):
     - apps\api\app\  (Python kod)
     - apps\web\src\  (web kod; node_modules hariç)
     - scripts\, docs\, *.md, *.bat, GUNCELLEME.txt, KURULUM.txt
 
-  ASLA ÜZERİNE YAZMA / SİLME:
+  ASLA ÜZERİNE YAZMA / SİLME (elle kopyada):
     - apps\api\baykus.db
     - apps\api\baykus.db-journal
     - apps\api\uploads\
     - apps\api\.venv\
-    - apps\web\node_modules\
-    - runtime\          (taşınabilir Python + Node)
-    - .env
-    - apps\web\.env.local
+    - .env / apps\web\.env.local
     - Yedekler\
+  Panel «Güncelle» runtime ve node_modules'u pakette varsa yeniler.
+  Pakette taşınabilir runtime yoksa işyerindeki runtime silinmez.
 
 --------------------------------------------------------------------------------
 4) YAPMAYIN
@@ -77,8 +82,8 @@ Taşınabilir paket ve sade kurulum paketi AYNI kuralı kullanır.
 6) KISA ÖZET
 --------------------------------------------------------------------------------
   Güncelleme PC = kod    |    İşyeri PC = defter (baykus.db)
-  Her zaman: guncelle.bat
+  Ev: panel «Yeni Sürüm Oluştur» → Masaüstü\Baykus_Guncelleme.zip
+  İşyeri: panel «Güncelle» (zip masaüstünde, USB'de veya klasörde)
   Asla: işyeri db'sini güncelleme db'siyle değiştirmek
-  USB zip: kaynak AYRI klasöre, guncelle.bat yol sorar
 
 ================================================================================
