@@ -10,6 +10,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 import SplitPaymentRows, {
   SplitPaymentRow,
@@ -505,7 +506,7 @@ export default function PerakendeSatisGirPage() {
                         >
                           <div className="text-sm font-medium">
                             {[v.color, v.size, v.print_type, v.name].filter(Boolean).join(" / ") ||
-                              v.sku ||
+                              displaySku(v.sku) ||
                               `Varyant #${v.id}`}
                           </div>
                           <div className="text-xs text-baykus-muted flex justify-between mt-0.5">

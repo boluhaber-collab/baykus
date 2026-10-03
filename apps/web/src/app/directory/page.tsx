@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { displayCode } from "@/lib/productLabel";
 
 type Entry = {
   kind: string;
@@ -189,7 +190,7 @@ export default function DirectoryPage() {
                   <Link href={e.href} className="text-baykus-primary hover:underline font-medium">
                     {e.name}
                   </Link>
-                  {e.code && <span className="ml-1 text-[10px] text-baykus-muted font-mono">{e.code}</span>}
+                  {displayCode(e.code) && <span className="ml-1 text-[10px] text-baykus-muted font-mono">{displayCode(e.code)}</span>}
                 </td>
                 <td>{e.company || "—"}</td>
                 <td>{e.phone || "—"}</td>

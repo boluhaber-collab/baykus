@@ -147,7 +147,7 @@ export default function SuppliersHubPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Ad, kod, telefon…"
+              placeholder="Ad, telefon…"
               className="bk-input max-w-[220px]"
             />
             <select
@@ -173,7 +173,6 @@ export default function SuppliersHubPage() {
             <table className="bk-table">
               <thead>
                 <tr>
-                  <th>Kod</th>
                   <th>Ad</th>
                   <th>Şehir</th>
                   <th>Telefon</th>
@@ -187,7 +186,6 @@ export default function SuppliersHubPage() {
                   const bal = Number(s.balance ?? 0);
                   return (
                     <tr key={s.id}>
-                      <td className="font-mono text-xs text-baykus-muted">{s.code || "—"}</td>
                       <td className="font-medium">
                         <Link href={`/suppliers/${s.id}`} className="text-baykus-primary hover:underline">
                           {s.name}
@@ -211,7 +209,7 @@ export default function SuppliersHubPage() {
                   );
                 })}
                 {!loading && items.length === 0 && (
-                  <tr><td colSpan={7} className="text-center text-slate-400 py-8">Tedarikçi yok</td></tr>
+                  <tr><td colSpan={6} className="text-center text-slate-400 py-8">Tedarikçi yok</td></tr>
                 )}
               </tbody>
             </table>

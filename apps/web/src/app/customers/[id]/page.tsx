@@ -29,8 +29,9 @@ import ExpandableMovementTable, {
 } from "@/components/ExpandableMovementTable";
 import PartyCardLayout, { partySmsHref } from "@/components/PartyCardLayout";
 import {
-  belgeFromNote, detailFromBhNote, hareketLabel, isBhImportNote, sanitizeDisplayNote,
+  belgeFromNote, detailFromBhNote, hareketLabel, isBhImportNote, mergeNotePreservingBh, sanitizeDisplayNote,
 } from "@/lib/bhNote";
+import { isBhSyncCode } from "@/lib/productLabel";
 import type { CariMovement, CustomerOrderBrief, OrderDetail } from "@/lib/api";
 
 type TabKey = "bilgi" | "hareketler" | "siparisler" | "notlar" | "whatsapp";
@@ -96,7 +97,7 @@ export default function CustomerDetailPage() {
         address: detail.address || "",
         tax_number: detail.tax_number || "",
         tax_office: detail.tax_office || "",
-        notes: detail.notes || "",
+        notes: sanitizeDisplayNote(detail.notes),
         is_active: detail.is_active !== false,
         special_day_note: detail.special_day_note || "",
         special_day_date: detail.special_day_date || "",
@@ -262,7 +263,7 @@ export default function CustomerDetailPage() {
       await apiFetch(`/api/customers/${id}`, {
         method: "PUT",
         body: JSON.stringify({
-          code: editForm.code.trim() || null,
+          code: isBhSyncCode(customer?.code) ? customer?.code || null : editForm.code.trim() || null,
           name: editForm.name.trim(),
           company: editForm.company.trim() || null,
           email: editForm.email.trim() || null,
@@ -271,7 +272,7 @@ export default function CustomerDetailPage() {
           address: editForm.address.trim() || null,
           tax_number: editForm.tax_number.trim() || null,
           tax_office: editForm.tax_office.trim() || null,
-          notes: editForm.notes.trim() || null,
+          notes: mergeNotePreservingBh(customer?.notes, editForm.notes),
           is_active: editForm.is_active,
           special_day_note: editForm.special_day_note.trim() || null,
           special_day_date: editForm.special_day_date || null,
@@ -776,7 +777,9 @@ export default function CustomerDetailPage() {
                           ["tax_office", "Vergi Dairesi"],
                           ["special_day_note", "Özel gün notu"],
                         ] as const
-                      ).map(([key, label]) => (
+                      )
+                        .filter(([key]) => key !== "code" || !isBhSyncCode(customer.code))
+                        .map(([key, label]) => (
                         <div key={key}>
                           <label className="block text-xs text-slate-500 mb-1">{label}</label>
                           <input
@@ -1135,7 +1138,7 @@ export default function CustomerDetailPage() {
                             {t.date || ""}
                           </span>
                         </div>
-                        {t.note && <p className="text-slate-500 text-xs mt-1">{t.note}</p>}
+                        {sanitizeDisplayNote(t.note) ? <p className="text-slate-500 text-xs mt-1">{sanitizeDisplayNote(t.note)}</p> : null}
                         {t.amount != null && (
                           <p className="text-xs text-slate-500 mt-1">{formatMoney(t.amount)}</p>
                         )}

@@ -10,6 +10,7 @@ import {
   SummaryCards,
   inputCls,
 } from "@/components/reports/ReportChrome";
+import { displayCode } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 import { Customer, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 
@@ -237,7 +238,7 @@ export default function CustomerListReportPage() {
           >
             {rows.map((r) => (
               <tr key={r.id}>
-                <td>{r.code || "—"}</td>
+                <td>{displayCode(r.code) || "—"}</td>
                 <td>
                   <Link
                     href={party === "customer" ? `/customers/${r.id}` : `/suppliers/${r.id}`}

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { displaySku } from "@/lib/productLabel";
 
 type PriceRow = {
   tarih?: string | null;
@@ -122,7 +123,7 @@ export default function ProductHistoryPage() {
           <div className="text-lg font-bold">
             ÖNCEKİ FİYATLAR / STOK EKSTRESİ · {(data?.product_name || "…").toLocaleUpperCase("tr")}
           </div>
-          <div className="text-xs opacity-90">SKU: {data?.sku || "—"}</div>
+          {displaySku(data?.sku) ? <div className="text-xs opacity-90">SKU: {displaySku(data?.sku)}</div> : null}
         </div>
         <div className="flex gap-2">
           <Link href={`/products/${id}`} className="rounded bg-white/20 px-3 py-1.5 text-xs font-medium hover:bg-white/30">

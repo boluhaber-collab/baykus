@@ -262,9 +262,6 @@ export default function ProductDetailPage() {
             {product.brand ? product.brand : null}
             {product.brand && product.category ? " · " : null}
             {product.category ? product.category : null}
-            {!humanSku && !product.brand && !product.category ? (
-              <span className="text-slate-400">SKU gizli (BH import)</span>
-            ) : null}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -516,7 +513,7 @@ export default function ProductDetailPage() {
                                 <div className="font-mono text-xs text-slate-500">{vSku}</div>
                               ) : null}
                             </td>
-                            <td className="px-4 py-3 font-mono text-xs">{v.barcode || "—"}</td>
+                            <td className="px-4 py-3 font-mono text-xs">{displaySku(v.barcode) || "—"}</td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               {formatMoney(Number(v.price))}
                             </td>

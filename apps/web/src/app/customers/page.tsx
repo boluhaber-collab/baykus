@@ -160,7 +160,7 @@ function CustomersHubPageInner() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Ad, kod, firma, telefon…"
+              placeholder="Ad, firma, telefon…"
               className="bk-input max-w-[220px]"
             />
             <select
@@ -203,7 +203,6 @@ function CustomersHubPageInner() {
             <table className="bk-table">
               <thead>
                 <tr>
-                  <th>Kod</th>
                   <th>Ad</th>
                   <th>Firma</th>
                   <th>Şehir</th>
@@ -218,7 +217,6 @@ function CustomersHubPageInner() {
                   const bal = Number(c.balance ?? 0);
                   return (
                     <tr key={c.id}>
-                      <td className="font-mono text-xs text-baykus-muted">{c.code || "—"}</td>
                       <td className="font-medium">
                         <Link href={`/customers/${c.id}`} className="text-baykus-primary hover:underline">
                           {c.name}
@@ -258,7 +256,7 @@ function CustomersHubPageInner() {
                 })}
                 {!loading && listItems.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center text-slate-400 py-8">
+                    <td colSpan={7} className="text-center text-slate-400 py-8">
                       Kayıt yok
                     </td>
                   </tr>

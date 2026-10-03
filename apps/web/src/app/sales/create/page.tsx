@@ -11,6 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 import LiveSearchSelect, { useCustomerSearch, useProductSearch } from "@/components/LiveSearchSelect";
 import PreviousPricesModal from "@/components/PreviousPricesModal";
 import SplitPaymentRows, {
@@ -879,7 +880,7 @@ function CreateSaleInner() {
                           >
                             <div className="text-sm font-medium">
                               {[v.color, v.size, v.print_type, v.name].filter(Boolean).join(" / ") ||
-                                v.sku ||
+                                displaySku(v.sku) ||
                                 `Varyant #${v.id}`}
                             </div>
                             <div className="text-xs text-baykus-muted flex justify-between mt-0.5">

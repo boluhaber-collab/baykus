@@ -3,17 +3,48 @@
  * for matching on re-import. Hide those from list/select UI; keep real human SKUs.
  */
 
-export function isImportSku(sku: string | null | undefined): boolean {
-  if (!sku) return false;
-  const s = sku.trim().toUpperCase();
-  return s.startsWith("BH:") || s.startsWith("BHV:");
+const HEX_GUID_RE = /^[A-Fa-f0-9]{16,}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * BizimHesap sync key stored as party code or product/variant SKU.
+ * BH:… / BHV:… / bare hex GUID. Not a human-facing code.
+ */
+export function isBhSyncCode(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const s = value.trim();
+  if (!s) return false;
+  const u = s.toUpperCase();
+  if (
+    u.startsWith("BH:") ||
+    u.startsWith("BHV:") ||
+    u.startsWith("BH_IMPORT") ||
+    u.startsWith("BH_FROM_STOCK")
+  ) {
+    return true;
+  }
+  return HEX_GUID_RE.test(s) || UUID_RE.test(s);
 }
 
-/** Human-facing SKU for chips/columns; null when import GUID or empty. */
+export function isImportSku(sku: string | null | undefined): boolean {
+  return isBhSyncCode(sku);
+}
+
+/** Human-facing SKU/code for chips/columns; null when import GUID or empty. */
 export function displaySku(sku: string | null | undefined): string | null {
   const t = (sku || "").trim();
-  if (!t || isImportSku(t)) return null;
+  if (!t || isBhSyncCode(t)) return null;
   return t;
+}
+
+/** Party code alias of displaySku (hide BH: GUIDs, keep M-011 / T-010). */
+export function displayCode(code: string | null | undefined): string | null {
+  return displaySku(code);
+}
+
+/** Input value: blank while the stored key is a BH sync code (state itself unchanged). */
+export function maskBhSyncValue(value: string | null | undefined): string {
+  return displaySku(value) || "";
 }
 
 /**

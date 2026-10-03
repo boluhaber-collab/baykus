@@ -10,6 +10,7 @@ import {
   SummaryCards,
   inputCls,
 } from "@/components/reports/ReportChrome";
+import { displayCode } from "@/lib/productLabel";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 
@@ -151,7 +152,7 @@ export default function ReceivablesReportPage() {
       >
         {rows.map((r) => (
           <tr key={r.customer_id} className="border-t border-slate-100 hover:bg-slate-50">
-            <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.code || "—"}</td>
+            <td className="px-4 py-3 font-mono text-xs text-slate-500">{displayCode(r.code) || "—"}</td>
             <td className="px-4 py-3 font-medium">{r.name}</td>
             <td className="px-4 py-3 text-slate-600">{r.company || "—"}</td>
             <td className="px-4 py-3">{r.city || "—"}</td>

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PayableItem, Supplier, apiFetch, downloadPdf, formatMoney } from "@/lib/api";
 import LiveSearchSelect, { useSupplierSearch } from "@/components/LiveSearchSelect";
+import { displayCode } from "@/lib/productLabel";
 
 export type FisTip = "Alacak Fişi" | "Borç Fişi";
 
@@ -74,12 +75,12 @@ export default function SupplierFisPanel({
     if (suppliers.length) {
       return suppliers.map((s) => ({
         id: s.id,
-        label: `${s.code ? s.code + " · " : ""}${s.name}${s.balance != null ? ` (${formatMoney(Number(s.balance))})` : ""}`,
+        label: `${displayCode(s.code) ? displayCode(s.code) + " · " : ""}${s.name}${s.balance != null ? ` (${formatMoney(Number(s.balance))})` : ""}`,
       }));
     }
     return payables.map((p) => ({
       id: p.supplier_id,
-      label: `${p.code ? p.code + " · " : ""}${p.name} (${formatMoney(Number(p.balance))})`,
+      label: `${displayCode(p.code) ? displayCode(p.code) + " · " : ""}${p.name} (${formatMoney(Number(p.balance))})`,
     }));
   }, [suppliers, payables]);
 

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { ProductDetail, ProductVariant } from "@/lib/api";
+import { displayCode, isBhSyncCode, maskBhSyncValue } from "@/lib/productLabel";
 
 export type VariantFormRow = {
   key: string;
@@ -159,8 +160,14 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
         <h2 className="font-semibold text-slate-800">Ürün Bilgileri</h2>
         <div className="grid md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">SKU / Kod *</label>
-            <input className={input} value={sku} onChange={(e) => setSku(e.target.value)} required />
+            <label className="block text-xs font-medium text-slate-600 mb-1">SKU / Kod{isBhSyncCode(sku) ? "" : " *"}</label>
+            <input
+              className={input}
+              value={maskBhSyncValue(sku)}
+              onChange={(e) => setSku(e.target.value)}
+              required={!isBhSyncCode(sku)}
+              placeholder={isBhSyncCode(sku) ? "Senkron kodu gizli" : undefined}
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Ad *</label>
@@ -245,7 +252,7 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
             <h2 className="font-semibold text-slate-800">Varyantlar</h2>
             <button
               type="button"
-              onClick={() => setVariants((v) => [...v, emptyVariant(sku)])}
+              onClick={() => setVariants((v) => [...v, emptyVariant(displayCode(sku) || "")])}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
             >
               + Varyant
@@ -258,11 +265,16 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
             {variants.map((v) => (
               <div key={v.key} className="rounded-lg border border-slate-100 bg-slate-50 p-3 grid md:grid-cols-4 gap-2">
                 <input className={input} placeholder="Ad *" value={v.name} onChange={(e) => updateVariant(v.key, { name: e.target.value })} />
-                <input className={input} placeholder="SKU *" value={v.sku} onChange={(e) => updateVariant(v.key, { sku: e.target.value })} />
+                <input
+                  className={input}
+                  placeholder={isBhSyncCode(v.sku) ? "Senkron kodu gizli" : "SKU *"}
+                  value={maskBhSyncValue(v.sku)}
+                  onChange={(e) => updateVariant(v.key, { sku: e.target.value })}
+                />
                 <input className={input} placeholder="Renk" value={v.color} onChange={(e) => updateVariant(v.key, { color: e.target.value })} />
                 <input className={input} placeholder="Beden" value={v.size} onChange={(e) => updateVariant(v.key, { size: e.target.value })} />
                 <input className={input} placeholder="Baskı türü" value={v.print_type} onChange={(e) => updateVariant(v.key, { print_type: e.target.value })} />
-                <input className={input} placeholder="Barkod" value={v.barcode} onChange={(e) => updateVariant(v.key, { barcode: e.target.value })} />
+                <input className={input} placeholder={isBhSyncCode(v.barcode) ? "Senkron kodu gizli" : "Barkod"} value={maskBhSyncValue(v.barcode) || (isBhSyncCode(v.barcode) ? "" : v.barcode)} onChange={(e) => updateVariant(v.key, { barcode: e.target.value })} />
                 <input className={input} type="number" step="0.01" placeholder="Fiyat" value={v.price} onChange={(e) => updateVariant(v.key, { price: e.target.value })} />
                 <div className="flex gap-2">
                   <input className={input} type="number" placeholder="Stok" value={v.stock_qty} onChange={(e) => updateVariant(v.key, { stock_qty: e.target.value })} />

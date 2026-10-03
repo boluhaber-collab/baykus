@@ -25,8 +25,9 @@ import SplitPaymentRows, {
 } from "@/components/SplitPaymentRows";
 import { localToday } from "@/lib/dates";
 import {
-  belgeFromNote, detailFromBhNote, hareketLabel, isBhImportNote, sanitizeDisplayNote,
+  belgeFromNote, detailFromBhNote, hareketLabel, isBhImportNote, mergeNotePreservingBh, sanitizeDisplayNote,
 } from "@/lib/bhNote";
+import { isBhSyncCode } from "@/lib/productLabel";
 import type {
   PurchaseDetail,
   SupplierMovement,
@@ -87,7 +88,7 @@ export default function SupplierDetailPage() {
         address: detail.address || "",
         tax_number: detail.tax_number || "",
         tax_office: detail.tax_office || "",
-        notes: detail.notes || "",
+        notes: sanitizeDisplayNote(detail.notes),
         is_active: detail.is_active !== false,
         opening_balance: String(detail.opening_balance ?? 0),
       });
@@ -109,7 +110,7 @@ export default function SupplierDetailPage() {
       await apiFetch(`/api/suppliers/${id}`, {
         method: "PUT",
         body: JSON.stringify({
-          code: editForm.code.trim() || null,
+          code: isBhSyncCode(supplier?.code) ? supplier?.code || null : editForm.code.trim() || null,
           name: editForm.name.trim(),
           email: editForm.email.trim() || null,
           phone: editForm.phone.trim() || null,
@@ -117,7 +118,7 @@ export default function SupplierDetailPage() {
           address: editForm.address.trim() || null,
           tax_number: editForm.tax_number.trim() || null,
           tax_office: editForm.tax_office.trim() || null,
-          notes: editForm.notes.trim() || null,
+          notes: mergeNotePreservingBh(supplier?.notes, editForm.notes),
           is_active: editForm.is_active,
           opening_balance: Number(editForm.opening_balance || 0),
         }),
@@ -636,7 +637,9 @@ export default function SupplierDetailPage() {
                       ["tax_office", "Vergi Dairesi"],
                       ["opening_balance", "Açılış bakiyesi"],
                     ] as const
-                  ).map(([key, label]) => (
+                  )
+                    .filter(([key]) => key !== "code" || !isBhSyncCode(supplier.code))
+                    .map(([key, label]) => (
                     <div key={key}>
                       <label className="block text-xs text-slate-500 mb-1">{label}</label>
                       <input

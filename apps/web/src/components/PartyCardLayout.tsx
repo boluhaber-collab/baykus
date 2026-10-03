@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { formatMoney } from "@/lib/api";
+import { sanitizeDisplayNote } from "@/lib/bhNote";
 
 export type PartyActionItem = {
   label: string;
@@ -297,7 +298,7 @@ export default function PartyCardLayout({
   okMsg,
   children,
 }: PartyCardLayoutProps) {
-  const noteText = (notes || "").trim();
+  const noteText = sanitizeDisplayNote(notes);
   const addr = [address].filter(Boolean).join(" ").trim();
 
   return (

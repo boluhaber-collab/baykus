@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PayableItem, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import SupplierFisPanel from "@/components/SupplierFisPanel";
+import { displayCode } from "@/lib/productLabel";
 
 export default function PayablesPage() {
   const [items, setItems] = useState<PayableItem[]>([]);
@@ -119,7 +120,7 @@ export default function PayablesPage() {
           <tbody>
             {filtered.map((i) => (
               <tr key={i.supplier_id} className="border-t border-slate-100 hover:bg-slate-50">
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">{i.code || "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-500">{displayCode(i.code) || "—"}</td>
                 <td className="px-4 py-3 font-medium">
                   <Link href={`/suppliers/${i.supplier_id}`} className="text-baykus-700 hover:underline">
                     {i.name}

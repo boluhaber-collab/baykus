@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { PayableItem, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import SupplierFisPanel from "@/components/SupplierFisPanel";
+import { displayCode } from "@/lib/productLabel";
 
 function SupplierPayablesInner() {
   const sp = useSearchParams();
@@ -154,7 +155,7 @@ function SupplierPayablesInner() {
           <tbody>
             {filtered.map((i) => (
               <tr key={i.supplier_id}>
-                <td className="font-mono text-xs text-slate-500">{i.code || "—"}</td>
+                <td className="font-mono text-xs text-slate-500">{displayCode(i.code) || "—"}</td>
                 <td className="font-medium">
                   <Link href={`/suppliers/${i.supplier_id}`} className="text-baykus-primary hover:underline">
                     {i.name}

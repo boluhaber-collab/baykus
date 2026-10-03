@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ProductFormPayload } from "@/components/ProductForm";
 import TabbedProductForm from "@/components/TabbedProductForm";
 import { ProductDetail, apiFetch } from "@/lib/api";
+import { displaySku } from "@/lib/productLabel";
 
 export default function EditProductPage() {
   const params = useParams();
@@ -66,7 +67,7 @@ export default function EditProductPage() {
           </Link>
           <span className="mx-1">/</span>
           <Link href={`/products/${id}`} className="text-baykus-primary hover:underline">
-            {product.sku}
+            {displaySku(product.sku) || product.name}
           </Link>
           <span className="mx-1">/</span>
           <span className="font-medium text-baykus-text">Düzenle</span>

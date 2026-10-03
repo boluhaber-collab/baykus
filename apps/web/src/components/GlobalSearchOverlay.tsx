@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { displayCode } from "@/lib/productLabel";
 
 export type SearchResult = {
   tur: string;
@@ -176,7 +177,7 @@ export default function GlobalSearchOverlay() {
                       {r.tur}
                     </span>
                   </td>
-                  <td className="px-2 py-2 font-mono text-xs text-slate-600 whitespace-nowrap">{r.no_kod}</td>
+                  <td className="px-2 py-2 font-mono text-xs text-slate-600 whitespace-nowrap">{displayCode(r.no_kod) || "—"}</td>
                   <td className="px-2 py-2 font-medium text-slate-800">{r.ad}</td>
                   <td className="px-2 py-2 text-xs text-slate-500">{r.iliski}</td>
                   <td className="px-3 py-2 text-xs text-slate-500 truncate max-w-[280px]">{r.detay}</td>

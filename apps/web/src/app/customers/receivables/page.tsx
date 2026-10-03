@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OpenBalanceOrder, ReceivableItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { displayCode } from "@/lib/productLabel";
 
 type OpenBalances = {
   open_orders?: OpenBalanceOrder[];
@@ -203,7 +204,7 @@ export default function CustomerReceivablesPage() {
             <tbody>
               {filteredParties.map((r) => (
                 <tr key={r.customer_id}>
-                  <td className="font-mono text-xs text-slate-500">{r.code || "—"}</td>
+                  <td className="font-mono text-xs text-slate-500">{displayCode(r.code) || "—"}</td>
                   <td className="font-medium">{r.name}</td>
                   <td className="text-slate-600">{r.company || "—"}</td>
                   <td>{r.city || "—"}</td>

@@ -14,7 +14,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Customer, Product, Supplier, apiFetch } from "@/lib/api";
-import { productOptionLabel } from "@/lib/productLabel";
+import { displayCode, productOptionLabel } from "@/lib/productLabel";
 
 export type LiveSearchOption = {
   value: string;
@@ -110,11 +110,12 @@ export function supplierToOption(s: {
   city?: string | null;
   tax_number?: string | null;
 }): LiveSearchOption {
+  const code = displayCode(s.code);
   return {
     value: String(s.id),
-    label: s.code ? `${s.code} — ${s.name}` : s.name,
+    label: code ? `${code} — ${s.name}` : s.name,
     hint: [s.phone, s.city].filter(Boolean).join(" · ") || undefined,
-    keywords: [s.code, s.name, s.phone, s.city, s.tax_number].filter(Boolean).join(" "),
+    keywords: [code, s.name, s.phone, s.city, s.tax_number].filter(Boolean).join(" "),
   };
 }
 

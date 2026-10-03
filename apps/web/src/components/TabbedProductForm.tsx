@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { ProductDetail, ProductVariant } from "@/lib/api";
-import { displaySku } from "@/lib/productLabel";
+import { displayCode, displaySku, isBhSyncCode, maskBhSyncValue } from "@/lib/productLabel";
 import {
   ProductMeta,
   SALES_UNITS,
@@ -251,8 +251,14 @@ export default function TabbedProductForm({
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">SKU / Kod *</label>
-                <input className={input} value={sku} onChange={(e) => setSku(e.target.value)} required />
+                <label className="block text-xs font-medium text-slate-600 mb-1">SKU / Kod{isBhSyncCode(sku) ? "" : " *"}</label>
+                <input
+                  className={input}
+                  value={maskBhSyncValue(sku)}
+                  onChange={(e) => setSku(e.target.value)}
+                  required={!isBhSyncCode(sku)}
+                  placeholder={isBhSyncCode(sku) ? "Senkron kodu gizli" : undefined}
+                />
               </div>
             </div>
             <div className="space-y-3">
@@ -526,7 +532,7 @@ export default function TabbedProductForm({
                   <p className="text-sm text-slate-600">Beden / renk / baskı varyantları</p>
                   <button
                     type="button"
-                    onClick={() => setVariants((v) => [...v, emptyVariant(sku)])}
+                    onClick={() => setVariants((v) => [...v, emptyVariant(displayCode(sku) || "")])}
                     className="bk-btn bk-btn-ghost text-xs"
                   >
                     + Varyant
@@ -554,8 +560,8 @@ export default function TabbedProductForm({
                     />
                     <input
                       className={input}
-                      placeholder="SKU *"
-                      value={v.sku}
+                      placeholder={isBhSyncCode(v.sku) ? "Senkron kodu gizli" : "SKU *"}
+                      value={maskBhSyncValue(v.sku)}
                       onChange={(e) => updateVariant(v.key, { sku: e.target.value })}
                     />
                     <input
@@ -578,8 +584,8 @@ export default function TabbedProductForm({
                     />
                     <input
                       className={input}
-                      placeholder="Barkod"
-                      value={v.barcode}
+                      placeholder={isBhSyncCode(v.barcode) ? "Senkron kodu gizli" : "Barkod"}
+                      value={isBhSyncCode(v.barcode) ? "" : v.barcode}
                       onChange={(e) => updateVariant(v.key, { barcode: e.target.value })}
                     />
                     <input

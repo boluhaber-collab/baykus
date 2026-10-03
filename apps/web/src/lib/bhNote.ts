@@ -301,6 +301,27 @@ export function sanitizeDisplayNote(
   return fallback;
 }
 
+/**
+ * Save path for party notes: keep BH: / BH_IMPORT tokens in the DB
+ * even when the textarea only shows human text (or is blank).
+ */
+export function mergeNotePreservingBh(
+  original: string | null | undefined,
+  editedVisible: string,
+): string | null {
+  const visibleOrig = sanitizeDisplayNote(original);
+  const edited = (editedVisible || "").trim();
+  if (edited === visibleOrig.trim()) {
+    const raw = (original || "").trim();
+    return raw || null;
+  }
+  const tokens = (original || "").match(/\b(?:BH_IMPORT|BH_FROM_STOCK|BHV?):\S+/gi) || [];
+  const unique = [...new Set(tokens)];
+  if (!edited) return unique.length ? unique.join(" ") : null;
+  if (!unique.length) return edited;
+  return `${edited} ${unique.join(" ")}`.trim();
+}
+
 /** Hesap column: Cari= from note, else optional fallback (e.g. customer_name). */
 export function accountHesap(
   note: string | null | undefined,
