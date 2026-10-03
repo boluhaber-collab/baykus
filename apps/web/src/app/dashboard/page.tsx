@@ -112,14 +112,19 @@ export default function DashboardPage() {
   }, [load, loadUsd, loadStock, loadNotes]);
 
   useEffect(() => {
+    // Summary walks the whole catalog. Don't reload it on every window focus;
+    // refresh at most every 2 minutes when the tab becomes visible again.
+    let last = Date.now();
     function onVis() {
-      if (document.visibilityState === "visible") void load();
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - last < 120_000) return;
+      last = now;
+      void load();
     }
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", onVis);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", onVis);
     };
   }, [load]);
 

@@ -38,6 +38,17 @@ cfg = get_settings()
 
 app = FastAPI(title=cfg.app_name, version="0.1.0")
 
+@app.on_event("startup")
+def _ensure_lookup_indexes() -> None:
+    """SQLite/Postgres: add hot lookup indexes if missing. Never block boot."""
+    try:
+        from app.db.indexes import ensure_hot_indexes
+
+        ensure_hot_indexes()
+    except Exception:
+        pass
+
+
 # Lock mode gate runs inside CORS (added last = outermost in Starlette)
 app.add_middleware(LockModeMiddleware)
 

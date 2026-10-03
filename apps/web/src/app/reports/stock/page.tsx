@@ -101,6 +101,8 @@ export default function StockReportPage() {
     printTypes: [],
     warehouses: [],
   });
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(0);
   const [data, setData] = useState<ReportResponse<StockRow> | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -124,41 +126,66 @@ export default function StockReportPage() {
     return p.toString();
   }, [criticalOnly, valueBasis, activeFilter, q, category, brand, productType, stockFilters]);
 
+  const filterSig = qs;
+  const filterSigRef = useRef(filterSig);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const [cats, brs, facetRaw] = await Promise.all([
+          apiFetch<string[]>("/api/products/categories").catch(() => [] as string[]),
+          apiFetch<string[]>("/api/products/brands").catch(() => [] as string[]),
+          apiFetch<{
+            colors: string[];
+            sizes: string[];
+            print_types: string[];
+            warehouses: string[];
+          }>("/api/products/variant-facets").catch(() => ({
+            colors: [],
+            sizes: [],
+            print_types: [],
+            warehouses: [],
+          })),
+        ]);
+        if (cancel) return;
+        setCategories(cats);
+        setBrands(brs);
+        setFacets({
+          colors: facetRaw.colors || [],
+          sizes: sortSizes(facetRaw.sizes || []),
+          printTypes: facetRaw.print_types || [],
+          warehouses: facetRaw.warehouses || [],
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    let usePage = page;
+    if (filterSigRef.current !== filterSig) {
+      filterSigRef.current = filterSig;
+      usePage = 0;
+      if (page !== 0) setPage(0);
+    }
     try {
-      const [report, cats, brs, facetRaw] = await Promise.all([
-        apiFetch<ReportResponse<StockRow>>(`/api/reports/stock?${qs}`),
-        apiFetch<string[]>("/api/products/categories").catch(() => [] as string[]),
-        apiFetch<string[]>("/api/products/brands").catch(() => [] as string[]),
-        apiFetch<{
-          colors: string[];
-          sizes: string[];
-          print_types: string[];
-          warehouses: string[];
-        }>("/api/products/variant-facets").catch(() => ({
-          colors: [],
-          sizes: [],
-          print_types: [],
-          warehouses: [],
-        })),
-      ]);
+      const report = await apiFetch<
+        ReportResponse<StockRow> & { total?: number; page?: number; page_size?: number }
+      >(`/api/reports/stock?${qs}&limit=${PAGE_SIZE}&skip=${usePage * PAGE_SIZE}`);
       setData(report);
-      setCategories(cats);
-      setBrands(brs);
-      setFacets({
-        colors: facetRaw.colors || [],
-        sizes: sortSizes(facetRaw.sizes || []),
-        printTypes: facetRaw.print_types || [],
-        warehouses: facetRaw.warehouses || [],
-      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     } finally {
       setLoading(false);
     }
-  }, [qs]);
+  }, [qs, page, filterSig]);
 
   useEffect(() => {
     load();
@@ -178,21 +205,30 @@ export default function StockReportPage() {
   }, [allRows, selected]);
 
   const viewSummary = useMemo(() => {
-    let totalQty = 0;
-    let totalValue = 0;
-    let critical = 0;
-    for (const r of visibleRows) {
-      totalQty += Number(r.qty) || 0;
-      totalValue += Number(r.value) || 0;
-      if (r.is_critical) critical += 1;
+    if (selected.size > 0) {
+      let totalQty = 0;
+      let totalValue = 0;
+      let critical = 0;
+      for (const r of visibleRows) {
+        totalQty += Number(r.qty) || 0;
+        totalValue += Number(r.value) || 0;
+        if (r.is_critical) critical += 1;
+      }
+      return {
+        row_count: visibleRows.length,
+        total_qty: totalQty,
+        total_value: totalValue,
+        critical_count: critical,
+      };
     }
+    const s = data?.summary;
     return {
-      row_count: visibleRows.length,
-      total_qty: totalQty,
-      total_value: totalValue,
-      critical_count: critical,
+      row_count: Number(s?.row_count ?? 0),
+      total_qty: Number(s?.total_qty ?? 0),
+      total_value: Number(s?.total_value ?? 0),
+      critical_count: Number(s?.critical_count ?? 0),
     };
-  }, [visibleRows]);
+  }, [visibleRows, selected.size, data]);
 
   useEffect(() => {
     const valid = new Set(allRows.map(rowKey));
@@ -433,6 +469,42 @@ export default function StockReportPage() {
           { label: "Kritik kalem", value: viewSummary.critical_count, accent: "border-red-200" },
         ]}
       />
+
+      {(() => {
+        const total = Number(data?.summary?.row_count ?? 0);
+        const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+        const from = total === 0 ? 0 : page * PAGE_SIZE + 1;
+        const to = Math.min(total, page * PAGE_SIZE + allRows.length);
+        return (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 print:hidden">
+            <span>
+              {loading ? "Yükleniyor…" : `${from}–${to} / ${total} satır`}
+              {selected.size > 0 ? " · kartlar seçili satırlar" : " · kartlar tüm filtre"}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-1"
+                disabled={page <= 0 || loading}
+                onClick={() => setPage((n) => Math.max(0, n - 1))}
+              >
+                Önceki
+              </button>
+              <span className="px-2 tabular-nums">
+                {page + 1} / {pages}
+              </span>
+              <button
+                type="button"
+                className="rounded border border-slate-300 px-2 py-1"
+                disabled={page + 1 >= pages || loading}
+                onClick={() => setPage((n) => n + 1)}
+              >
+                Sonraki
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       <ReportTable
         prefixHeader={<SelectAllCheckbox checked={allSelected} indeterminate={someSelected} onChange={toggleAll} />}

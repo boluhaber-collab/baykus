@@ -11,7 +11,8 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
-from sqlalchemy import and_, exists, func, or_
+from sqlalchemy import Integer, String, and_, case, cast, exists, func, literal, or_, union_all
+from sqlalchemy.sql import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
@@ -469,8 +470,14 @@ def stock_report(
     sku: str | None = Query(default=None),
     warehouse: str | None = Query(default=None),
     in_stock_only: bool = Query(default=True),
+    skip: int = Query(default=0, ge=0),
+    limit: int | None = Query(default=None, ge=1, le=500),
 ):
-    """Stok Değeri / Depo Durumu — BH product stock-value list filters."""
+    """Stok Değeri / Depo Durumu — BH product stock-value list filters.
+
+    JSON responses page variant rows (skip/limit). Summary counts stay on the
+    full filtered set. CSV and print ignore paging and export every matching row.
+    """
 
     def _terms(single: str | None, many: list[str] | None) -> list[str]:
         raw: list[str] = []
@@ -494,58 +501,49 @@ def stock_report(
     color_keys = {t.lower() for t in color_terms}
     size_keys = {t.lower() for t in size_terms}
 
-    query = db.query(Product).options(joinedload(Product.variants))
-    if q and q.strip():
+    unit_cost = case(
+        (Product.cost > 0, Product.cost),
+        else_=func.coalesce(Product.purchase_price, 0),
+    )
+    v_sale = case(
+        (ProductVariant.price > 0, ProductVariant.price),
+        else_=func.coalesce(Product.base_price, 0),
+    )
+    p_sale = func.coalesce(Product.base_price, 0)
+    wh_label = literal(warehouse.strip()) if warehouse and str(warehouse).strip() else Product.warehouse
+    # Direct calls (stock_print) may pass FastAPI Query defaults; only real ints page.
+    page_skip = skip if isinstance(skip, int) and skip > 0 else 0
+    page_limit = limit if isinstance(limit, int) and limit > 0 else None
+    # CSV always exports the full filtered set.
+    if _wants_csv(request, format if isinstance(format, str) or format is None else None):
+        page_limit = None
+        page_skip = 0
+
+    prod_filters = []
+    if isinstance(q, str) and q.strip():
         like = f"%{q.strip()}%"
-        query = query.filter(
-            (Product.name.ilike(like))
-            | (Product.sku.ilike(like))
-            | (Product.brand.ilike(like))
-            | (Product.category.ilike(like))
-        )
-    if category:
-        query = query.filter(Product.category == category)
-    if brand:
-        query = query.filter(Product.brand == brand)
-    if product_type:
-        query = query.filter(Product.product_type == product_type)
-    if active_only:
-        query = query.filter(Product.is_active.is_(True))
-
-    needs_variant = bool(color_terms or size_terms or print_type or (sku and sku.strip()))
-    if needs_variant:
-        vconds = []
-        if color_terms:
-            vconds.append(or_(*[ProductVariant.color.ilike(t) for t in color_terms]))
-        if size_terms:
-            vconds.append(or_(*[ProductVariant.size.ilike(t) for t in size_terms]))
-        if print_type:
-            vconds.append(ProductVariant.print_type.ilike(print_type.strip()))
-        if sku and sku.strip():
-            like_sku = f"%{sku.strip()}%"
-            vconds.append(
-                or_(
-                    ProductVariant.sku.ilike(like_sku),
-                    ProductVariant.name.ilike(like_sku),
-                )
+        prod_filters.append(
+            or_(
+                Product.name.ilike(like),
+                Product.sku.ilike(like),
+                Product.brand.ilike(like),
+                Product.category.ilike(like),
             )
-        variant_exists = exists().where(
-            and_(ProductVariant.product_id == Product.id, *vconds)
         )
-        if sku and sku.strip():
-            like_sku = f"%{sku.strip()}%"
-            query = query.filter(
-                or_(variant_exists, Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
-            )
-        else:
-            query = query.filter(variant_exists)
-    elif sku and sku.strip():
-        like_sku = f"%{sku.strip()}%"
-        query = query.filter(
-            or_(Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
-        )
+    if isinstance(category, str) and category:
+        prod_filters.append(Product.category == category)
+    if isinstance(brand, str) and brand:
+        prod_filters.append(Product.brand == brand)
+    if isinstance(product_type, str) and product_type:
+        prod_filters.append(Product.product_type == product_type)
+    if active_only is True or active_only is False:
+        if active_only:
+            prod_filters.append(Product.is_active.is_(True))
+    elif active_only:
+        # Query(default=True) object from a direct call — keep historical default.
+        prod_filters.append(Product.is_active.is_(True))
 
-    if warehouse and warehouse.strip():
+    if isinstance(warehouse, str) and warehouse.strip():
         wh = warehouse.strip()
         wh_exists = exists().where(
             and_(
@@ -554,133 +552,129 @@ def stock_report(
                 WarehouseStock.quantity > 0,
             )
         )
-        query = query.filter(or_(Product.warehouse == wh, wh_exists))
+        prod_filters.append(or_(Product.warehouse == wh, wh_exists))
 
-    products = query.order_by(Product.name).all()
-
-    rows_out: list[dict] = []
-    total_qty = 0
-    total_value_cost = Decimal("0")
-    total_value_sale = Decimal("0")
-    critical_count = 0
-
-    for p in products:
-        threshold = p.critical_stock_threshold or 0
-        unit_cost = _dec(p.cost) if _dec(p.cost) > 0 else _dec(p.purchase_price)
-        unit_sale = _dec(p.base_price)
-        row_wh = (warehouse.strip() if warehouse and warehouse.strip() else None) or p.warehouse
-
-        if p.variants:
-            for v in p.variants:
-                if color_keys and (v.color or "").strip().lower() not in color_keys:
-                    continue
-                if size_keys and (v.size or "").strip().lower() not in size_keys:
-                    continue
-                if print_type and (v.print_type or "").strip().lower() != print_type.strip().lower():
-                    continue
-                if sku and sku.strip():
-                    needle = sku.strip().lower()
-                    hay = f"{v.sku or ''} {v.name or ''} {p.sku or ''} {p.name or ''}".lower()
-                    if needle not in hay:
-                        continue
-                qty = int(v.stock_qty or 0)
-                if in_stock_only and qty <= 0:
-                    continue
-                is_crit = qty < threshold
-                v_sale = _dec(v.price) if _dec(v.price) > 0 else unit_sale
-                val_cost = unit_cost * qty
-                val_sale = v_sale * qty
-                total_qty += qty
-                total_value_cost += val_cost
-                total_value_sale += val_sale
-                if is_crit:
-                    critical_count += 1
-                if critical_only and not is_crit:
-                    continue
-                value = val_cost if value_basis == "cost" else val_sale
-                rows_out.append(
-                    {
-                        "product_id": p.id,
-                        "sku": v.sku,
-                        "name": p.name,
-                        "variant_id": v.id,
-                        "variant_name": v.name,
-                        "category": p.category,
-                        "brand": p.brand,
-                        "warehouse": row_wh,
-                        "color": v.color,
-                        "size": v.size,
-                        "print_type": v.print_type,
-                        "qty": qty,
-                        "threshold": threshold,
-                        "is_critical": is_crit,
-                        "unit_cost": _f(unit_cost),
-                        "unit_sale": _f(v_sale),
-                        "value": _f(value),
-                        "value_basis": value_basis,
-                        "product_type": p.product_type,
-                        "is_active": bool(p.is_active),
-                    }
-                )
-        else:
-            if color_terms or size_terms or print_type:
-                continue
-            qty = int(p.stock_qty or 0)
-            if in_stock_only and qty <= 0 and p.product_type != "hizmet":
-                continue
-            if sku and sku.strip():
-                needle = sku.strip().lower()
-                hay = f"{p.sku or ''} {p.name or ''}".lower()
-                if needle not in hay:
-                    continue
-            is_crit = qty < threshold
-            val_cost = unit_cost * qty
-            val_sale = unit_sale * qty
-            total_qty += qty
-            total_value_cost += val_cost
-            total_value_sale += val_sale
-            if is_crit:
-                critical_count += 1
-            if critical_only and not is_crit:
-                continue
-            value = val_cost if value_basis == "cost" else val_sale
-            rows_out.append(
-                {
-                    "product_id": p.id,
-                    "sku": p.sku,
-                    "name": p.name,
-                    "variant_id": None,
-                    "variant_name": None,
-                    "category": p.category,
-                    "brand": p.brand,
-                    "warehouse": row_wh,
-                    "color": None,
-                    "size": None,
-                    "print_type": None,
-                    "qty": qty,
-                    "threshold": threshold,
-                    "is_critical": is_crit,
-                    "unit_cost": _f(unit_cost),
-                    "unit_sale": _f(unit_sale),
-                    "value": _f(value),
-                    "value_basis": value_basis,
-                    "product_type": p.product_type,
-                    "is_active": bool(p.is_active),
-                }
+    var_filters = list(prod_filters)
+    if color_terms:
+        var_filters.append(or_(*[ProductVariant.color.ilike(term) for term in color_terms]))
+    if size_terms:
+        var_filters.append(or_(*[ProductVariant.size.ilike(term) for term in size_terms]))
+    if isinstance(print_type, str) and print_type.strip():
+        var_filters.append(ProductVariant.print_type.ilike(print_type.strip()))
+    if isinstance(sku, str) and sku.strip():
+        like_sku = f"%{sku.strip()}%"
+        var_filters.append(
+            or_(
+                ProductVariant.sku.ilike(like_sku),
+                ProductVariant.name.ilike(like_sku),
+                Product.sku.ilike(like_sku),
+                Product.name.ilike(like_sku),
             )
+        )
+    in_stock_flag = bool(in_stock_only) if isinstance(in_stock_only, bool) else True
+    critical_flag = bool(critical_only) if isinstance(critical_only, bool) else False
+    if in_stock_flag:
+        var_filters.append(func.coalesce(ProductVariant.stock_qty, 0) > 0)
+    if critical_flag:
+        var_filters.append(
+            func.coalesce(ProductVariant.stock_qty, 0) < func.coalesce(Product.critical_stock_threshold, 0)
+        )
 
-    filtered_value = sum((_dec(r["value"]) for r in rows_out), Decimal("0"))
+    v_value = (unit_cost if value_basis == "cost" else v_sale) * func.coalesce(ProductVariant.stock_qty, 0)
+    v_crit = func.coalesce(ProductVariant.stock_qty, 0) < func.coalesce(Product.critical_stock_threshold, 0)
+    v_sel = select(
+        Product.id.label("product_id"),
+        ProductVariant.sku.label("sku"),
+        Product.name.label("name"),
+        ProductVariant.id.label("variant_id"),
+        ProductVariant.name.label("variant_name"),
+        Product.category.label("category"),
+        Product.brand.label("brand"),
+        wh_label.label("warehouse"),
+        ProductVariant.color.label("color"),
+        ProductVariant.size.label("size"),
+        ProductVariant.print_type.label("print_type"),
+        func.coalesce(ProductVariant.stock_qty, 0).label("qty"),
+        func.coalesce(Product.critical_stock_threshold, 0).label("threshold"),
+        v_crit.label("is_critical"),
+        unit_cost.label("unit_cost"),
+        v_sale.label("unit_sale"),
+        v_value.label("value"),
+        literal(value_basis).label("value_basis"),
+        Product.product_type.label("product_type"),
+        Product.is_active.label("is_active"),
+    ).select_from(ProductVariant).join(Product, Product.id == ProductVariant.product_id)
+    if var_filters:
+        v_sel = v_sel.where(and_(*var_filters))
+
+    selects = [v_sel]
+    if not (color_terms or size_terms or (isinstance(print_type, str) and print_type.strip())):
+        plain_filters = list(prod_filters)
+        plain_filters.append(~exists().where(ProductVariant.product_id == Product.id))
+        if isinstance(sku, str) and sku.strip():
+            like_sku = f"%{sku.strip()}%"
+            plain_filters.append(or_(Product.sku.ilike(like_sku), Product.name.ilike(like_sku)))
+        if in_stock_flag:
+            plain_filters.append(
+                or_(
+                    func.coalesce(Product.stock_qty, 0) > 0,
+                    Product.product_type == "hizmet",
+                )
+            )
+        if critical_flag:
+            plain_filters.append(
+                func.coalesce(Product.stock_qty, 0) < func.coalesce(Product.critical_stock_threshold, 0)
+            )
+        p_value = (unit_cost if value_basis == "cost" else p_sale) * func.coalesce(Product.stock_qty, 0)
+        p_crit = func.coalesce(Product.stock_qty, 0) < func.coalesce(Product.critical_stock_threshold, 0)
+        p_sel = select(
+            Product.id.label("product_id"),
+            Product.sku.label("sku"),
+            Product.name.label("name"),
+            cast(literal(None), Integer).label("variant_id"),
+            cast(literal(None), String).label("variant_name"),
+            Product.category.label("category"),
+            Product.brand.label("brand"),
+            wh_label.label("warehouse"),
+            cast(literal(None), String).label("color"),
+            cast(literal(None), String).label("size"),
+            cast(literal(None), String).label("print_type"),
+            func.coalesce(Product.stock_qty, 0).label("qty"),
+            func.coalesce(Product.critical_stock_threshold, 0).label("threshold"),
+            p_crit.label("is_critical"),
+            unit_cost.label("unit_cost"),
+            p_sale.label("unit_sale"),
+            p_value.label("value"),
+            literal(value_basis).label("value_basis"),
+            Product.product_type.label("product_type"),
+            Product.is_active.label("is_active"),
+        ).where(and_(*plain_filters))
+        selects.append(p_sel)
+
+    combined = union_all(*selects).subquery("stock_rows")
+    agg = db.query(
+        func.count(),
+        func.coalesce(func.sum(combined.c.qty), 0),
+        func.coalesce(func.sum(combined.c.value), 0),
+        func.coalesce(func.sum(case((combined.c.is_critical.is_(True), 1), else_=0)), 0),
+        func.coalesce(func.sum(combined.c.unit_cost * combined.c.qty), 0),
+        func.coalesce(func.sum(combined.c.unit_sale * combined.c.qty), 0),
+    ).one()
+    total_rows = int(agg[0] or 0)
+    filtered_value = _dec(agg[2])
     summary = {
-        "row_count": len(rows_out),
-        "total_qty": sum(r["qty"] for r in rows_out),
-        "total_value_cost": _f(sum((_dec(r["unit_cost"]) * r["qty"] for r in rows_out), Decimal("0"))),
-        "total_value_sale": _f(sum((_dec(r["unit_sale"]) * r["qty"] for r in rows_out), Decimal("0"))),
+        "row_count": total_rows,
+        "total_qty": int(agg[1] or 0),
+        "total_value_cost": _f(agg[4]),
+        "total_value_sale": _f(agg[5]),
         "total_value": _f(filtered_value),
-        "critical_count": sum(1 for r in rows_out if r["is_critical"]),
+        "critical_count": int(agg[3] or 0),
         "value_basis": value_basis,
-        "critical_only": critical_only,
-        "in_stock_only": in_stock_only,
-        "active_only": active_only,
+        "critical_only": critical_flag,
+        "in_stock_only": in_stock_flag,
+        "active_only": bool(active_only),
+        "page": (page_skip // page_limit + 1) if page_limit else 1,
+        "page_size": page_limit or total_rows,
         "assumptions": [
             "BH Stok Değeri filtreleri: aktif, kategori, marka, tür, renk/beden (çoklu), baskı, depo, SKU, stokta.",
             "Maliyet birimi: product.cost; yoksa purchase_price.",
@@ -688,10 +682,41 @@ def stock_report(
             "Kritik: qty < critical_stock_threshold.",
             "Değer = miktar × birim (seçilen baz).",
             "Varsayılan: aktif ürünler + stokta olanlar (BH ürün stok listesi).",
+            "Liste sayfalanır (varsayılan 50). Özet tüm filtreli satırların toplamıdır; CSV tam listeyi indirir.",
         ],
     }
 
-    if _wants_csv(request, format):
+    row_q = db.query(combined).order_by(combined.c.name, combined.c.variant_id)
+    if page_limit:
+        row_q = row_q.offset(page_skip).limit(page_limit)
+    rows_out: list[dict] = []
+    for r in row_q.all():
+        rows_out.append(
+            {
+                "product_id": r.product_id,
+                "sku": r.sku,
+                "name": r.name,
+                "variant_id": r.variant_id,
+                "variant_name": r.variant_name,
+                "category": r.category,
+                "brand": r.brand,
+                "warehouse": r.warehouse,
+                "color": r.color,
+                "size": r.size,
+                "print_type": r.print_type,
+                "qty": int(r.qty or 0),
+                "threshold": int(r.threshold or 0),
+                "is_critical": bool(r.is_critical),
+                "unit_cost": _f(r.unit_cost),
+                "unit_sale": _f(r.unit_sale),
+                "value": _f(r.value),
+                "value_basis": r.value_basis,
+                "product_type": r.product_type,
+                "is_active": bool(r.is_active),
+            }
+        )
+
+    if _wants_csv(request, format if isinstance(format, str) or format is None else None):
         headers = [
             "SKU",
             "Ürün",
@@ -733,7 +758,14 @@ def stock_report(
         ]
         return _csv_response("stok_raporu.csv", headers, csv_rows)
 
-    return {"summary": summary, "rows": rows_out}
+    return {
+        "summary": summary,
+        "rows": rows_out,
+        "total": total_rows,
+        "page": summary["page"],
+        "page_size": summary["page_size"],
+    }
+
 
 
 @router.get("/stock/print", response_class=HTMLResponse)
@@ -753,6 +785,21 @@ def stock_print(
         critical_only=critical_only,
         value_basis=value_basis,
         format=None,
+        q=None,
+        category=None,
+        brand=None,
+        product_type=None,
+        active_only=True,
+        color=None,
+        size=None,
+        colors=None,
+        sizes=None,
+        print_type=None,
+        sku=None,
+        warehouse=None,
+        in_stock_only=True,
+        skip=0,
+        limit=None,
     )
     assert isinstance(result, dict)
     s = result["summary"]

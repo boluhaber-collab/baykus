@@ -115,17 +115,18 @@ export default function CustomerDetailPage() {
     load();
   }, [id, load]);
 
-  // Re-fetch balances when returning to this tab after a sale/tahsilat elsewhere
+  // Balance screen: refresh the statement when the tab is shown again, not on every focus.
   useEffect(() => {
+    let last = Date.now();
     function onVis() {
-      if (document.visibilityState === "visible" && Number.isFinite(id)) void load();
+      if (document.visibilityState !== "visible" || !Number.isFinite(id)) return;
+      const now = Date.now();
+      if (now - last < 15_000) return;
+      last = now;
+      void load();
     }
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", onVis);
-    return () => {
-      document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", onVis);
-    };
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, [id, load]);
 
   useEffect(() => {

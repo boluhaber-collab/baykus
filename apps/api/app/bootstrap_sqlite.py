@@ -153,6 +153,13 @@ def bootstrap() -> None:
     else:
         print("Tablolar hazır.")
 
+    from app.db.indexes import ensure_hot_indexes
+    created = ensure_hot_indexes()
+    if created:
+        print("  + indexes: " + ", ".join(created))
+    else:
+        print("  indexes ok")
+
     db = SessionLocal()
     try:
         seed(db)

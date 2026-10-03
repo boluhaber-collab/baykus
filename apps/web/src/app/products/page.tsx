@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { DashboardSummary, Product, apiFetch, formatMoney, stockBadgeClass } from "@/lib/api";
+import { Product, apiFetch, formatMoney, stockBadgeClass } from "@/lib/api";
 import { displaySku } from "@/lib/productLabel";
 import { HubActionsBar, HubSection, HubTabs } from "@/components/hub/HubChrome";
 import StatusFooter from "@/components/StatusFooter";
@@ -37,10 +37,22 @@ function ProductsHubPageInner() {
         : "urunler",
   );
 
+  const PAGE_SIZE = 50;
+  type ListCounts = {
+    total: number;
+    products: number;
+    variants: number;
+    qty: number;
+    critical: number;
+    value: number;
+  };
+
   const [items, setItems] = useState<Product[]>([]);
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [counts, setCounts] = useState<ListCounts | null>(null);
+  const [page, setPage] = useState(0);
   const [categories, setCategories] = useState<string[]>([]);
   const [brands, setBrands] = useState<string[]>([]);
+  const [qInput, setQInput] = useState("");
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [brand, setBrand] = useState("");
@@ -65,9 +77,77 @@ function ProductsHubPageInner() {
 
   const criticalOnly = tab === "kritik";
 
+  useEffect(() => {
+    const timer = setTimeout(() => setQ(qInput), 250);
+    return () => clearTimeout(timer);
+  }, [qInput]);
+
+  const filterSig = useMemo(
+    () =>
+      JSON.stringify({
+        q,
+        category,
+        brand,
+        productType,
+        criticalOnly,
+        activeFilter,
+        colors: stockFilters.colors,
+        sizes: stockFilters.sizes,
+        printType: stockFilters.printType,
+        sku: stockFilters.sku,
+        warehouse: stockFilters.warehouse,
+        inStockOnly: stockFilters.inStockOnly,
+      }),
+    [q, category, brand, productType, criticalOnly, activeFilter, stockFilters],
+  );
+  const filterSigRef = useRef(filterSig);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const [cats, brs, facetRaw] = await Promise.all([
+          apiFetch<string[]>("/api/products/categories"),
+          apiFetch<string[]>("/api/products/brands").catch(() => [] as string[]),
+          apiFetch<{
+            colors: string[];
+            sizes: string[];
+            print_types: string[];
+            warehouses: string[];
+          }>("/api/products/variant-facets").catch(() => ({
+            colors: [],
+            sizes: [],
+            print_types: [],
+            warehouses: [],
+          })),
+        ]);
+        if (cancel) return;
+        setCategories(cats);
+        setBrands(brs);
+        setFacets({
+          colors: facetRaw.colors || [],
+          sizes: sortSizes(facetRaw.sizes || []),
+          printTypes: facetRaw.print_types || [],
+          warehouses: facetRaw.warehouses || [],
+        });
+      } catch {
+        /* facets are optional; list still loads */
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    let usePage = page;
+    if (filterSigRef.current !== filterSig) {
+      filterSigRef.current = filterSig;
+      usePage = 0;
+      if (page !== 0) setPage(0);
+    }
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
@@ -80,40 +160,21 @@ function ProductsHubPageInner() {
       for (const [k, v] of Object.entries(sf)) params.set(k, v);
       for (const c of stockFilters.colors || []) params.append("colors", c);
       for (const s of stockFilters.sizes || []) params.append("sizes", s);
+      params.set("limit", String(PAGE_SIZE));
+      params.set("skip", String(usePage * PAGE_SIZE));
       const qs = params.toString();
-      const [data, cats, brs, dash, facetRaw] = await Promise.all([
-        apiFetch<Product[]>(`/api/products${qs ? `?${qs}` : ""}`),
-        apiFetch<string[]>("/api/products/categories"),
-        apiFetch<string[]>("/api/products/brands").catch(() => [] as string[]),
-        apiFetch<DashboardSummary>("/api/dashboard/summary").catch(() => null),
-        apiFetch<{
-          colors: string[];
-          sizes: string[];
-          print_types: string[];
-          warehouses: string[];
-        }>("/api/products/variant-facets").catch(() => ({
-          colors: [],
-          sizes: [],
-          print_types: [],
-          warehouses: [],
-        })),
+      const [data, tally] = await Promise.all([
+        apiFetch<Product[]>(`/api/products?${qs}`),
+        apiFetch<ListCounts>(`/api/products/list-counts?${qs}`).catch(() => null),
       ]);
       setItems(data);
-      setCategories(cats);
-      setBrands(brs);
-      setSummary(dash);
-      setFacets({
-        colors: facetRaw.colors || [],
-        sizes: sortSizes(facetRaw.sizes || []),
-        printTypes: facetRaw.print_types || [],
-        warehouses: facetRaw.warehouses || [],
-      });
+      setCounts(tally);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     } finally {
       setLoading(false);
     }
-  }, [q, category, brand, productType, criticalOnly, activeFilter, stockFilters]);
+  }, [q, category, brand, productType, criticalOnly, activeFilter, stockFilters, page, filterSig]);
 
   useEffect(() => {
     load();
@@ -136,44 +197,34 @@ function ProductsHubPageInner() {
     return items.filter((p) => !picked.has(p.id));
   }, [items, selectedIds]);
 
-  const variantNarrow = useMemo(
-    () =>
-      (stockFilters.colors?.length ?? 0) > 0 ||
-      (stockFilters.sizes?.length ?? 0) > 0 ||
-      !!stockFilters.color ||
-      !!stockFilters.size,
-    [stockFilters],
-  );
-
   const stats = useMemo(() => {
-    const source = visibleItems;
-    let variants = 0;
-    let qty = 0;
-    let critical = 0;
-    let value = 0;
-    for (const p of source) {
-      variants += p.variants_count ?? 0;
-      const total = p.total_stock ?? p.stock_qty ?? 0;
-      if (p.product_type !== "hizmet") {
-        qty += total;
-        const unit = Number(p.cost || 0) > 0 ? Number(p.cost) : Number(p.purchase_price || 0);
-        value += unit * total;
+    if (selectedIds.length > 0) {
+      const source = visibleItems;
+      let variants = 0;
+      let qty = 0;
+      let critical = 0;
+      let value = 0;
+      for (const p of source) {
+        variants += p.variants_count ?? 0;
+        const total = p.total_stock ?? p.stock_qty ?? 0;
+        if (p.product_type !== "hizmet") {
+          qty += total;
+          const unit = Number(p.cost || 0) > 0 ? Number(p.cost) : Number(p.purchase_price || 0);
+          value += unit * total;
+        }
+        const thr = p.critical_stock_threshold ?? 10;
+        if (p.is_critical || (p.product_type !== "hizmet" && total < thr)) critical += 1;
       }
-      const thr = p.critical_stock_threshold ?? 10;
-      if (p.is_critical || (p.product_type !== "hizmet" && total < thr)) critical += 1;
-    }
-    const narrowed = selectedIds.length > 0 || variantNarrow;
-    if (narrowed) {
       return { products: source.length, variants, qty, critical, value };
     }
     return {
-      products: summary?.products_count ?? source.length,
-      variants: summary?.variants_count ?? variants,
-      qty: summary?.stock_qty_total ?? qty,
-      critical: summary?.critical_stock_count ?? critical,
-      value: summary?.stock_value ?? value,
+      products: counts?.products ?? 0,
+      variants: counts?.variants ?? 0,
+      qty: counts?.qty ?? 0,
+      critical: counts?.critical ?? 0,
+      value: counts?.value ?? 0,
     };
-  }, [visibleItems, summary, selectedIds.length, variantNarrow]);
+  }, [visibleItems, selectedIds.length, counts]);
 
   useEffect(() => {
     const valid = new Set(items.map((p) => p.id));
@@ -425,8 +476,8 @@ function ProductsHubPageInner() {
             <label className="text-xs text-slate-500 flex items-center gap-1">
               Ara:
               <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
+                value={qInput}
+                onChange={(e) => setQInput(e.target.value)}
                 placeholder="Ad / SKU / marka…"
                 className="bk-input max-w-[200px]"
               />
@@ -434,6 +485,7 @@ function ProductsHubPageInner() {
             <button
               type="button"
               onClick={() => {
+                setQInput("");
                 setQ("");
                 setCategory("");
                 setBrand("");
@@ -591,6 +643,41 @@ function ProductsHubPageInner() {
               </tbody>
             </table>
           </div>
+          {(() => {
+            const total = counts?.total ?? items.length;
+            const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+            const from = total === 0 ? 0 : page * PAGE_SIZE + 1;
+            const to = Math.min(total, page * PAGE_SIZE + items.length);
+            return (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                <span>
+                  {loading ? "Yükleniyor…" : `${from}–${to} / ${total} ürün`}
+                  {selectedIds.length > 0 ? " · toplamlar seçili satırlar" : " · toplamlar filtreye göre"}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="bk-btn bk-btn-ghost text-xs"
+                    disabled={page <= 0 || loading}
+                    onClick={() => setPage((n) => Math.max(0, n - 1))}
+                  >
+                    Önceki
+                  </button>
+                  <span className="px-2 tabular-nums">
+                    {page + 1} / {pages}
+                  </span>
+                  <button
+                    type="button"
+                    className="bk-btn bk-btn-ghost text-xs"
+                    disabled={page + 1 >= pages || loading}
+                    onClick={() => setPage((n) => n + 1)}
+                  >
+                    Sonraki
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
 

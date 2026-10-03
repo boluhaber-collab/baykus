@@ -16,7 +16,7 @@ class Product(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     sku: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     category: Mapped[str | None] = mapped_column(String(100))
     brand: Mapped[str | None] = mapped_column(String(100))
     supplier_name: Mapped[str | None] = mapped_column(String(255))
@@ -53,9 +53,9 @@ class ProductVariant(Base):
         ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    sku: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    color: Mapped[str | None] = mapped_column(String(50))
-    size: Mapped[str | None] = mapped_column(String(50))
+    sku: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    color: Mapped[str | None] = mapped_column(String(50), index=True)
+    size: Mapped[str | None] = mapped_column(String(50), index=True)
     print_type: Mapped[str | None] = mapped_column(String(100))
     barcode: Mapped[str | None] = mapped_column(String(64))
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)

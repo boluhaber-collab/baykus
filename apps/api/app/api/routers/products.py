@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import or_, and_, exists
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_db, require_roles
@@ -239,6 +239,251 @@ def _ensure_unique_variant_sku(
         raise HTTPException(status_code=400, detail=f"Varyant SKU zaten kullanılıyor: {sku}")
 
 
+def _variant_match_conds(
+    color_terms: list[str],
+    size_terms: list[str],
+    print_key: str,
+) -> list:
+    """Exact (case-insensitive) renk/beden/baskı predicates on ProductVariant."""
+    conds = []
+    if color_terms:
+        conds.append(or_(*[ProductVariant.color.ilike(term) for term in color_terms]))
+    if size_terms:
+        conds.append(or_(*[ProductVariant.size.ilike(term) for term in size_terms]))
+    if print_key:
+        conds.append(ProductVariant.print_type.ilike(print_key))
+    return conds
+
+
+def _unit_cost_expr():
+    return case(
+        (Product.cost > 0, Product.cost),
+        else_=func.coalesce(Product.purchase_price, 0),
+    )
+
+
+def _critical_exists(match_conds: list):
+    """Product is critical when a matching variant (or the bare product) is under threshold."""
+    has_var = exists().where(ProductVariant.product_id == Product.id)
+    var_where = [ProductVariant.product_id == Product.id, *match_conds]
+    var_where.append(ProductVariant.stock_qty < func.coalesce(Product.critical_stock_threshold, 0))
+    crit_var = exists().where(and_(*var_where))
+    crit_plain = and_(
+        ~has_var,
+        func.coalesce(Product.stock_qty, 0) < func.coalesce(Product.critical_stock_threshold, 0),
+    )
+    return and_(Product.product_type != "hizmet", or_(crit_var, crit_plain))
+
+
+def _in_stock_exists(match_conds: list):
+    has_var = exists().where(ProductVariant.product_id == Product.id)
+    var_where = [ProductVariant.product_id == Product.id, *match_conds, ProductVariant.stock_qty > 0]
+    return or_(
+        Product.product_type == "hizmet",
+        exists().where(and_(*var_where)),
+        and_(~has_var, func.coalesce(Product.stock_qty, 0) > 0),
+    )
+
+
+def _apply_catalog_filters(
+    query,
+    *,
+    q: str | None,
+    category: str | None,
+    brand: str | None,
+    product_type: str | None,
+    active_only: bool,
+    color_terms: list[str],
+    size_terms: list[str],
+    print_key: str,
+    sku: str | None,
+    warehouse: str | None,
+    critical_only: bool,
+    in_stock_only: bool,
+):
+    """Shared /products filters. Stock/critical are SQL so LIMIT pages the filtered set."""
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            (Product.name.ilike(like))
+            | (Product.sku.ilike(like))
+            | (Product.brand.ilike(like))
+            | (Product.category.ilike(like))
+        )
+    if category:
+        query = query.filter(Product.category == category)
+    if brand:
+        query = query.filter(Product.brand == brand)
+    if product_type:
+        query = query.filter(Product.product_type == product_type)
+    if active_only:
+        query = query.filter(Product.is_active.is_(True))
+
+    match_conds = _variant_match_conds(color_terms, size_terms, print_key)
+    needs_variant = bool(color_terms or size_terms or print_key or (sku and sku.strip()))
+    if needs_variant:
+        vconds = list(match_conds)
+        if sku and sku.strip():
+            like_sku = f"%{sku.strip()}%"
+            vconds.append(
+                or_(
+                    ProductVariant.sku.ilike(like_sku),
+                    ProductVariant.name.ilike(like_sku),
+                )
+            )
+        variant_exists = exists().where(and_(ProductVariant.product_id == Product.id, *vconds))
+        if sku and sku.strip():
+            like_sku = f"%{sku.strip()}%"
+            query = query.filter(
+                or_(variant_exists, Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
+            )
+        else:
+            query = query.filter(variant_exists)
+    elif sku and sku.strip():
+        like_sku = f"%{sku.strip()}%"
+        query = query.filter(or_(Product.sku.ilike(like_sku), Product.name.ilike(like_sku)))
+
+    if warehouse and warehouse.strip():
+        wh = warehouse.strip()
+        wh_exists = exists().where(
+            and_(
+                WarehouseStock.product_id == Product.id,
+                WarehouseStock.warehouse == wh,
+                WarehouseStock.quantity > 0,
+            )
+        )
+        query = query.filter(or_(Product.warehouse == wh, wh_exists))
+
+    # Renk/beden/baskı scope the stock test; SKU does not (same as _scope_list_item).
+    scope_conds = match_conds
+    if in_stock_only:
+        query = query.filter(_in_stock_exists(scope_conds))
+    if critical_only:
+        query = query.filter(_critical_exists(scope_conds))
+    return query
+
+
+def _variant_aggs(
+    db: Session,
+    product_ids: list[int],
+    color_terms: list[str],
+    size_terms: list[str],
+    print_key: str,
+) -> dict[int, dict[str, int]]:
+    """One grouped query for the page — do not joinedload every variant."""
+    if not product_ids:
+        return {}
+    conds = [ProductVariant.product_id.in_(product_ids)]
+    if color_terms or size_terms or print_key:
+        conds.extend(_variant_match_conds(color_terms, size_terms, print_key))
+    rows = (
+        db.query(
+            ProductVariant.product_id,
+            func.count(ProductVariant.id),
+            func.coalesce(func.sum(ProductVariant.stock_qty), 0),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (ProductVariant.stock_qty < func.coalesce(Product.critical_stock_threshold, 0), 1),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
+        )
+        .join(Product, Product.id == ProductVariant.product_id)
+        .filter(*conds)
+        .group_by(ProductVariant.product_id)
+        .all()
+    )
+    return {
+        int(pid): {"count": int(count or 0), "qty": int(qty or 0), "crit": int(crit or 0)}
+        for pid, count, qty, crit in rows
+    }
+
+
+def _products_with_variants(db: Session, product_ids: list[int]) -> set[int]:
+    if not product_ids:
+        return set()
+    rows = (
+        db.query(ProductVariant.product_id)
+        .filter(ProductVariant.product_id.in_(product_ids))
+        .distinct()
+        .all()
+    )
+    return {int(r[0]) for r in rows}
+
+
+def _list_item_scoped(
+    product: Product,
+    agg: dict[str, int] | None,
+    has_var: bool,
+    scoped: bool,
+) -> ProductListItem:
+    """List row without touching product.variants (that lazy-loads the whole set)."""
+    threshold = product.critical_stock_threshold or 0
+    if has_var and scoped:
+        total = int((agg or {}).get("qty") or 0)
+        vcount = int((agg or {}).get("count") or 0)
+        is_critical = product.product_type != "hizmet" and int((agg or {}).get("crit") or 0) > 0
+        stock_qty = total
+    elif has_var:
+        total = int((agg or {}).get("qty") or 0)
+        vcount = int((agg or {}).get("count") or 0)
+        is_critical = product.product_type != "hizmet" and int((agg or {}).get("crit") or 0) > 0
+        stock_qty = int(product.stock_qty or 0)
+    else:
+        total = int(product.stock_qty or 0)
+        vcount = 0
+        is_critical = product.product_type != "hizmet" and total < threshold
+        stock_qty = total
+    return ProductListItem(
+        id=product.id,
+        sku=product.sku,
+        name=product.name,
+        category=product.category,
+        brand=product.brand,
+        product_type=product.product_type,
+        base_price=product.base_price,
+        purchase_price=product.purchase_price or Decimal("0"),
+        cost=product.cost or Decimal("0"),
+        stock_qty=stock_qty,
+        total_stock=total,
+        critical_stock_threshold=threshold,
+        is_critical=is_critical,
+        is_active=bool(product.is_active),
+        warehouse=product.warehouse,
+        variants_count=vcount,
+        photo_url=product.photo_url,
+    )
+
+
+def _catalog_kwargs(
+    *,
+    q, category, brand, product_type, active_only,
+    color, colors, size, sizes, print_type, sku, warehouse,
+    critical_only, in_stock_only,
+) -> dict:
+    color_terms = _query_terms(color, colors)
+    size_terms = _query_terms(size, sizes)
+    print_key = print_type.strip() if print_type and print_type.strip() else ""
+    return {
+        "q": q.strip() if q and q.strip() else None,
+        "category": category,
+        "brand": brand,
+        "product_type": product_type,
+        "active_only": active_only,
+        "color_terms": color_terms,
+        "size_terms": size_terms,
+        "print_key": print_key,
+        "sku": sku,
+        "warehouse": warehouse,
+        "critical_only": critical_only,
+        "in_stock_only": in_stock_only,
+        "scoped": bool(color_terms or size_terms or print_key),
+    }
+
+
 @router.get("", response_model=list[ProductListItem])
 def list_products(
     db: Session = Depends(get_db),
@@ -260,83 +505,149 @@ def list_products(
     skip: int = 0,
     limit: int = 200,
 ) -> list[ProductListItem]:
-    query = db.query(Product).options(joinedload(Product.variants))
-    if q:
-        like = f"%{q}%"
-        query = query.filter(
-            (Product.name.ilike(like))
-            | (Product.sku.ilike(like))
-            | (Product.brand.ilike(like))
-            | (Product.category.ilike(like))
-        )
-    if category:
-        query = query.filter(Product.category == category)
-    if brand:
-        query = query.filter(Product.brand == brand)
-    if product_type:
-        query = query.filter(Product.product_type == product_type)
-    if active_only:
-        query = query.filter(Product.is_active.is_(True))
-
-    # BizimHesap-style detailed stock filters (renk/beden/baskı/SKU/depo/stokta)
-    color_terms = _query_terms(color, colors)
-    size_terms = _query_terms(size, sizes)
-    color_keys = {term.lower() for term in color_terms}
-    size_keys = {term.lower() for term in size_terms}
-    print_key = print_type.strip().lower() if print_type and print_type.strip() else ""
-    needs_variant = bool(color_terms or size_terms or print_key or (sku and sku.strip()))
-    if needs_variant:
-        vconds = []
-        if color_terms:
-            vconds.append(or_(*[ProductVariant.color.ilike(term) for term in color_terms]))
-        if size_terms:
-            vconds.append(or_(*[ProductVariant.size.ilike(term) for term in size_terms]))
-        if print_key:
-            vconds.append(ProductVariant.print_type.ilike(print_type.strip()))
-        if sku and sku.strip():
-            like_sku = f"%{sku.strip()}%"
-            vconds.append(
-                or_(
-                    ProductVariant.sku.ilike(like_sku),
-                    ProductVariant.name.ilike(like_sku),
-                )
-            )
-        variant_exists = exists().where(
-            and_(ProductVariant.product_id == Product.id, *vconds)
-        )
-        if sku and sku.strip():
-            like_sku = f"%{sku.strip()}%"
-            query = query.filter(
-                or_(variant_exists, Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
-            )
-        else:
-            query = query.filter(variant_exists)
-    elif sku and sku.strip():
-        like_sku = f"%{sku.strip()}%"
-        query = query.filter(
-            or_(Product.sku.ilike(like_sku), Product.name.ilike(like_sku))
-        )
-
-    if warehouse and warehouse.strip():
-        wh = warehouse.strip()
-        wh_exists = exists().where(
-            and_(
-                WarehouseStock.product_id == Product.id,
-                WarehouseStock.warehouse == wh,
-                WarehouseStock.quantity > 0,
-            )
-        )
-        query = query.filter(or_(Product.warehouse == wh, wh_exists))
-
+    # Page of products only. Variant totals come from one GROUP BY, not joinedload
+    # of every variant (~3k rows) on each request. Default limit stays 200 so
+    # existing callers keep working; the ürün list asks for 50.
+    kw = _catalog_kwargs(
+        q=q,
+        category=category,
+        brand=brand,
+        product_type=product_type,
+        active_only=active_only,
+        color=color,
+        colors=colors,
+        size=size,
+        sizes=sizes,
+        print_type=print_type,
+        sku=sku,
+        warehouse=warehouse,
+        critical_only=critical_only,
+        in_stock_only=in_stock_only,
+    )
+    scoped = kw.pop("scoped")
+    query = _apply_catalog_filters(db.query(Product), **kw)
     products = query.order_by(Product.id.desc()).offset(skip).limit(limit).all()
-    items = [
-        _scope_list_item(_list_item(p), p, color_keys, size_keys, print_key) for p in products
+    ids = [p.id for p in products]
+    aggs = _variant_aggs(db, ids, kw["color_terms"], kw["size_terms"], kw["print_key"])
+    have = _products_with_variants(db, ids)
+    return [
+        _list_item_scoped(p, aggs.get(p.id), p.id in have, scoped)
+        for p in products
     ]
-    if critical_only:
-        items = [i for i in items if i.is_critical]
-    if in_stock_only:
-        items = [i for i in items if (i.total_stock or i.stock_qty or 0) > 0 or i.product_type == "hizmet"]
-    return items
+
+
+@router.get("/list-counts")
+def list_product_counts(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+    q: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    brand: str | None = Query(default=None),
+    product_type: str | None = Query(default=None, alias="type"),
+    critical_only: bool = Query(default=False),
+    active_only: bool = Query(default=False),
+    color: str | None = Query(default=None),
+    size: str | None = Query(default=None),
+    colors: list[str] | None = Query(default=None),
+    sizes: list[str] | None = Query(default=None),
+    print_type: str | None = Query(default=None),
+    sku: str | None = Query(default=None),
+    warehouse: str | None = Query(default=None),
+    in_stock_only: bool = Query(default=False),
+) -> dict:
+    """Filtered KPI totals for the ürün list. Does not return rows."""
+    kw = _catalog_kwargs(
+        q=q,
+        category=category,
+        brand=brand,
+        product_type=product_type,
+        active_only=active_only,
+        color=color,
+        colors=colors,
+        size=size,
+        sizes=sizes,
+        print_type=print_type,
+        sku=sku,
+        warehouse=warehouse,
+        critical_only=critical_only,
+        in_stock_only=in_stock_only,
+    )
+    scoped = kw.pop("scoped")
+    query = _apply_catalog_filters(db.query(Product), **kw)
+    id_sq = query.order_by(None).with_entities(Product.id).subquery()
+    total = int(db.query(func.count()).select_from(id_sq).scalar() or 0)
+    id_select = select(id_sq.c.id)
+    unit = _unit_cost_expr()
+
+    vq = (
+        db.query(
+            func.count(ProductVariant.id),
+            func.coalesce(
+                func.sum(
+                    case((Product.product_type != "hizmet", ProductVariant.stock_qty), else_=0)
+                ),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            Product.product_type != "hizmet",
+                            unit * func.coalesce(ProductVariant.stock_qty, 0),
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
+        )
+        .join(Product, Product.id == ProductVariant.product_id)
+        .filter(Product.id.in_(id_select))
+    )
+    if scoped:
+        for cond in _variant_match_conds(kw["color_terms"], kw["size_terms"], kw["print_key"]):
+            vq = vq.filter(cond)
+    v_count, v_qty, v_value = vq.one()
+
+    plain = (
+        db.query(
+            func.coalesce(
+                func.sum(case((Product.product_type != "hizmet", Product.stock_qty), else_=0)),
+                0,
+            ),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            Product.product_type != "hizmet",
+                            unit * func.coalesce(Product.stock_qty, 0),
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ),
+        )
+        .filter(Product.id.in_(id_select))
+        .filter(~exists().where(ProductVariant.product_id == Product.id))
+    )
+    p_qty, p_value = plain.one()
+
+    crit = int(
+        db.query(func.count(Product.id))
+        .filter(Product.id.in_(id_select))
+        .filter(_critical_exists(_variant_match_conds(kw["color_terms"], kw["size_terms"], kw["print_key"])))
+        .scalar()
+        or 0
+    )
+    return {
+        "total": total,
+        "products": total,
+        "variants": int(v_count or 0),
+        "qty": int(v_qty or 0) + int(p_qty or 0),
+        "critical": crit,
+        "value": float(v_value or 0) + float(p_value or 0),
+    }
 
 
 @router.get("/categories", response_model=list[str])

@@ -71,6 +71,7 @@ export default function ProductDetailPage() {
   const [warehouseStocks, setWarehouseStocks] = useState<WarehouseStockRow[]>([]);
   const [stockFilters, setStockFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
   const [stockModalOpen, setStockModalOpen] = useState(false);
+  const [variantPage, setVariantPage] = useState(0);
   const [historyLite, setHistoryLite] = useState<ProductHistoryLite | null>(null);
 
   const load = useCallback(async () => {
@@ -160,6 +161,15 @@ export default function ProductDetailPage() {
     const all = product?.variants || [];
     return filterStockRows(all, stockFilters);
   }, [product?.variants, stockFilters]);
+
+  const VARIANT_PAGE = 50;
+  useEffect(() => {
+    setVariantPage(0);
+  }, [stockFilters]);
+  const pagedVariants = useMemo(() => {
+    const start = variantPage * VARIANT_PAGE;
+    return visibleVariants.slice(start, start + VARIANT_PAGE);
+  }, [visibleVariants, variantPage]);
 
   const visibleWarehouseStocks = useMemo(() => {
     return filterStockRows(
@@ -496,7 +506,7 @@ export default function ProductDetailPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {visibleVariants.map((v) => {
+                      {pagedVariants.map((v) => {
                         const vSku = displaySku(v.sku);
                         return (
                           <tr
@@ -531,6 +541,18 @@ export default function ProductDetailPage() {
                       })}
                     </tbody>
                   </table>
+                  {visibleVariants.length > VARIANT_PAGE && (
+                    <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-600">
+                      <span>
+                        {variantPage * VARIANT_PAGE + 1}–
+                        {Math.min(visibleVariants.length, (variantPage + 1) * VARIANT_PAGE)} / {visibleVariants.length} varyant
+                      </span>
+                      <span className="flex gap-1">
+                        <button type="button" className="bk-btn bk-btn-ghost text-xs" disabled={variantPage <= 0} onClick={() => setVariantPage((n) => n - 1)}>Önceki</button>
+                        <button type="button" className="bk-btn bk-btn-ghost text-xs" disabled={(variantPage + 1) * VARIANT_PAGE >= visibleVariants.length} onClick={() => setVariantPage((n) => n + 1)}>Sonraki</button>
+                      </span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="px-4 py-4 text-sm text-slate-500">

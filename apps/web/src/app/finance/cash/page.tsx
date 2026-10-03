@@ -55,15 +55,17 @@ export default function CashPage() {
   }, [load]);
 
   useEffect(() => {
+    // Balance screen: refresh when the tab is shown again, not on every focus click.
+    let last = Date.now();
     function onVis() {
-      if (document.visibilityState === "visible") void load();
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - last < 15_000) return;
+      last = now;
+      void load();
     }
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", onVis);
-    return () => {
-      document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", onVis);
-    };
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, [load]);
 
   async function onSubmit(e: FormEvent) {
