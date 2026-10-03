@@ -103,6 +103,7 @@ export function ReportTable({
   colSpan,
   dateSort,
   dateHeader = "Tarih",
+  prefixHeader,
 }: {
   headers: string[];
   children: ReactNode;
@@ -111,12 +112,17 @@ export function ReportTable({
   /** When set, the matching date header becomes clickable newest↔oldest. */
   dateSort?: { dir: DateSortDir; onChange: (next: DateSortDir) => void };
   dateHeader?: string;
+  /** Extra leading header cell (e.g. select-all checkbox). */
+  prefixHeader?: ReactNode;
 }) {
   return (
     <div className="bk-table-wrap">
       <table className="bk-table">
         <thead>
           <tr>
+            {prefixHeader != null && (
+              <th className="w-10 px-2 text-center print:hidden">{prefixHeader}</th>
+            )}
             {headers.map((h) => (
               <th key={h} className={dateSort && h === dateHeader ? "bk-th-sortable" : undefined}>
                 {dateSort && h === dateHeader ? (

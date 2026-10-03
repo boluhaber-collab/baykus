@@ -463,12 +463,37 @@ def stock_report(
     active_only: bool = Query(default=True),
     color: str | None = Query(default=None),
     size: str | None = Query(default=None),
+    colors: list[str] | None = Query(default=None),
+    sizes: list[str] | None = Query(default=None),
     print_type: str | None = Query(default=None),
     sku: str | None = Query(default=None),
     warehouse: str | None = Query(default=None),
     in_stock_only: bool = Query(default=True),
 ):
     """Stok Değeri / Depo Durumu — BH product stock-value list filters."""
+
+    def _terms(single: str | None, many: list[str] | None) -> list[str]:
+        raw: list[str] = []
+        if single and single.strip():
+            raw.append(single.strip())
+        for item in many or []:
+            if item and item.strip():
+                raw.append(item.strip())
+        seen: set[str] = set()
+        out: list[str] = []
+        for term in raw:
+            key = term.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(term)
+        return out
+
+    color_terms = _terms(color, colors)
+    size_terms = _terms(size, sizes)
+    color_keys = {t.lower() for t in color_terms}
+    size_keys = {t.lower() for t in size_terms}
+
     query = db.query(Product).options(joinedload(Product.variants))
     if q and q.strip():
         like = f"%{q.strip()}%"
@@ -487,13 +512,13 @@ def stock_report(
     if active_only:
         query = query.filter(Product.is_active.is_(True))
 
-    needs_variant = bool(color or size or print_type or (sku and sku.strip()))
+    needs_variant = bool(color_terms or size_terms or print_type or (sku and sku.strip()))
     if needs_variant:
         vconds = []
-        if color:
-            vconds.append(ProductVariant.color.ilike(color.strip()))
-        if size:
-            vconds.append(ProductVariant.size.ilike(size.strip()))
+        if color_terms:
+            vconds.append(or_(*[ProductVariant.color.ilike(t) for t in color_terms]))
+        if size_terms:
+            vconds.append(or_(*[ProductVariant.size.ilike(t) for t in size_terms]))
         if print_type:
             vconds.append(ProductVariant.print_type.ilike(print_type.strip()))
         if sku and sku.strip():
@@ -547,9 +572,9 @@ def stock_report(
 
         if p.variants:
             for v in p.variants:
-                if color and (v.color or "").strip().lower() != color.strip().lower():
+                if color_keys and (v.color or "").strip().lower() not in color_keys:
                     continue
-                if size and (v.size or "").strip().lower() != size.strip().lower():
+                if size_keys and (v.size or "").strip().lower() not in size_keys:
                     continue
                 if print_type and (v.print_type or "").strip().lower() != print_type.strip().lower():
                     continue
@@ -598,7 +623,7 @@ def stock_report(
                     }
                 )
         else:
-            if color or size or print_type:
+            if color_terms or size_terms or print_type:
                 continue
             qty = int(p.stock_qty or 0)
             if in_stock_only and qty <= 0 and p.product_type != "hizmet":
@@ -657,7 +682,7 @@ def stock_report(
         "in_stock_only": in_stock_only,
         "active_only": active_only,
         "assumptions": [
-            "BH Stok Değeri filtreleri: aktif, kategori, marka, tür, renk/beden/baskı, depo, SKU, stokta.",
+            "BH Stok Değeri filtreleri: aktif, kategori, marka, tür, renk/beden (çoklu), baskı, depo, SKU, stokta.",
             "Maliyet birimi: product.cost; yoksa purchase_price.",
             "Satış birimi: varyant.price (varsa) yoksa product.base_price.",
             "Kritik: qty < critical_stock_threshold.",

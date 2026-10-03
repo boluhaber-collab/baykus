@@ -6,6 +6,12 @@
 export type StockFilterState = {
   color: string;
   size: string;
+  /**
+   * Multi-select renk/beden (Stok Değeri). Empty = no extra constraint.
+   * When non-empty, these replace the single `color` / `size` string.
+   */
+  colors: string[];
+  sizes: string[];
   printType: string;
   sku: string;
   /** When true, only rows with qty > 0 (default BH behaviour). */
@@ -16,6 +22,8 @@ export type StockFilterState = {
 export const EMPTY_STOCK_FILTERS: StockFilterState = {
   color: "",
   size: "",
+  colors: [],
+  sizes: [],
   printType: "",
   sku: "",
   inStockOnly: true,
@@ -74,9 +82,19 @@ export function rowQty(row: StockFilterable): number {
   return Number(q ?? 0);
 }
 
+function matchesAny(value: string | null | undefined, selected: string[] | undefined): boolean {
+  if (!selected || selected.length === 0) return true;
+  const n = norm(value);
+  return selected.some((s) => norm(s) === n);
+}
+
 export function matchesStockFilters(row: StockFilterable, f: StockFilterState): boolean {
-  if (f.color && norm(row.color) !== norm(f.color)) return false;
-  if (f.size && norm(row.size) !== norm(f.size)) return false;
+  if (f.colors && f.colors.length > 0) {
+    if (!matchesAny(row.color, f.colors)) return false;
+  } else if (f.color && norm(row.color) !== norm(f.color)) return false;
+  if (f.sizes && f.sizes.length > 0) {
+    if (!matchesAny(row.size, f.sizes)) return false;
+  } else if (f.size && norm(row.size) !== norm(f.size)) return false;
   if (f.printType && norm(row.print_type) !== norm(f.printType)) return false;
   if (f.warehouse && norm(row.warehouse) !== norm(f.warehouse)) return false;
   if (f.inStockOnly && rowQty(row) <= 0) return false;
@@ -98,11 +116,17 @@ export function filterStockRows<T extends StockFilterable>(
   return rows.filter((r) => matchesStockFilters(r, f));
 }
 
+function listKey(values: string[] | undefined): string {
+  return [...(values || [])].map((v) => v.trim().toLocaleLowerCase("tr")).sort().join("\0");
+}
+
 export function stockFiltersActive(f: StockFilterState, defaults?: Partial<StockFilterState>): boolean {
   const d = { ...EMPTY_STOCK_FILTERS, ...defaults };
   return (
     f.color !== d.color ||
     f.size !== d.size ||
+    listKey(f.colors) !== listKey(d.colors) ||
+    listKey(f.sizes) !== listKey(d.sizes) ||
     f.printType !== d.printType ||
     f.sku !== d.sku ||
     f.inStockOnly !== d.inStockOnly ||
