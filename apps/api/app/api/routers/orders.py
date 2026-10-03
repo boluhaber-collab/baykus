@@ -572,7 +572,8 @@ def create_order(
     _apply_sale_side_effects(db, order, user, mov_date=mov_date)
 
     # Kapora / split deposit — only when explicit payment amount > 0.
-    # Unpaid / deferred (Sipariş Alındı, veresiye): cari sale debit only; do NOT touch kasa/banka.
+    # Unpaid (veresiye teslim or açık sipariş): cari sale debit + stock only; do NOT touch kasa/banka.
+    # Veresiye from /sales/create is status Teslim Edildi; açık sipariş stays Sipariş Alındı.
     from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
 
     deposit_lines = normalize_payment_lines(payments=getattr(payload, "payments", None))
@@ -641,11 +642,14 @@ def create_order(
                 require_account=False,
             )
 
-    # Paid retail-style (kapora/tahsilat): skip workflow → Teslim Edildi + tasarım onay
+    # Delivered sale leaves the open order / design workflow.
+    # Paid (kapora) is always Teslim Edildi. Unpaid Teslim Edildi (veresiye) stays
+    # completed: cari debit already posted, no kasa/banka. Sipariş Alındı is untouched.
     paid = bool(deposit_lines) and dep_paid > 0
-    if paid and order.status != "Sipariş İptali":
-        if order.status != "Teslim Edildi":
-            order.status = "Teslim Edildi"
+    if paid and order.status != "Sipariş İptali" and order.status != "Teslim Edildi":
+        order.status = "Teslim Edildi"
+    delivered = order.status == "Teslim Edildi"
+    if delivered:
         if (order.design_status or DEFAULT_DESIGN_STATUS) in (
             DEFAULT_DESIGN_STATUS,
             "Bekliyor",

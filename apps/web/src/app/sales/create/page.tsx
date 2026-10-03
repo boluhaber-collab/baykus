@@ -124,7 +124,8 @@ function CreateSaleInner() {
   const [notes, setNotes] = useState("");
   const [saleDate, setSaleDate] = useState(() => localToday());
   const [dueDate, setDueDate] = useState("");
-  // Kayıtlı müşteri: varsayılan veresiye (kapora yok → Sipariş Alındı, kasa/banka yok).
+  // Kayıtlı müşteri: varsayılan veresiye = teslim edilmiş cari satış
+  // (kapora yok, kasa/banka yok, cari borç, stok↓, durum Teslim Edildi).
   const [veresiye, setVeresiye] = useState(mappedInitial === "kayitli");
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
@@ -402,18 +403,20 @@ function CreateSaleInner() {
             ? "perakende"
             : "mağaza";
 
-      // Tahsilatlı satış → anında Teslim Edildi (iş akışı atlanır); veresiye → Sipariş Alındı
+      // Veresiye = teslim edilmiş cari satış (Teslim Edildi, kasa/banka yok).
+      // Kapora > 0 = tahsilatlı teslim. Veresiye kapalı + kapora 0 = açık sipariş.
       const paidNow = !veresiye && amount > 0;
+      const delivered = veresiye || paidNow;
       const created = await apiFetch<{ id: number }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
           customer_id: cid,
-          status: paidNow ? "Teslim Edildi" : "Sipariş Alındı",
+          status: delivered ? "Teslim Edildi" : "Sipariş Alındı",
           notes: notes || null,
           channel: orderChannel,
-          design_status: paidNow ? "Onaylandı" : "Bekliyor",
+          design_status: delivered ? "Onaylandı" : "Bekliyor",
           due_date: dueDate || null,
-          delivery_date: paidNow ? dueDate || saleDate || localToday() : null,
+          delivery_date: delivered ? dueDate || saleDate || localToday() : null,
           movement_date: saleDate || localToday(),
           deposit_amount: amount > 0 ? amount : 0,
           discount_amount: 0,
@@ -423,11 +426,13 @@ function CreateSaleInner() {
       });
 
       setMsg(
-        paidNow
-          ? "Satış tamamlandı · stok↓ · cari + kasa/banka işlendi"
-          : "Satış kaydedildi · Sipariş Alındı · cari borç (kasa/banka yok)",
+        veresiye
+          ? "Satış tamamlandı · Teslim Edildi · cari borç + stok↓ · kasa/banka yok (tahsilat sonra)"
+          : paidNow
+            ? "Satış tamamlandı · stok↓ · cari + kasa/banka işlendi"
+            : "Sipariş kaydedildi · Sipariş Alındı · açık iş akışı (henüz teslim değil)",
       );
-      router.push(paidNow ? `/customers/${cid}` : `/orders/${created.id}`);
+      router.push(delivered && cid ? `/customers/${cid}` : `/orders/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kayıt hatası");
     } finally {
@@ -763,7 +768,7 @@ function CreateSaleInner() {
                 checked={veresiye}
                 onChange={(e) => setVeresiye(e.target.checked)}
               />
-              Veresiye / sonra tahsilat (kapora yok · kasa/banka yok · cari borç + stok↓)
+              Veresiye / sonra tahsilat (teslim edildi · kapora yok · kasa/banka yok · cari borç + stok↓)
             </label>
             {!veresiye && (
               <SplitPaymentRows
@@ -786,9 +791,11 @@ function CreateSaleInner() {
                 Kalan: <strong className="tabular-nums text-red-700">{formatMoney(remaining)}</strong>
               </div>
               <div className="text-[10px] text-baykus-muted">
-                {veresiye || payAmountNum <= 0
-                  ? "Ödeme yok → Sipariş Alındı · cari borç + stok↓ · kasa/banka işlenmez (tahsilatı sonra girin)"
-                  : "Kapora > 0 → kasa/banka tahsilat + Teslim Edildi"}
+                {veresiye
+                  ? "Veresiye teslim → Teslim Edildi · cari borç + stok↓ · kasa/banka yok (tahsilatı sonra cariye girin)"
+                  : payAmountNum <= 0
+                    ? "Kapora yok ve veresiye kapalı → Sipariş Alındı (açık sipariş). Teslim edilmiş borç için veresiyeyi işaretleyin."
+                    : "Kapora > 0 → kasa/banka tahsilat + Teslim Edildi"}
               </div>
             </div>
           </fieldset>
