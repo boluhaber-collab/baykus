@@ -54,7 +54,7 @@ function norm(s: string | null | undefined): string {
   return (s || "").trim().toLocaleLowerCase("tr");
 }
 
-export function uniqueSorted(values: Array<string | null | undefined>): string[] {
+function dedupeLabels(values: Array<string | null | undefined>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const v of values) {
@@ -65,13 +65,100 @@ export function uniqueSorted(values: Array<string | null | undefined>): string[]
     seen.add(key);
     out.push(t);
   }
-  return out.sort((a, b) => a.localeCompare(b, "tr"));
+  return out;
+}
+
+export function uniqueSorted(values: Array<string | null | undefined>): string[] {
+  return dedupeLabels(values).sort((a, b) => a.localeCompare(b, "tr"));
+}
+
+/** Apparel rank. null = not a letter size. Higher = larger. */
+function apparelRank(token: string): number | null {
+  const t = token.trim().toLocaleUpperCase("tr").replace(/[\s._-]+/g, "");
+  const aliases: Record<string, string> = {
+    SMALL: "S",
+    MEDIUM: "M",
+    LARGE: "L",
+    XSMALL: "XS",
+    XXSMALL: "XXS",
+    XLARGE: "XL",
+    XXLARGE: "XXL",
+    XXXLARGE: "XXXL",
+    ONESIZE: "OS",
+    TEKBEDEN: "OS",
+    STANDART: "OS",
+    STANDARD: "OS",
+    STD: "OS",
+  };
+  const key = aliases[t] || t;
+  const table: Record<string, number> = {
+    XXXS: 0,
+    "3XS": 0,
+    XXS: 10,
+    "2XS": 10,
+    XS: 20,
+    S: 30,
+    M: 40,
+    L: 50,
+    XL: 60,
+    XXL: 70,
+    "2XL": 70,
+    XXXL: 80,
+    "3XL": 80,
+    XXXXL: 90,
+    "4XL": 90,
+    "5XL": 100,
+    "6XL": 110,
+    "7XL": 120,
+    "8XL": 130,
+    OS: 200,
+  };
+  if (Object.prototype.hasOwnProperty.call(table, key)) return table[key];
+  const m = key.match(/^(\d+)X[LS]$/);
+  if (m) {
+    const n = Number(m[1]);
+    if (key.endsWith("XL")) return 50 + n * 10;
+    if (key.endsWith("XS")) return 30 - n * 10;
+  }
+  return null;
+}
+
+function sizeSortKey(raw: string): { group: number; n: number; sub: number } {
+  const t = raw.trim().toLocaleUpperCase("tr").replace(/\s+/g, "");
+  const exact = apparelRank(t);
+  if (exact != null) return { group: 0, n: exact, sub: 0 };
+  const slash = t.split("/");
+  if (slash.length === 2) {
+    const a = apparelRank(slash[0]);
+    const b = apparelRank(slash[1]);
+    if (a != null && b != null) return { group: 0, n: a, sub: b };
+  }
+  const num = t.match(/^(\d+(?:[.,]\d+)?)/);
+  if (num) {
+    const n = parseFloat(num[1].replace(",", "."));
+    return { group: 1, n: Number.isFinite(n) ? n : 0, sub: 0 };
+  }
+  return { group: 2, n: 0, sub: 0 };
+}
+
+/** XS…3XL, then numeric (1/2, 2, 10, 12/14), then other labels. */
+export function compareSizes(a: string, b: string): number {
+  const ka = sizeSortKey(a);
+  const kb = sizeSortKey(b);
+  if (ka.group !== kb.group) return ka.group - kb.group;
+  if (ka.n !== kb.n) return ka.n - kb.n;
+  if (ka.sub !== kb.sub) return ka.sub - kb.sub;
+  return a.localeCompare(b, "tr", { numeric: true, sensitivity: "base" });
+}
+
+export function sortSizes(values: Array<string | null | undefined>): string[] {
+  return dedupeLabels(values).sort(compareSizes);
 }
 
 export function collectFacetOptions(rows: StockFilterable[]): StockFilterFacets {
   return {
     colors: uniqueSorted(rows.map((r) => r.color)),
-    sizes: uniqueSorted(rows.map((r) => r.size)),
+    sizes: sortSizes(rows.map((r) => r.size)),
     printTypes: uniqueSorted(rows.map((r) => r.print_type)),
     warehouses: uniqueSorted(rows.map((r) => r.warehouse)),
   };

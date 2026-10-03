@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DashboardSummary, Product, apiFetch, formatMoney, stockBadgeClass } from "@/lib/api";
 import { displaySku } from "@/lib/productLabel";
@@ -12,6 +12,7 @@ import {
   EMPTY_STOCK_FILTERS,
   StockFilterFacets,
   StockFilterState,
+  sortSizes,
   stockFiltersToProductQuery,
 } from "@/lib/stockFilters";
 
@@ -75,8 +76,10 @@ function ProductsHubPageInner() {
       if (productType) params.set("type", productType);
       if (criticalOnly) params.set("critical_only", "true");
       if (activeFilter === "active") params.set("active_only", "true");
-      const sf = stockFiltersToProductQuery(stockFilters);
+      const sf = stockFiltersToProductQuery({ ...stockFilters, color: "", size: "" });
       for (const [k, v] of Object.entries(sf)) params.set(k, v);
+      for (const c of stockFilters.colors || []) params.append("colors", c);
+      for (const s of stockFilters.sizes || []) params.append("sizes", s);
       const qs = params.toString();
       const [data, cats, brs, dash, facetRaw] = await Promise.all([
         apiFetch<Product[]>(`/api/products${qs ? `?${qs}` : ""}`),
@@ -101,11 +104,10 @@ function ProductsHubPageInner() {
       setSummary(dash);
       setFacets({
         colors: facetRaw.colors || [],
-        sizes: facetRaw.sizes || [],
+        sizes: sortSizes(facetRaw.sizes || []),
         printTypes: facetRaw.print_types || [],
         warehouses: facetRaw.warehouses || [],
       });
-      setSelected({});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     } finally {
@@ -117,30 +119,79 @@ function ProductsHubPageInner() {
     load();
   }, [load]);
 
-  const stats = useMemo(() => {
-    let variants = 0;
-    let qty = 0;
-    let critical = 0;
-    for (const p of items) {
-      variants += p.variants_count ?? 0;
-      const total = p.total_stock ?? p.stock_qty ?? 0;
-      if (p.product_type !== "hizmet") qty += total;
-      const thr = p.critical_stock_threshold ?? 10;
-      if (p.is_critical || (p.product_type !== "hizmet" && total < thr)) critical += 1;
-    }
-    return {
-      products: summary?.products_count ?? items.length,
-      variants: summary?.variants_count ?? variants,
-      qty: summary?.stock_qty_total ?? qty,
-      critical: summary?.critical_stock_count ?? critical,
-      value: summary?.stock_value ?? 0,
-    };
-  }, [items, summary]);
-
   const selectedIds = useMemo(
     () => Object.entries(selected).filter(([, v]) => v).map(([k]) => Number(k)),
     [selected],
   );
+
+  const visibleItems = useMemo(() => {
+    if (selectedIds.length === 0) return items;
+    const picked = new Set(selectedIds);
+    return items.filter((p) => picked.has(p.id));
+  }, [items, selectedIds]);
+
+  const hiddenItems = useMemo(() => {
+    if (selectedIds.length === 0) return [] as Product[];
+    const picked = new Set(selectedIds);
+    return items.filter((p) => !picked.has(p.id));
+  }, [items, selectedIds]);
+
+  const variantNarrow = useMemo(
+    () =>
+      (stockFilters.colors?.length ?? 0) > 0 ||
+      (stockFilters.sizes?.length ?? 0) > 0 ||
+      !!stockFilters.color ||
+      !!stockFilters.size,
+    [stockFilters],
+  );
+
+  const stats = useMemo(() => {
+    const source = visibleItems;
+    let variants = 0;
+    let qty = 0;
+    let critical = 0;
+    let value = 0;
+    for (const p of source) {
+      variants += p.variants_count ?? 0;
+      const total = p.total_stock ?? p.stock_qty ?? 0;
+      if (p.product_type !== "hizmet") {
+        qty += total;
+        const unit = Number(p.cost || 0) > 0 ? Number(p.cost) : Number(p.purchase_price || 0);
+        value += unit * total;
+      }
+      const thr = p.critical_stock_threshold ?? 10;
+      if (p.is_critical || (p.product_type !== "hizmet" && total < thr)) critical += 1;
+    }
+    const narrowed = selectedIds.length > 0 || variantNarrow;
+    if (narrowed) {
+      return { products: source.length, variants, qty, critical, value };
+    }
+    return {
+      products: summary?.products_count ?? source.length,
+      variants: summary?.variants_count ?? variants,
+      qty: summary?.stock_qty_total ?? qty,
+      critical: summary?.critical_stock_count ?? critical,
+      value: summary?.stock_value ?? value,
+    };
+  }, [visibleItems, summary, selectedIds.length, variantNarrow]);
+
+  useEffect(() => {
+    const valid = new Set(items.map((p) => p.id));
+    setSelected((prev) => {
+      let changed = false;
+      const next: Record<number, boolean> = {};
+      for (const [k, on] of Object.entries(prev)) {
+        if (!on) continue;
+        const id = Number(k);
+        if (!valid.has(id)) {
+          changed = true;
+          continue;
+        }
+        next[id] = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [items]);
 
   async function onDelete(id: number) {
     if (!confirm("Bu ürünü silmek istediğinize emin misiniz?")) return;
@@ -184,6 +235,13 @@ function ProductsHubPageInner() {
       setBulkBusy(false);
     }
   }
+
+  const allSelected = items.length > 0 && selectedIds.length === items.length;
+  const someSelected = selectedIds.length > 0 && !allSelected;
+  const headRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (headRef.current) headRef.current.indeterminate = someSelected;
+  }, [someSelected]);
 
   function toggleAll(on: boolean) {
     const next: Record<number, boolean> = {};
@@ -381,6 +439,7 @@ function ProductsHubPageInner() {
                 setBrand("");
                 setProductType("");
                 setStockFilters({ ...EMPTY_STOCK_FILTERS, inStockOnly: false });
+                setSelected({});
               }}
               className="bk-btn bk-btn-ghost"
             >
@@ -396,7 +455,42 @@ function ProductsHubPageInner() {
             onChange={setStockFilters}
             facets={facets}
             defaults={{ inStockOnly: false }}
+            multiColorSize
           />
+
+          {selectedIds.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+              <span>
+                {selectedIds.length} ürün seçili — liste ve üst toplamlar yalnız seçilen ürünler.
+              </span>
+              {hiddenItems.length > 0 && (
+                <details className="relative">
+                  <summary className="cursor-pointer font-semibold text-sky-700">
+                    Seçime ekle ({hiddenItems.length})
+                  </summary>
+                  <div className="absolute z-30 mt-1 max-h-64 w-80 overflow-auto rounded border border-slate-200 bg-white shadow-lg">
+                    {hiddenItems.map((p) => (
+                      <label
+                        key={p.id}
+                        className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-300"
+                          checked={false}
+                          onChange={() => setSelected((s) => ({ ...s, [p.id]: true }))}
+                        />
+                        <span className="truncate">{p.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </details>
+              )}
+              <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => setSelected({})}>
+                Seçimi temizle
+              </button>
+            </div>
+          )}
 
           <div className="bk-table-wrap">
             <table className="bk-table bk-product-list-table">
@@ -404,8 +498,9 @@ function ProductsHubPageInner() {
                 <tr>
                   <th className="w-8">
                     <input
+                      ref={headRef}
                       type="checkbox"
-                      checked={items.length > 0 && selectedIds.length === items.length}
+                      checked={allSelected}
                       onChange={(e) => toggleAll(e.target.checked)}
                       aria-label="Tümünü seç"
                     />
@@ -417,7 +512,7 @@ function ProductsHubPageInner() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((p) => {
+                {visibleItems.map((p) => {
                   const total = p.total_stock ?? p.stock_qty;
                   const thr = p.critical_stock_threshold ?? 10;
                   const critical = p.is_critical || (p.product_type !== "hizmet" && total < thr);
@@ -486,7 +581,7 @@ function ProductsHubPageInner() {
                     </tr>
                   );
                 })}
-                {!loading && items.length === 0 && (
+                {!loading && visibleItems.length === 0 && (
                   <tr>
                     <td colSpan={5} className="text-center text-baykus-muted py-8">
                       Ürün yok

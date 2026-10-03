@@ -22,6 +22,7 @@ import {
   StockFilterState,
   collectFacetOptions,
   filterStockRows,
+  sortSizes,
 } from "@/lib/stockFilters";
 
 type WarehouseStockRow = {
@@ -140,9 +141,7 @@ export default function ProductDetailPage() {
       colors: Array.from(new Set([...fromVariants.colors, ...fromWh.colors])).sort((a, b) =>
         a.localeCompare(b, "tr"),
       ),
-      sizes: Array.from(new Set([...fromVariants.sizes, ...fromWh.sizes])).sort((a, b) =>
-        a.localeCompare(b, "tr"),
-      ),
+      sizes: sortSizes([...fromVariants.sizes, ...fromWh.sizes]),
       printTypes: Array.from(new Set([...fromVariants.printTypes, ...fromWh.printTypes])).sort(
         (a, b) => a.localeCompare(b, "tr"),
       ),

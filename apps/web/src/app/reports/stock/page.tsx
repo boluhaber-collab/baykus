@@ -23,6 +23,7 @@ import {
   EMPTY_STOCK_FILTERS,
   StockFilterFacets,
   StockFilterState,
+  sortSizes,
   stockFiltersToProductQuery,
 } from "@/lib/stockFilters";
 
@@ -148,7 +149,7 @@ export default function StockReportPage() {
       setBrands(brs);
       setFacets({
         colors: facetRaw.colors || [],
-        sizes: facetRaw.sizes || [],
+        sizes: sortSizes(facetRaw.sizes || []),
         printTypes: facetRaw.print_types || [],
         warehouses: facetRaw.warehouses || [],
       });

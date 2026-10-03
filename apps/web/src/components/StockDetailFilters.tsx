@@ -6,6 +6,7 @@ import {
   StockFilterFacets,
   StockFilterState,
   stockFiltersActive,
+  sortSizes,
   uniqueSorted,
 } from "@/lib/stockFilters";
 
@@ -31,6 +32,7 @@ function MultiCheckSelect({
   selected,
   onChange,
   className,
+  sizeOrder = false,
 }: {
   label: string;
   allLabel: string;
@@ -38,6 +40,8 @@ function MultiCheckSelect({
   selected: string[];
   onChange: (next: string[]) => void;
   className: string;
+  /** Beden: XS…3XL then numeric, not A–Z. */
+  sizeOrder?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -50,7 +54,7 @@ function MultiCheckSelect({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const opts = uniqueSorted([...options, ...selected]);
+  const opts = (sizeOrder ? sortSizes : uniqueSorted)([...options, ...selected]);
   const summary =
     selected.length === 0 ? allLabel : selected.length === 1 ? selected[0] : `${selected.length} seçili`;
 
@@ -168,6 +172,7 @@ export default function StockDetailFilters({
             selected={value.sizes || []}
             onChange={(sizes) => patch({ sizes, size: "" })}
             className={sel}
+            sizeOrder
           />
         ) : (
           <select
@@ -177,7 +182,7 @@ export default function StockDetailFilters({
             aria-label="Beden"
           >
             <option value="">Tüm bedenler</option>
-            {facets.sizes.map((s) => (
+            {sortSizes(facets.sizes).map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>

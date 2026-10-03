@@ -33,6 +33,7 @@ from app.schemas.product import (
 )
 
 from app.utils.bh_note import sanitize_display_note
+from app.utils.size_sort import sort_sizes
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -160,6 +161,66 @@ def _get_product(db: Session, product_id: int) -> Product:
     return product
 
 
+
+def _query_terms(single: str | None, many: list[str] | None) -> list[str]:
+    raw: list[str] = []
+    if single and single.strip():
+        raw.append(single.strip())
+    for item in many or []:
+        if item and str(item).strip():
+            raw.append(str(item).strip())
+    seen: set[str] = set()
+    out: list[str] = []
+    for term in raw:
+        key = term.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(term)
+    return out
+
+
+def _variant_matches_terms(
+    variant: ProductVariant,
+    color_keys: set[str],
+    size_keys: set[str],
+    print_key: str,
+) -> bool:
+    if color_keys and (variant.color or "").strip().lower() not in color_keys:
+        return False
+    if size_keys and (variant.size or "").strip().lower() not in size_keys:
+        return False
+    if print_key and (variant.print_type or "").strip().lower() != print_key:
+        return False
+    return True
+
+
+def _scope_list_item(
+    item: ProductListItem,
+    product: Product,
+    color_keys: set[str],
+    size_keys: set[str],
+    print_key: str,
+) -> ProductListItem:
+    """When renk/beden/baskı is set, stock totals count only matching variants."""
+    if not (color_keys or size_keys or print_key) or not product.variants:
+        return item
+    matched = [
+        v
+        for v in product.variants
+        if _variant_matches_terms(v, color_keys, size_keys, print_key)
+    ]
+    total = sum(int(v.stock_qty or 0) for v in matched)
+    threshold = product.critical_stock_threshold or 0
+    item.total_stock = total
+    item.stock_qty = total
+    item.variants_count = len(matched)
+    item.is_critical = product.product_type != "hizmet" and any(
+        int(v.stock_qty or 0) < threshold for v in matched
+    )
+    return item
+
+
 def _ensure_unique_sku(db: Session, sku: str, exclude_product_id: int | None = None) -> None:
     q = db.query(Product).filter(Product.sku == sku)
     if exclude_product_id is not None:
@@ -190,6 +251,8 @@ def list_products(
     active_only: bool = Query(default=False),
     color: str | None = Query(default=None, description="Varyant renk filtresi"),
     size: str | None = Query(default=None, description="Varyant beden filtresi"),
+    colors: list[str] | None = Query(default=None, description="Çoklu renk (OR)"),
+    sizes: list[str] | None = Query(default=None, description="Çoklu beden (OR)"),
     print_type: str | None = Query(default=None, description="Varyant baskı filtresi"),
     sku: str | None = Query(default=None, description="Ürün veya varyant SKU (kısmi)"),
     warehouse: str | None = Query(default=None, description="Depo adı"),
@@ -216,14 +279,19 @@ def list_products(
         query = query.filter(Product.is_active.is_(True))
 
     # BizimHesap-style detailed stock filters (renk/beden/baskı/SKU/depo/stokta)
-    needs_variant = bool(color or size or print_type or (sku and sku.strip()))
+    color_terms = _query_terms(color, colors)
+    size_terms = _query_terms(size, sizes)
+    color_keys = {term.lower() for term in color_terms}
+    size_keys = {term.lower() for term in size_terms}
+    print_key = print_type.strip().lower() if print_type and print_type.strip() else ""
+    needs_variant = bool(color_terms or size_terms or print_key or (sku and sku.strip()))
     if needs_variant:
         vconds = []
-        if color:
-            vconds.append(ProductVariant.color.ilike(color.strip()))
-        if size:
-            vconds.append(ProductVariant.size.ilike(size.strip()))
-        if print_type:
+        if color_terms:
+            vconds.append(or_(*[ProductVariant.color.ilike(term) for term in color_terms]))
+        if size_terms:
+            vconds.append(or_(*[ProductVariant.size.ilike(term) for term in size_terms]))
+        if print_key:
             vconds.append(ProductVariant.print_type.ilike(print_type.strip()))
         if sku and sku.strip():
             like_sku = f"%{sku.strip()}%"
@@ -261,7 +329,9 @@ def list_products(
         query = query.filter(or_(Product.warehouse == wh, wh_exists))
 
     products = query.order_by(Product.id.desc()).offset(skip).limit(limit).all()
-    items = [_list_item(p) for p in products]
+    items = [
+        _scope_list_item(_list_item(p), p, color_keys, size_keys, print_key) for p in products
+    ]
     if critical_only:
         items = [i for i in items if i.is_critical]
     if in_stock_only:
@@ -317,7 +387,7 @@ def variant_facets(
         return [r[0] for r in rows if r[0] and str(r[0]).strip()]
 
     colors = _distinct(ProductVariant.color)
-    sizes = _distinct(ProductVariant.size)
+    sizes = sort_sizes(_distinct(ProductVariant.size))
     print_types = _distinct(ProductVariant.print_type)
     wh_rows = (
         db.query(Warehouse.name)
