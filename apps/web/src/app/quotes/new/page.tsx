@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, AppSettings, Customer, Product, ProductPricingInfo, QUOTE_STATUSES, formatMoney } from "@/lib/api";
-import { productOptionLabel } from "@/lib/productLabel";
+import LiveSearchSelect, { useCustomerSearch, useProductSearch } from "@/components/LiveSearchSelect";
 
 type Line = {
   key: string;
@@ -38,6 +38,8 @@ export default function NewQuotePage() {
   const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const customerSearch = useCustomerSearch(customers, setCustomers);
+  const productSearch = useProductSearch(products, setProducts);
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("Taslak");
   const [notes, setNotes] = useState("");
@@ -55,8 +57,8 @@ export default function NewQuotePage() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch<Customer[]>("/api/customers"),
-      apiFetch<Product[]>("/api/products"),
+      apiFetch<Customer[]>("/api/customers?limit=1000"),
+      apiFetch<Product[]>("/api/products?active_only=true&limit=1000"),
       apiFetch<AppSettings>("/api/settings/app").catch(() => null),
     ])
       .then(([c, p, s]) => {
@@ -124,16 +126,15 @@ export default function NewQuotePage() {
       <form onSubmit={onSubmit} className="space-y-6">
         <div className="rounded-xl border bg-white p-5 shadow-sm grid md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs text-baykus-muted mb-1">Müşteri</label>
-            <select className={input} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">— Seçin —</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.company ? ` (${c.company})` : ""}
-                </option>
-              ))}
-            </select>
+            <label className="block text-xs text-baykus-muted mb-1">Müşteri Ara</label>
+            <LiveSearchSelect
+              value={customerId}
+              onChange={(id) => setCustomerId(id)}
+              options={customerSearch.options}
+              fetchMatches={customerSearch.fetchMatches}
+              placeholder="Ad / telefon / firma…"
+              inputClassName={input}
+            />
             {selectedCustomer && (
               <div className="mt-2 rounded-lg border border-baykus-line bg-baykus-bg px-3 py-2 text-xs space-y-1">
                 <div>
@@ -185,16 +186,18 @@ export default function NewQuotePage() {
           {lines.map((line, idx) => (
             <div key={line.key} className="grid md:grid-cols-6 gap-2 rounded-lg bg-baykus-bg p-3 border">
               <div className="md:col-span-2">
-                <label className="text-[10px] text-baykus-muted">Ürün #{idx + 1}</label>
-                <select
-                  className={input}
+                <label className="text-[10px] text-baykus-muted">Ürün ara #{idx + 1}</label>
+                <LiveSearchSelect
                   value={line.product_id}
-                  onChange={async (e) => {
-                    const pid = e.target.value;
+                  inputClassName={input}
+                  options={productSearch.options}
+                  fetchMatches={productSearch.fetchMatches}
+                  placeholder="Ürün ara…"
+                  onChange={async (pid) => {
                     const prod = products.find((p) => String(p.id) === pid);
                     updateLine(line.key, {
                       product_id: pid,
-                      description: prod?.name || line.description,
+                      description: prod?.name || (pid ? line.description : ""),
                       unit_price: prod ? String(prod.base_price ?? 0) : line.unit_price,
                       stock_qty: prod?.stock_qty ?? null,
                       is_critical: Boolean(prod?.is_critical),
@@ -212,14 +215,7 @@ export default function NewQuotePage() {
                       /* keep fallback */
                     }
                   }}
-                >
-                  <option value="">— Manuel —</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {productOptionLabel(p.sku, p.name)}
-                    </option>
-                  ))}
-                </select>
+                />
                 {line.product_id && (
                   <div className="mt-1 text-[11px] text-baykus-muted">
                     Stok:{" "}

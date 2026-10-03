@@ -14,7 +14,7 @@ import {
   ProductPricingInfo,
   formatMoney,
 } from "@/lib/api";
-import { productOptionLabel } from "@/lib/productLabel";
+import LiveSearchSelect, { useCustomerSearch, useProductSearch } from "@/components/LiveSearchSelect";
 
 export type OrderFormPayload = {
   customer_id: number | null;
@@ -105,6 +105,8 @@ type Props = {
 export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: Props) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const customerSearch = useCustomerSearch(customers, setCustomers);
+  const productSearch = useProductSearch(products, setProducts);
   const [customerId, setCustomerId] = useState(initial?.customer_id ? String(initial.customer_id) : "");
   const [orderNumber, setOrderNumber] = useState(initial?.order_number || "");
   const [status, setStatus] = useState(initial?.status || "Sipariş Alındı");
@@ -124,8 +126,8 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
 
   useEffect(() => {
     Promise.all([
-      apiFetch<Customer[]>("/api/customers"),
-      apiFetch<Product[]>("/api/products"),
+      apiFetch<Customer[]>("/api/customers?limit=1000"),
+      apiFetch<Product[]>("/api/products?active_only=true&limit=1000"),
     ])
       .then(([c, p]) => {
         setCustomers(c);
@@ -235,20 +237,15 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
 
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm grid md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Müşteri</label>
-          <select
-            className={inputCls}
+          <label className="block text-xs font-medium text-slate-600 mb-1">Müşteri Ara</label>
+          <LiveSearchSelect
             value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          >
-            <option value="">— Seçin —</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.company ? ` (${c.company})` : ""}
-              </option>
-            ))}
-          </select>
+            onChange={(id) => setCustomerId(id)}
+            options={customerSearch.options}
+            fetchMatches={customerSearch.fetchMatches}
+            placeholder="Ad / telefon / firma…"
+            inputClassName={inputCls}
+          />
           {selectedCustomer && (
             <div className="mt-2 rounded-lg border border-baykus-line bg-baykus-bg px-3 py-2 text-xs space-y-1">
               <div>
@@ -376,19 +373,15 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
               className="rounded-lg border border-slate-100 bg-slate-50 p-3 grid md:grid-cols-6 gap-2"
             >
               <div className="md:col-span-2">
-                <label className="block text-[10px] text-slate-500 mb-0.5">Ürün #{idx + 1}</label>
-                <select
-                  className={inputCls}
+                <label className="block text-[10px] text-slate-500 mb-0.5">Ürün ara #{idx + 1}</label>
+                <LiveSearchSelect
                   value={line.product_id}
-                  onChange={(e) => onProductChange(line.key, e.target.value)}
-                >
-                  <option value="">— Manuel —</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {productOptionLabel(p.sku, p.name)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => void onProductChange(line.key, id)}
+                  options={productSearch.options}
+                  fetchMatches={productSearch.fetchMatches}
+                  placeholder="Ürün ara…"
+                  inputClassName={inputCls}
+                />
                 {line.product_id && (
                   <div className="mt-1 text-[11px] text-slate-500 space-x-2">
                     <span>

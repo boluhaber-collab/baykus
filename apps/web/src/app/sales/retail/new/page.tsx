@@ -17,6 +17,7 @@ import SplitPaymentRows, {
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
 import { localToday } from "@/lib/dates";
+import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 import StockDetailFilters from "@/components/StockDetailFilters";
 import {
   EMPTY_STOCK_FILTERS,
@@ -55,8 +56,8 @@ export default function PerakendeSatisGirPage() {
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [delivered, setDelivered] = useState(true);
   const [aciklama, setAciklama] = useState("");
-  const [search, setSearch] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
+  const productSearch = useProductSearch(products, setProducts);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -70,7 +71,7 @@ export default function PerakendeSatisGirPage() {
 
   const loadMeta = useCallback(async () => {
     try {
-      const prods = await apiFetch<Product[]>("/api/products?limit=500&active_only=true");
+      const prods = await apiFetch<Product[]>("/api/products?limit=1000&active_only=true");
       setProducts(prods);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
@@ -80,21 +81,6 @@ export default function PerakendeSatisGirPage() {
   useEffect(() => {
     void loadMeta();
   }, [loadMeta]);
-
-  const filteredProducts = useMemo(() => {
-    const needle = search.trim().toLocaleLowerCase("tr");
-    return products
-      .filter((p) => {
-        if (p.product_type === "hizmet") return true;
-        return (p.stock_qty ?? p.total_stock ?? 0) >= 0;
-      })
-      .filter((p) => {
-        if (!needle) return true;
-        const hay = `${p.name} ${p.sku} ${p.category || ""}`.toLocaleLowerCase("tr");
-        return hay.includes(needle);
-      })
-      .slice(0, 80);
-  }, [products, search]);
 
   const toplam = useMemo(
     () => cart.reduce((s, l) => s + Number(l.toplam || 0), 0),
@@ -123,7 +109,6 @@ export default function PerakendeSatisGirPage() {
     };
     setCart((prev) => [...prev, line]);
     setSelectedKey(key);
-    setSearch("");
     setVariantPick(null);
   }
 
@@ -349,40 +334,23 @@ export default function PerakendeSatisGirPage() {
         <fieldset className="rounded border border-baykus-line bg-white px-3 py-2.5 space-y-2">
           <legend className="px-1 text-xs font-bold tracking-wide">ÜRÜN / HİZMETLER</legend>
 
-          <input
-            className="bk-input"
-            placeholder="Ürün isminden arayın veya barkod okutun"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                const first = filteredProducts[0];
-                if (first) void addProduct(first);
+          <LiveSearchSelect
+            value=""
+            clearOnSelect
+            options={productSearch.options}
+            fetchMatches={productSearch.fetchMatches}
+            placeholder="Ürün ara… isim, SKU veya barkod"
+            emptyText="Ürün bulunamadı"
+            onChange={(id) => {
+              if (!id) return;
+              const found = products.find((p) => String(p.id) === id);
+              if (found) {
+                void addProduct(found);
+                return;
               }
+              void apiFetch<ProductDetail>(`/api/products/${id}`).then((d) => addProduct(d));
             }}
           />
-
-          <div className="max-h-44 overflow-auto rounded border border-baykus-line bg-slate-50">
-            {filteredProducts.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => void addProduct(p)}
-                className="block w-full text-left px-3 py-1.5 text-xs border-b border-baykus-line/60 hover:bg-sky-50"
-              >
-                <span className="font-semibold">{p.name}</span>
-                <span className="text-baykus-muted">
-                  {" "}
-                  · {(p.stock_qty ?? p.total_stock ?? 0)} ad
-                  {p.category ? ` · ${p.category}` : ""}
-                </span>
-              </button>
-            ))}
-            {filteredProducts.length === 0 && (
-              <div className="px-3 py-6 text-center text-xs text-baykus-muted">Ürün bulunamadı</div>
-            )}
-          </div>
 
           <div className="bk-table-wrap">
             <table className="bk-table">

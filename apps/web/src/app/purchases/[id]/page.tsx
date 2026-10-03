@@ -12,7 +12,7 @@ import {
   formatMoney,
 } from "@/lib/api";
 import { isBhImportNote } from "@/lib/bhNote";
-import { productOptionLabel } from "@/lib/productLabel";
+import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 
 type EditLine = {
   key: string;
@@ -60,6 +60,7 @@ export default function PurchaseDetailPage() {
   const [taxAmount, setTaxAmount] = useState("0");
   const [lines, setLines] = useState<EditLine[]>([emptyLine()]);
   const [products, setProducts] = useState<Product[]>([]);
+  const productSearch = useProductSearch(products, setProducts);
   const [productDetails, setProductDetails] = useState<Record<number, ProductDetail>>({});
 
   const load = useCallback(async () => {
@@ -91,7 +92,7 @@ export default function PurchaseDetailPage() {
 
   useEffect(() => {
     if (!editing) return;
-    apiFetch<Product[]>("/api/products?active_only=true")
+    apiFetch<Product[]>("/api/products?active_only=true&limit=1000")
       .then((p) => setProducts(p.filter((x) => x.product_type !== "hizmet")))
       .catch((e) => setError(e instanceof Error ? e.message : "Ürün listesi yüklenemedi"));
   }, [editing]);
@@ -160,14 +161,15 @@ export default function PurchaseDetailPage() {
     setLine(idx, {
       product_id: productId,
       variant_id: sorted.length === 1 ? String(sorted[0]!.id) : "",
-      description: product
-        ? sorted.length === 1
-          ? `${product.name} — ${sorted[0]!.name}`
-          : product.name
-        : lines[idx]!.description,
-      unit_cost: product
-        ? String(product.purchase_price ?? product.cost ?? 0)
-        : lines[idx]!.unit_cost,
+      description:
+        (product?.name || detail?.name)
+          ? sorted.length === 1
+            ? `${product?.name || detail?.name} — ${sorted[0]!.name}`
+            : (product?.name || detail?.name || "")
+          : lines[idx]!.description,
+      unit_cost: String(
+        product?.purchase_price ?? product?.cost ?? detail?.purchase_price ?? detail?.cost ?? lines[idx]!.unit_cost,
+      ),
     });
   }
 
@@ -514,18 +516,14 @@ export default function PurchaseDetailPage() {
                     return (
                       <tr key={l.key} className="border-t border-slate-100 align-top">
                         <td className="px-3 py-2 min-w-[160px]">
-                          <select
-                            className="w-full rounded border px-2 py-1.5 text-xs"
+                          <LiveSearchSelect
                             value={l.product_id}
-                            onChange={(e) => void onProductChange(idx, e.target.value)}
-                          >
-                            <option value="">— Manuel —</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {productOptionLabel(p.sku, p.name)}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(id) => void onProductChange(idx, id)}
+                            options={productSearch.options}
+                            fetchMatches={productSearch.fetchMatches}
+                            placeholder="Ürün ara…"
+                            inputClassName="w-full rounded border px-2 py-1.5 text-xs"
+                          />
                         </td>
                         <td className="px-3 py-2 min-w-[120px]">
                           <select

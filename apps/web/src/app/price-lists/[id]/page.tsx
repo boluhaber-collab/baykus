@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PriceList, Product, apiFetch, downloadAuthFile, formatMoney, getToken } from "@/lib/api";
+import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 
 type EditItem = {
   key: string;
@@ -36,6 +37,7 @@ export default function PriceListDetailPage() {
   const id = Number(params.id);
   const [list, setList] = useState<PriceList | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const productSearch = useProductSearch(products, setProducts);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [name, setName] = useState("");
@@ -82,7 +84,7 @@ export default function PriceListDetailPage() {
 
   useEffect(() => {
     if (Number.isFinite(id)) void load();
-    void apiFetch<Product[]>("/api/products").then(setProducts).catch(() => undefined);
+    void apiFetch<Product[]>("/api/products?active_only=true&limit=1000").then(setProducts).catch(() => undefined);
   }, [id, load]);
 
   const filtered = useMemo(() => {
@@ -448,10 +450,13 @@ export default function PriceListDetailPage() {
                       <input type="checkbox" checked={selected.has(it.key)} onChange={() => toggleSel(it.key)} />
                     </td>
                     <td className="min-w-[140px]">
-                      <select
+                      <LiveSearchSelect
+                        className="mb-1"
                         value={it.product_id}
-                        onChange={(e) => {
-                          const pid = e.target.value;
+                        placeholder="Ürün ara…"
+                        options={productSearch.options}
+                        fetchMatches={productSearch.fetchMatches}
+                        onChange={(pid) => {
                           const prod = products.find((p) => String(p.id) === pid);
                           setItems((prev) =>
                             prev.map((x) =>
@@ -467,15 +472,7 @@ export default function PriceListDetailPage() {
                             ),
                           );
                         }}
-                        className="bk-input mb-1"
-                      >
-                        <option value="">— Manuel —</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
+                      />
                       <input
                         value={it.description}
                         onChange={(e) =>

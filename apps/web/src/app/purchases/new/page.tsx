@@ -11,7 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
-import { productOptionLabel } from "@/lib/productLabel";
+import LiveSearchSelect, { useProductSearch, useSupplierSearch } from "@/components/LiveSearchSelect";
 import StockDetailFilters from "@/components/StockDetailFilters";
 import {
   EMPTY_STOCK_FILTERS,
@@ -43,6 +43,8 @@ function NewPurchaseForm() {
   const [tab, setTab] = useState<"talep" | "manuel">(modeParam === "manuel" ? "manuel" : "talep");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const supplierSearch = useSupplierSearch(suppliers, setSuppliers);
+  const productSearch = useProductSearch(products, setProducts);
   const [productDetails, setProductDetails] = useState<Record<number, ProductDetail>>({});
   const [lineFilters, setLineFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
   const [supplierId, setSupplierId] = useState(presetSupplier);
@@ -93,8 +95,8 @@ function NewPurchaseForm() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch<Supplier[]>("/api/suppliers?active=true"),
-      apiFetch<Product[]>("/api/products?active_only=true"),
+      apiFetch<Supplier[]>("/api/suppliers?active=true&limit=1000"),
+      apiFetch<Product[]>("/api/products?active_only=true&limit=1000"),
     ])
       .then(([s, p]) => {
         setSuppliers(s);
@@ -149,12 +151,15 @@ function NewPurchaseForm() {
     setLine(idx, {
       product_id: productId,
       variant_id: variants.length === 1 ? String(variants[0]!.id) : "",
-      description: product
-        ? variants.length === 1
-          ? `${product.name} — ${variants[0]!.name}`
-          : product.name
-        : lines[idx]!.description,
-      unit_cost: product ? String(product.purchase_price ?? product.cost ?? 0) : lines[idx]!.unit_cost,
+      description:
+        (product?.name || detail?.name)
+          ? variants.length === 1
+            ? `${product?.name || detail?.name} — ${variants[0]!.name}`
+            : (product?.name || detail?.name || "")
+          : lines[idx]!.description,
+      unit_cost: String(
+        product?.purchase_price ?? product?.cost ?? detail?.purchase_price ?? detail?.cost ?? lines[idx]!.unit_cost,
+      ),
     });
   }
 
@@ -302,16 +307,16 @@ function NewPurchaseForm() {
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm grid sm:grid-cols-3 gap-3">
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Tedarikçi *</label>
-          <select required className={input} value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-            <option value="">Seçin</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.code ? `${s.code} — ` : ""}
-                {s.name}
-              </option>
-            ))}
-          </select>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Tedarikçi ara *</label>
+          <LiveSearchSelect
+            required
+            value={supplierId}
+            onChange={(id) => setSupplierId(id)}
+            options={supplierSearch.options}
+            fetchMatches={supplierSearch.fetchMatches}
+            placeholder="Tedarikçi ara…"
+            inputClassName={input}
+          />
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Tarih</label>
@@ -486,21 +491,17 @@ function NewPurchaseForm() {
                 <div key={idx} className="rounded-lg border border-slate-100 p-3 space-y-2">
                   <div className="grid sm:grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Ürün (opsiyonel)</label>
-                      <select
-                        className={input}
+                      <label className="block text-xs text-slate-500 mb-1">Ürün ara (opsiyonel)</label>
+                      <LiveSearchSelect
                         value={line.product_id}
-                        onChange={(e) => {
-                          void onProductChange(idx, e.target.value);
+                        onChange={(id) => {
+                          void onProductChange(idx, id);
                         }}
-                      >
-                        <option value="">— Manuel açıklama —</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {productOptionLabel(p.sku, p.name)}
-                          </option>
-                        ))}
-                      </select>
+                        options={productSearch.options}
+                        fetchMatches={productSearch.fetchMatches}
+                        placeholder="Ürün ara…"
+                        inputClassName={input}
+                      />
                     </div>
                     <div>
                       <label className="block text-xs text-slate-500 mb-1">Varyant</label>

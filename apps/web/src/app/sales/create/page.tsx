@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Customer,
   Product,
@@ -11,7 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
-import { productOptionLabel } from "@/lib/productLabel";
+import LiveSearchSelect, { useCustomerSearch, useProductSearch } from "@/components/LiveSearchSelect";
 import PreviousPricesModal from "@/components/PreviousPricesModal";
 import SplitPaymentRows, {
   SplitPaymentRow,
@@ -112,8 +112,11 @@ function CreateSaleInner() {
   const [saleType, setSaleType] = useState<SaleType>(mappedInitial);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const customerSearch = useCustomerSearch(customers, setCustomers);
+  const productSearch = useProductSearch(products, setProducts);
+  const productsRef = useRef(products);
+  productsRef.current = products;
   const [customerId, setCustomerId] = useState("");
-  const [customerQ, setCustomerQ] = useState("");
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newCompany, setNewCompany] = useState("");
@@ -125,7 +128,6 @@ function CreateSaleInner() {
   const [veresiye, setVeresiye] = useState(mappedInitial === "kayitli");
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
-  const [productQ, setProductQ] = useState("");
   const [warehouses, setWarehouses] = useState<Wh[]>([]);
   const [variantPick, setVariantPick] = useState<{
     lineKey: string;
@@ -153,8 +155,8 @@ function CreateSaleInner() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch<Customer[]>("/api/customers"),
-      apiFetch<Product[]>("/api/products"),
+      apiFetch<Customer[]>("/api/customers?limit=1000"),
+      apiFetch<Product[]>("/api/products?active_only=true&limit=1000"),
       apiFetch<Wh[]>("/api/stock/warehouses?active=true").catch(() => [] as Wh[]),
     ])
       .then(([c, p, w]) => {
@@ -169,32 +171,6 @@ function CreateSaleInner() {
     () => customers.find((c) => String(c.id) === customerId) || null,
     [customers, customerId],
   );
-
-  const filteredCustomers = useMemo(() => {
-    const needle = customerQ.trim().toLocaleLowerCase("tr");
-    if (!needle) return customers.slice(0, 80);
-    return customers
-      .filter((c) =>
-        [c.name, c.company, c.phone, c.code]
-          .filter(Boolean)
-          .join(" ")
-          .toLocaleLowerCase("tr")
-          .includes(needle),
-      )
-      .slice(0, 80);
-  }, [customers, customerQ]);
-
-  const filteredProducts = useMemo(() => {
-    const needle = productQ.trim().toLocaleLowerCase("tr");
-    if (!needle) return products;
-    return products.filter((p) =>
-      [p.sku, p.name, p.category]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("tr")
-        .includes(needle),
-    );
-  }, [products, productQ]);
 
   async function loadWhStocks(productId: number): Promise<Record<string, number>> {
     const map: Record<string, number> = {};
@@ -220,8 +196,8 @@ function CreateSaleInner() {
   }
 
   async function applyProductToLine(lineKey: string, pid: string) {
-    const prod = products.find((p) => String(p.id) === pid);
-    if (!pid || !prod) {
+    let prod = productsRef.current.find((p) => String(p.id) === pid) || null;
+    if (!pid) {
       updateLine(lineKey, {
         product_id: "",
         variant_id: "",
@@ -233,6 +209,20 @@ function CreateSaleInner() {
       });
       return;
     }
+    if (!prod) {
+      try {
+        const fetched = await apiFetch<ProductDetail>(`/api/products/${pid}`);
+        prod = fetched;
+        if (!productsRef.current.some((p) => p.id === fetched.id)) {
+          const next = [...productsRef.current, fetched];
+          productsRef.current = next;
+          setProducts(next);
+        }
+      } catch {
+        return;
+      }
+    }
+    if (!prod) return;
     const defaultDepo =
       prod.warehouse ||
       warehouses.find((w) => w.is_default)?.name ||
@@ -504,29 +494,16 @@ function CreateSaleInner() {
             ) : saleType === "kayitli" ? (
               <>
                 <div className="md:col-span-2">
-                  <label className="block text-[11px] text-baykus-muted mb-0.5">Müşteri Ara</label>
-                  <input
-                    className="bk-input mb-2"
-                    placeholder="Ad / telefon / firma…"
-                    value={customerQ}
-                    onChange={(e) => setCustomerQ(e.target.value)}
-                  />
-                  <label className="block text-[11px] text-baykus-muted mb-0.5">Kayıtlı müşteri *</label>
-                  <select
-                    className="bk-input"
+                  <label className="block text-[11px] text-baykus-muted mb-0.5">Müşteri Ara *</label>
+                  <LiveSearchSelect
                     value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
+                    onChange={(id) => setCustomerId(id)}
+                    options={customerSearch.options}
+                    fetchMatches={customerSearch.fetchMatches}
+                    placeholder="Ad / telefon / firma… örn. fero"
                     required
-                  >
-                    <option value="">— Seçin —</option>
-                    {filteredCustomers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                        {c.phone ? ` | ${c.phone}` : ""}
-                        {c.company ? ` (${c.company})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    className="max-w-lg"
+                  />
                   {selectedCustomer && (
                     <div className="mt-2 text-xs text-baykus-muted">
                       Tel: {selectedCustomer.phone || "—"} · Bakiye:{" "}
@@ -542,38 +519,29 @@ function CreateSaleInner() {
             ) : saleType === "perakende" ? (
               <div className="md:col-span-2 text-sm text-baykus-muted">
                 Perakende satış — müşteri isteğe bağlı (fihrist için önerilir).
-                <select
-                  className="bk-input mt-2 max-w-md"
+                <label className="block text-[11px] text-baykus-muted mt-2 mb-0.5">Müşteri Ara</label>
+                <LiveSearchSelect
                   value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                >
-                  <option value="">— Müşterisiz / perakende —</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                      {c.company ? ` (${c.company})` : ""}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => setCustomerId(id)}
+                  options={customerSearch.options}
+                  fetchMatches={customerSearch.fetchMatches}
+                  placeholder="Ad / telefon / firma…"
+                  className="max-w-md"
+                />
               </div>
             ) : (
               <div className="md:col-span-2">
                 <label className="block text-[11px] text-baykus-muted mb-0.5">
-                  {saleType === "teklif" ? "Müşteri (opsiyonel)" : "Müşteri"}
+                  {saleType === "teklif" ? "Müşteri Ara (opsiyonel)" : "Müşteri Ara"}
                 </label>
-                <select
-                  className="bk-input max-w-lg"
+                <LiveSearchSelect
                   value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                >
-                  <option value="">— Seçin —</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                      {c.company ? ` (${c.company})` : ""}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => setCustomerId(id)}
+                  options={customerSearch.options}
+                  fetchMatches={customerSearch.fetchMatches}
+                  placeholder="Ad / telefon / firma…"
+                  className="max-w-lg"
+                />
               </div>
             )}
 
@@ -617,11 +585,24 @@ function CreateSaleInner() {
         <fieldset className="rounded border bg-white px-3 py-3 space-y-2">
           <legend className="px-1 text-xs font-semibold">Ürün / Hizmet</legend>
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              className="bk-input max-w-xs"
+            <LiveSearchSelect
+              value=""
+              clearOnSelect
+              options={productSearch.options}
+              fetchMatches={productSearch.fetchMatches}
               placeholder="Ürün ara…"
-              value={productQ}
-              onChange={(e) => setProductQ(e.target.value)}
+              className="max-w-xs min-w-[220px]"
+              onChange={(id) => {
+                if (!id) return;
+                const empty = lines.find((l) => !l.product_id);
+                if (empty) {
+                  void applyProductToLine(empty.key, id);
+                  return;
+                }
+                const line = emptyLine();
+                setLines((prev) => [...prev, line]);
+                void applyProductToLine(line.key, id);
+              }}
             />
             <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => setLines((p) => [...p, emptyLine()])}>
               Ürün ekle
@@ -649,20 +630,15 @@ function CreateSaleInner() {
                   return (
                     <tr key={line.key}>
                       <td className="min-w-[160px]">
-                        <select
-                          className="bk-input"
+                        <LiveSearchSelect
                           value={line.product_id}
-                          onChange={(e) => {
-                            void applyProductToLine(line.key, e.target.value);
+                          options={productSearch.options}
+                          fetchMatches={productSearch.fetchMatches}
+                          placeholder="Ürün ara…"
+                          onChange={(id) => {
+                            void applyProductToLine(line.key, id);
                           }}
-                        >
-                          <option value="">— Manuel —</option>
-                          {filteredProducts.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {productOptionLabel(p.sku, p.name)}
-                            </option>
-                          ))}
-                        </select>
+                        />
                         {line.stock_qty != null && (
                           <div
                             className={`text-[10px] mt-0.5 ${

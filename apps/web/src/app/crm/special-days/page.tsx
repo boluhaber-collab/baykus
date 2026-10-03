@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Customer, SpecialDay, apiFetch } from "@/lib/api";
+import LiveSearchSelect, { useCustomerSearch } from "@/components/LiveSearchSelect";
 import StatusFooter from "@/components/StatusFooter";
 
 const TYPES = ["doğum günü", "yıldönümü", "kampanya", "diğer"];
@@ -10,6 +11,7 @@ const TYPES = ["doğum günü", "yıldönümü", "kampanya", "diğer"];
 export default function SpecialDaysPage() {
   const [items, setItems] = useState<SpecialDay[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const customerSearch = useCustomerSearch(customers, setCustomers);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [q, setQ] = useState("");
@@ -29,7 +31,7 @@ export default function SpecialDaysPage() {
       const params = upcomingOnly ? "?upcoming_days=30&active=true" : "?active=true";
       const [s, c] = await Promise.all([
         apiFetch<SpecialDay[]>(`/api/crm/special-days${params}`),
-        apiFetch<Customer[]>("/api/customers"),
+        apiFetch<Customer[]>("/api/customers?limit=1000"),
       ]);
       setItems(s);
       setCustomers(c);
@@ -133,19 +135,15 @@ export default function SpecialDaysPage() {
           </select>
         </label>
         <label>
-          <span className="text-[11px] text-baykus-muted">Müşteri (opsiyonel)</span>
-          <select
+          <span className="text-[11px] text-baykus-muted">Müşteri ara (opsiyonel)</span>
+          <LiveSearchSelect
+            className="mt-0.5"
             value={form.customer_id}
-            onChange={(e) => setForm({ ...form, customer_id: e.target.value })}
-            className="bk-input mt-0.5"
-          >
-            <option value="">—</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            onChange={(id) => setForm({ ...form, customer_id: id })}
+            options={customerSearch.options}
+            fetchMatches={customerSearch.fetchMatches}
+            placeholder="Müşteri ara…"
+          />
         </label>
         <label>
           <span className="text-[11px] text-baykus-muted">Not</span>

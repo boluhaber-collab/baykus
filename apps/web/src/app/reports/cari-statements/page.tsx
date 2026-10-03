@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
-import { apiFetch, downloadReportCsv, formatMoney, getApiBase, getToken } from "@/lib/api";
+import { Customer, apiFetch, downloadReportCsv, formatMoney, getApiBase, getToken } from "@/lib/api";
+import LiveSearchSelect, { customerToOption } from "@/components/LiveSearchSelect";
 import StatusFooter from "@/components/StatusFooter";
 import { ReportHeader } from "@/components/reports/ReportChrome";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
@@ -17,7 +18,6 @@ export default function CariStatementsPage() {
   const [rows, setRows] = useState<Move[]>([]);
   const [summary, setSummary] = useState<{ customer_name?: string; closing_balance?: number } | null>(null);
   const [error, setError] = useState("");
-  const [q, setQ] = useState("");
   const [csvBusy, setCsvBusy] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [dateFrom, setDateFrom] = useState(() => {
@@ -67,9 +67,16 @@ export default function CariStatementsPage() {
     void load();
   }, [load]);
 
-  const filteredCustomers = q.trim()
-    ? customers.filter((c) => [c.name, c.company].join(" ").toLowerCase().includes(q.trim().toLowerCase()))
-    : customers;
+  const customerOptions = useMemo(
+    () => customers.map((c) => customerToOption({ id: c.id, name: c.name, company: c.company })),
+    [customers],
+  );
+  const fetchCustomers = useCallback(async (q: string) => {
+    const query = q.trim();
+    if (!query) return [];
+    const rows = await apiFetch<Customer[]>(`/api/customers?limit=40&q=${encodeURIComponent(query)}`);
+    return rows.map(customerToOption);
+  }, []);
 
   const debitSum = rows.reduce((s, r) => s + r.debit, 0);
   const creditSum = rows.reduce((s, r) => s + r.credit, 0);
@@ -144,21 +151,14 @@ export default function CariStatementsPage() {
         subtitle="Tarih aralığı + CSV/PDF/HTML (boş tarih = tüm hareketler)"
       />
       <div className="bk-filter-bar items-end">
-        <input
-          className="bk-input max-w-[160px]"
+        <LiveSearchSelect
+          className="min-w-[220px] max-w-xs"
+          value={customerId}
+          onChange={(id) => setCustomerId(id)}
+          options={customerOptions}
+          fetchMatches={fetchCustomers}
           placeholder="Müşteri ara…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
         />
-        <select className="bk-input min-w-[220px]" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-          <option value="">Müşteri seçin…</option>
-          {filteredCustomers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.company ? ` (${c.company})` : ""} · {formatMoney(c.balance)}
-            </option>
-          ))}
-        </select>
         <label className="text-xs">
           <span className="text-baykus-muted block mb-0.5">Başlangıç</span>
           <input type="date" className="bk-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />

@@ -14,6 +14,7 @@ import {
   formatMoney,
   quoteStatusBadgeClass,
 } from "@/lib/api";
+import LiveSearchSelect, { useCustomerSearch, useProductSearch } from "@/components/LiveSearchSelect";
 
 type EditLine = {
   key: string;
@@ -62,6 +63,8 @@ export default function QuoteDetailPage() {
   const [editing, setEditing] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const customerSearch = useCustomerSearch(customers, setCustomers);
+  const productSearch = useProductSearch(products, setProducts);
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState("Taslak");
   const [notes, setNotes] = useState("");
@@ -99,8 +102,8 @@ export default function QuoteDetailPage() {
   useEffect(() => {
     if (!editing) return;
     Promise.all([
-      apiFetch<Customer[]>("/api/customers"),
-      apiFetch<Product[]>("/api/products"),
+      apiFetch<Customer[]>("/api/customers?limit=1000"),
+      apiFetch<Product[]>("/api/products?active_only=true&limit=1000"),
     ])
       .then(([c, p]) => {
         setCustomers(c);
@@ -306,19 +309,16 @@ export default function QuoteDetailPage() {
         <form onSubmit={saveEdit} className="space-y-4">
           <div className="grid md:grid-cols-2 gap-4 rounded-xl border bg-white p-4 shadow-sm">
             <label className="text-sm">
-              <span className="text-slate-500">Müşteri</span>
-              <select
+              <span className="text-slate-500">Müşteri Ara</span>
+              <LiveSearchSelect
+                className="mt-1"
                 value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-                className="mt-1 w-full rounded-lg border px-3 py-2"
-              >
-                <option value="">— Seçin —</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(id) => setCustomerId(id)}
+                options={customerSearch.options}
+                fetchMatches={customerSearch.fetchMatches}
+                placeholder="Ad / telefon / firma…"
+                inputClassName="mt-0 w-full rounded-lg border px-3 py-2 text-sm"
+              />
             </label>
             <label className="text-sm">
               <span className="text-slate-500">Durum</span>
@@ -377,10 +377,14 @@ export default function QuoteDetailPage() {
             </div>
             {lines.map((line) => (
               <div key={line.key} className="grid md:grid-cols-6 gap-2 border-t pt-3">
-                <select
+                <LiveSearchSelect
+                  className="md:col-span-2"
                   value={line.product_id}
-                  onChange={(e) => {
-                    const pid = e.target.value;
+                  placeholder="Ürün ara…"
+                  options={productSearch.options}
+                  fetchMatches={productSearch.fetchMatches}
+                  inputClassName="rounded-lg border px-2 py-1.5 text-sm w-full"
+                  onChange={(pid) => {
                     const prod = products.find((p) => String(p.id) === pid);
                     setLines((prev) =>
                       prev.map((l) =>
@@ -395,15 +399,7 @@ export default function QuoteDetailPage() {
                       ),
                     );
                   }}
-                  className="rounded-lg border px-2 py-1.5 text-sm md:col-span-2"
-                >
-                  <option value="">Ürün (opsiyonel)</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                />
                 <input
                   placeholder="Açıklama"
                   value={line.description}

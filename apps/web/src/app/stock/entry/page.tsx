@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Product, ProductDetail, apiFetch, formatMoney } from "@/lib/api";
 import { productOptionLabel } from "@/lib/productLabel";
+import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 import StatusFooter from "@/components/StatusFooter";
 
 type Warehouse = {
@@ -16,6 +17,7 @@ type Warehouse = {
 
 function StockEntryPageInner() {
   const [products, setProducts] = useState<Product[]>([]);
+  const productSearch = useProductSearch(products, setProducts);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const sp = useSearchParams();
   const [productId, setProductId] = useState(() => sp.get("product_id") || "");
@@ -30,7 +32,6 @@ function StockEntryPageInner() {
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   });
-  const [q, setQ] = useState("");
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,8 +39,7 @@ function StockEntryPageInner() {
   const loadLists = useCallback(async () => {
     setError("");
     try {
-      const params = new URLSearchParams({ active_only: "true", type: "stoklu", limit: "200" });
-      if (q.trim()) params.set("q", q.trim());
+      const params = new URLSearchParams({ active_only: "true", type: "stoklu", limit: "1000" });
       const [prods, whs] = await Promise.all([
         apiFetch<Product[]>(`/api/products?${params}`),
         apiFetch<Warehouse[]>("/api/warehouses").catch(() => [] as Warehouse[]),
@@ -51,7 +51,7 @@ function StockEntryPageInner() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
-  }, [q, warehouse]);
+  }, [warehouse]);
 
   useEffect(() => {
     void loadLists();
@@ -75,17 +75,6 @@ function StockEntryPageInner() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Ürün yüklenemedi"));
   }, [productId]);
-
-  const filtered = useMemo(() => {
-    if (!q.trim()) return products;
-    const needle = q.trim().toLowerCase();
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(needle) ||
-        p.sku.toLowerCase().includes(needle) ||
-        (p.brand || "").toLowerCase().includes(needle),
-    );
-  }, [products, q]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -188,31 +177,20 @@ function StockEntryPageInner() {
       <form onSubmit={onSubmit} className="bk-card p-4 space-y-4" data-baykus-save>
         <div className="grid md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
-            <label className="block text-xs font-medium text-slate-600 mb-1">Ürün ara / seç *</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                className="bk-input"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Ad / SKU / marka…"
-              />
+            <div className="flex items-end justify-between gap-2 mb-1">
+              <label className="block text-xs font-medium text-slate-600">Ürün ara / seç *</label>
               <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => void loadLists()}>
                 Yenile
               </button>
             </div>
-            <select
-              className="bk-input"
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
+            <LiveSearchSelect
               required
-            >
-              <option value="">— ürün seçin —</option>
-              {filtered.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {productOptionLabel(p.sku, p.name, { sep: " · ", suffix: ` (stok ${p.total_stock ?? p.stock_qty})` })}
-                </option>
-              ))}
-            </select>
+              value={productId}
+              onChange={(id) => setProductId(id)}
+              options={productSearch.options}
+              fetchMatches={productSearch.fetchMatches}
+              placeholder="Ad / SKU / marka…"
+            />
           </div>
 
           {detail?.variants && detail.variants.length > 0 && (

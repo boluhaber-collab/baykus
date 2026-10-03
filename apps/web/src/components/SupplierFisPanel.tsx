@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PayableItem, Supplier, apiFetch, downloadPdf, formatMoney } from "@/lib/api";
+import LiveSearchSelect, { useSupplierSearch } from "@/components/LiveSearchSelect";
 
 export type FisTip = "Alacak Fişi" | "Borç Fişi";
 
@@ -36,6 +37,7 @@ export default function SupplierFisPanel({
   onClose,
 }: Props) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const supplierSearch = useSupplierSearch(suppliers, setSuppliers);
   const [supplierId, setSupplierId] = useState<string>(
     initialSupplierId ? String(initialSupplierId) : "",
   );
@@ -57,7 +59,7 @@ export default function SupplierFisPanel({
     if (!open) return;
     void (async () => {
       try {
-        const list = await apiFetch<Supplier[]>("/api/suppliers?active=true&limit=500");
+        const list = await apiFetch<Supplier[]>("/api/suppliers?active=true&limit=1000");
         setSuppliers(list);
         if (!supplierId && payables[0]) setSupplierId(String(payables[0].supplier_id));
         else if (!supplierId && list[0]) setSupplierId(String(list[0].id));
@@ -225,20 +227,20 @@ h1{font-size:1.35rem;margin:0 0 4px;color:#0f766e}
 
       <div className="grid sm:grid-cols-2 gap-3 text-sm">
         <label>
-          <span className="text-[11px] text-baykus-muted">Tedarikçi *</span>
-          <select
-            className="bk-input mt-0.5"
-            value={supplierId}
-            onChange={(e) => setSupplierId(e.target.value)}
+          <span className="text-[11px] text-baykus-muted">Tedarikçi ara *</span>
+          <LiveSearchSelect
+            className="mt-0.5"
             required
-          >
-            <option value="">Seçin…</option>
-            {picker.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+            value={supplierId}
+            onChange={(id) => setSupplierId(id)}
+            options={
+              supplierSearch.options.length
+                ? supplierSearch.options
+                : picker.map((p) => ({ value: String(p.id), label: p.label, keywords: p.label }))
+            }
+            fetchMatches={supplierSearch.fetchMatches}
+            placeholder="Tedarikçi ara…"
+          />
         </label>
         <label>
           <span className="text-[11px] text-baykus-muted">İşlem Tipi</span>

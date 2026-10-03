@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Customer, apiFetch, formatMoney } from "@/lib/api";
+import LiveSearchSelect, { useCustomerSearch } from "@/components/LiveSearchSelect";
 import StatusFooter from "@/components/StatusFooter";
 
 type Event = {
@@ -47,6 +48,7 @@ type TrackPayload = {
 export default function CustomerTrackPage() {
   const [data, setData] = useState<TrackPayload | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const customerSearch = useCustomerSearch(customers, setCustomers);
   const [customerId, setCustomerId] = useState("");
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"timeline" | "receivables" | "notes">("timeline");
@@ -58,7 +60,7 @@ export default function CustomerTrackPage() {
       if (customerId) params.set("customer_id", customerId);
       const [track, cust] = await Promise.all([
         apiFetch<TrackPayload>(`/api/customers/track?${params}`),
-        apiFetch<Customer[]>("/api/customers"),
+        apiFetch<Customer[]>("/api/customers?limit=1000"),
       ]);
       setData(track);
       setCustomers(cust);
@@ -95,15 +97,14 @@ export default function CustomerTrackPage() {
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
       <div className="bk-filter-bar">
-        <select className="bk-input max-w-sm" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-          <option value="">— Tüm müşteriler —</option>
-          {customers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.phone ? ` | ${c.phone}` : ""}
-            </option>
-          ))}
-        </select>
+        <LiveSearchSelect
+          className="max-w-sm min-w-[220px]"
+          value={customerId}
+          onChange={(id) => setCustomerId(id)}
+          options={customerSearch.options}
+          fetchMatches={customerSearch.fetchMatches}
+          placeholder="Müşteri ara… (boş = tümü)"
+        />
         <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={load}>
           Yenile
         </button>
