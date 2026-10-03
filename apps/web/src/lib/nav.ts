@@ -87,7 +87,6 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: "🛒",
     color: "#fbbf24",
     href: "/sales",
-    defaultOpen: true,
     items: [
       { href: "/orders", label: "Sipariş Merkezi", color: "#111827" },
       { href: "/sales", label: "Satışlar", color: "#1f6feb" },

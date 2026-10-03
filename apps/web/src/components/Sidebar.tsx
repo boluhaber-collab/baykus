@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { NAV_GROUPS, NavGroup, filterNavByLockMode, orderNavGroups } from "@/lib/nav";
 import { AppSettings, apiFetch, clearToken } from "@/lib/api";
 
@@ -72,24 +72,6 @@ export default function Sidebar() {
     window.addEventListener("baykus-settings-changed", onChanged);
     return () => window.removeEventListener("baykus-settings-changed", onChanged);
   }, []);
-
-  const activeGroupId = useMemo(() => {
-    for (const g of groups) {
-      if (groupIsActive(pathname, g)) return g.id;
-    }
-    return null;
-  }, [pathname, groups]);
-
-  useEffect(() => {
-    setOpen((prev) => {
-      const next = { ...prev };
-      for (const g of groups) {
-        if (g.defaultOpen && next[g.id] === undefined) next[g.id] = true;
-        if (g.id === activeGroupId && !g.tek) next[g.id] = true;
-      }
-      return next;
-    });
-  }, [activeGroupId, groups]);
 
   function toggle(id: string) {
     setOpen((prev) => ({ ...prev, [id]: !prev[id] }));
