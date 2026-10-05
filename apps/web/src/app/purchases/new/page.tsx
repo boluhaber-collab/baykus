@@ -32,6 +32,8 @@ type TalepRow = CriticalStockItem & {
   key: string;
   selected: boolean;
   talep: number;
+  /** Editable alış fiyatı; blank by default — do not seed from catalog/sale price */
+  alisFiyat: string;
 };
 
 function NewPurchaseForm() {
@@ -85,6 +87,8 @@ function NewPurchaseForm() {
             key: `${r.product_id}-${r.variant_id ?? "p"}`,
             selected: false,
             talep: onerilen,
+            // Leave alış empty — never prefill from product sale/list/purchase_price
+            alisFiyat: "",
           };
         });
       setTalepRows(mapped);
@@ -206,7 +210,11 @@ function NewPurchaseForm() {
       const payloadLines = selectedTalep.map((r) => ({
         description: [r.product_name, r.variant_name, r.size, r.color].filter(Boolean).join(" — "),
         quantity: Math.max(1, r.talep),
-        unit_cost: Number(r.purchase_price || 0),
+        // Use only the user-entered alış; never seed from product sale/list price
+        unit_cost: (() => {
+          const n = Number(r.alisFiyat);
+          return Number.isFinite(n) && n >= 0 ? n : 0;
+        })(),
         product_id: r.product_id,
         variant_id: r.variant_id ?? null,
       }));
@@ -409,7 +417,25 @@ function NewPurchaseForm() {
                         }}
                       />
                     </td>
-                    <td className="text-right tabular-nums">{formatMoney(Number(r.purchase_price || 0))}</td>
+                    <td className="text-right">
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="bk-input w-28 text-right"
+                        value={r.alisFiyat}
+                        placeholder="—"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setTalepRows((rows) =>
+                            rows.map((x) =>
+                              x.key === r.key ? { ...x, alisFiyat: v, selected: true } : x,
+                            ),
+                          );
+                        }}
+                        aria-label="Alış fiyatı"
+                      />
+                    </td>
                   </tr>
                 ))}
                 {talepRows.length === 0 && (
