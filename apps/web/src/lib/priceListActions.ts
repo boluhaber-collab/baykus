@@ -66,25 +66,80 @@ export async function savePriceListPdf(id: number, name: string, customer = fals
   triggerDownload(blob, priceListFileName(name));
 }
 
-/** Yazdır — yetkili HTML'i gizli iframe'e yükleyip tarayıcı yazdırma penceresini açar (popup engeline takılmaz). */
+/**
+ * Yazdır — PDF olarak kaydet ile aynı çıktıyı (antet/logo) kullanır.
+ * Blob gizli iframe'e yüklenir ve print() çağrılır; iframe basamazsa yeni sekmede açılır.
+ */
 export async function printPriceList(id: number, customer = false): Promise<void> {
-  const res = await authFetch(`/api/price-lists/${id}/export?fmt=html${customer ? "&customer=true" : ""}`);
-  const html = await res.text();
-  const old = document.getElementById("bk-price-print-frame");
-  if (old) old.remove();
+  const blob = await fetchPriceListPdf(id, customer);
+  const url = URL.createObjectURL(blob);
+  const prev = document.getElementById("bk-price-print-frame");
+  if (prev) prev.remove();
+
+  const revokeLater = () => {
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const openTabFallback = (): void => {
+    const w = window.open(url, "_blank");
+    if (!w) {
+      revokeLater();
+      throw new Error("Yazdırma penceresi açılamadı (popup engellendi)");
+    }
+    revokeLater();
+  };
+
   const frame = document.createElement("iframe");
   frame.id = "bk-price-print-frame";
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
   document.body.appendChild(frame);
-  await new Promise<void>((resolve) => {
-    frame.onload = () => resolve();
-    frame.srcdoc = html;
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let printDelay: ReturnType<typeof setTimeout> | undefined;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      if (printDelay != null) clearTimeout(printDelay);
+      try {
+        fn();
+        resolve();
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error("Yazdırma hatası"));
+      }
+    };
+
+    const tryPrint = () => {
+      if (settled) return;
+      try {
+        const win = frame.contentWindow;
+        if (!win) {
+          finish(openTabFallback);
+          return;
+        }
+        win.focus();
+        win.print();
+        revokeLater();
+        finish(() => undefined);
+      } catch {
+        finish(openTabFallback);
+      }
+    };
+
+    const watchdog = setTimeout(() => {
+      // Bazı tarayıcılarda PDF iframe onload tetiklenmez
+      finish(openTabFallback);
+    }, 2500);
+
+    frame.onload = () => {
+      // PDF görüntüleyici hazır olsun diye kısa gecikme
+      printDelay = setTimeout(tryPrint, 300);
+    };
+    frame.onerror = () => finish(openTabFallback);
+    frame.src = url;
   });
-  const win = frame.contentWindow;
-  if (!win) throw new Error("Yazdırma penceresi açılamadı");
-  win.focus();
-  win.print();
 }
 
 /** Müşteriye gönderilecek düz metin (alış fiyatı / tedarikçi yok). */
