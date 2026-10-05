@@ -144,15 +144,22 @@ export function useCustomerSearch(
 export function useProductSearch(
   products: Product[],
   setProducts: Dispatch<SetStateAction<Product[]>>,
+  opts?: { inStockOnly?: boolean },
 ) {
   const options = useMemo(() => products.map(productToOption), [products]);
+  const stockQs =
+    opts?.inStockOnly === true
+      ? "&in_stock_only=true"
+      : opts?.inStockOnly === false
+        ? "&in_stock_only=false"
+        : "";
   const fetchMatches = useCallback(
     async (q: string) => {
-      const rows = await searchRows<Product>("/api/products?active_only=true", q);
+      const rows = await searchRows<Product>(`/api/products?active_only=true${stockQs}`, q);
       setProducts((prev) => mergeById(prev, rows));
       return rows.map(productToOption);
     },
-    [setProducts],
+    [setProducts, stockQs],
   );
   return { options, fetchMatches };
 }

@@ -46,9 +46,13 @@ function NewPurchaseForm() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const supplierSearch = useSupplierSearch(suppliers, setSuppliers);
-  const productSearch = useProductSearch(products, setProducts);
+  // Purchases must list qty 0 (and negative); do not inherit sale in-stock-only filter
+  const productSearch = useProductSearch(products, setProducts, { inStockOnly: false });
   const [productDetails, setProductDetails] = useState<Record<number, ProductDetail>>({});
-  const [lineFilters, setLineFilters] = useState<StockFilterState>({ ...EMPTY_STOCK_FILTERS });
+  const [lineFilters, setLineFilters] = useState<StockFilterState>({
+    ...EMPTY_STOCK_FILTERS,
+    inStockOnly: false,
+  });
   const [supplierId, setSupplierId] = useState(presetSupplier);
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
@@ -100,7 +104,7 @@ function NewPurchaseForm() {
   useEffect(() => {
     Promise.all([
       apiFetch<Supplier[]>("/api/suppliers?active=true&limit=1000"),
-      apiFetch<Product[]>("/api/products?active_only=true&limit=1000"),
+      apiFetch<Product[]>("/api/products?active_only=true&in_stock_only=false&limit=1000"),
     ])
       .then(([s, p]) => {
         setSuppliers(s);
@@ -498,7 +502,7 @@ function NewPurchaseForm() {
                   onChange={setLineFilters}
                   facets={facets}
                   hideWarehouse
-                  defaults={{ inStockOnly: true }}
+                  defaults={{ inStockOnly: false }}
                 />
               );
             })()}

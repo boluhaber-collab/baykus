@@ -60,7 +60,7 @@ export default function PurchaseDetailPage() {
   const [taxAmount, setTaxAmount] = useState("0");
   const [lines, setLines] = useState<EditLine[]>([emptyLine()]);
   const [products, setProducts] = useState<Product[]>([]);
-  const productSearch = useProductSearch(products, setProducts);
+  const productSearch = useProductSearch(products, setProducts, { inStockOnly: false });
   const [productDetails, setProductDetails] = useState<Record<number, ProductDetail>>({});
 
   const load = useCallback(async () => {
@@ -92,7 +92,7 @@ export default function PurchaseDetailPage() {
 
   useEffect(() => {
     if (!editing) return;
-    apiFetch<Product[]>("/api/products?active_only=true&limit=1000")
+    apiFetch<Product[]>("/api/products?active_only=true&in_stock_only=false&limit=1000")
       .then((p) => setProducts(p.filter((x) => x.product_type !== "hizmet")))
       .catch((e) => setError(e instanceof Error ? e.message : "Ürün listesi yüklenemedi"));
   }, [editing]);
