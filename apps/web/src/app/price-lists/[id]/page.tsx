@@ -54,6 +54,8 @@ export default function PriceListDetailPage() {
   const [bulkValue, setBulkValue] = useState("10");
   const [bulkFields, setBulkFields] = useState<string[]>(["blank_price", "printed_price", "embroidered_price"]);
   const [importBusy, setImportBusy] = useState(false);
+  /** Which row is picking a catalog product (keeps Ürün as one name line). */
+  const [bindKey, setBindKey] = useState<string | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -470,30 +472,9 @@ export default function PriceListDetailPage() {
                     <td>
                       <input type="checkbox" checked={selected.has(it.key)} onChange={() => toggleSel(it.key)} />
                     </td>
-                    <td className="min-w-[140px]">
-                      <LiveSearchSelect
-                        className="mb-1"
-                        value={it.product_id}
-                        placeholder="Ürün ara…"
-                        options={productSearch.options}
-                        fetchMatches={productSearch.fetchMatches}
-                        onChange={(pid) => {
-                          const prod = products.find((p) => String(p.id) === pid);
-                          setItems((prev) =>
-                            prev.map((x) =>
-                              x.key === it.key
-                                ? {
-                                    ...x,
-                                    product_id: pid,
-                                    description: prod?.name || x.description,
-                                    blank_price: prod ? String(prod.base_price) : x.blank_price,
-                                    purchase_price: prod ? String(prod.purchase_price ?? 0) : x.purchase_price,
-                                  }
-                                : x,
-                            ),
-                          );
-                        }}
-                      />
+                    <td className="min-w-[160px]">
+                      {/* One visible product name — LiveSearchSelect used to also show the
+                          catalog label above description, so each kalem looked doubled. */}
                       <input
                         value={it.description}
                         onChange={(e) =>
@@ -502,6 +483,78 @@ export default function PriceListDetailPage() {
                         className="bk-input"
                         placeholder="Ürün adı"
                       />
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] leading-tight">
+                        {bindKey === it.key ? (
+                          <>
+                            <LiveSearchSelect
+                              className="flex-1 min-w-[120px]"
+                              value=""
+                              clearOnSelect
+                              placeholder="Kataloğdan seç…"
+                              options={productSearch.options}
+                              fetchMatches={productSearch.fetchMatches}
+                              onChange={(pid) => {
+                                if (!pid) {
+                                  setBindKey(null);
+                                  return;
+                                }
+                                const prod = products.find((p) => String(p.id) === pid);
+                                setItems((prev) =>
+                                  prev.map((x) =>
+                                    x.key === it.key
+                                      ? {
+                                          ...x,
+                                          product_id: pid,
+                                          description: prod?.name || x.description,
+                                          blank_price: prod ? String(prod.base_price) : x.blank_price,
+                                          purchase_price: prod ? String(prod.purchase_price ?? 0) : x.purchase_price,
+                                        }
+                                      : x,
+                                  ),
+                                );
+                                setBindKey(null);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="text-baykus-muted hover:underline shrink-0"
+                              onClick={() => setBindKey(null)}
+                            >
+                              Vazgeç
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {it.product_id ? (
+                              <span className="text-emerald-700 tabular-nums" title="Kataloğa bağlı">
+                                katalog #{it.product_id}
+                              </span>
+                            ) : (
+                              <span className="text-baykus-muted">serbest ad</span>
+                            )}
+                            <button
+                              type="button"
+                              className="text-[#0f766e] hover:underline"
+                              onClick={() => setBindKey(it.key)}
+                            >
+                              {it.product_id ? "Değiştir" : "Kataloğdan bağla"}
+                            </button>
+                            {it.product_id ? (
+                              <button
+                                type="button"
+                                className="text-red-600 hover:underline"
+                                onClick={() =>
+                                  setItems((prev) =>
+                                    prev.map((x) => (x.key === it.key ? { ...x, product_id: "" } : x)),
+                                  )
+                                }
+                              >
+                                Bağı kaldır
+                              </button>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <input
