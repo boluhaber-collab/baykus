@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import html as html_lib
 import io
 from datetime import datetime
 from decimal import Decimal
@@ -589,54 +590,76 @@ def _item_rows(pl: PriceList) -> list[dict]:
     return rows
 
 
+def _safe_filename(name: str, list_id: int) -> str:
+    import re
+    import unicodedata
+
+    base = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
+    base = re.sub(r"[^A-Za-z0-9]+", "-", base).strip("-").lower()[:60]
+    return f"fiyat-listesi-{base or list_id}"
+
+
 @router.get("/{list_id}/export")
 def export_price_list(
     list_id: int,
     fmt: str = Query(default="csv", pattern="^(csv|html|pdf)$"),
+    customer: bool = Query(default=False, description="Müşteri nüshası: alış + tedarikçi gizli"),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış", "muhasebe")),
 ):
-    """CSV / yazdırılabilir HTML / basit PDF."""
+    """CSV / yazdırılabilir HTML / PDF. customer=true → alış fiyatı ve tedarikçi gizlenir."""
     pl = _load(db, list_id)
     rows = _item_rows(pl)
+    fname = _safe_filename(pl.name, list_id)
     if fmt == "csv":
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(
-            ["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı", "Not"]
-        )
+        if customer:
+            w.writerow(["Ürün", "Baskısız", "Baskılı", "Nakışlı", "Not"])
+        else:
+            w.writerow(["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı", "Not"])
         for r in rows:
-            w.writerow(
-                [
-                    r["description"],
-                    r["supplier_name"],
-                    r["purchase_price"],
-                    r["blank_price"],
-                    r["printed_price"],
-                    r["embroidered_price"],
-                    r["notes"],
-                ]
-            )
+            if customer:
+                w.writerow([r["description"], r["blank_price"], r["printed_price"], r["embroidered_price"], r["notes"]])
+            else:
+                w.writerow(
+                    [
+                        r["description"],
+                        r["supplier_name"],
+                        r["purchase_price"],
+                        r["blank_price"],
+                        r["printed_price"],
+                        r["embroidered_price"],
+                        r["notes"],
+                    ]
+                )
         data = "\ufeff" + buf.getvalue()
         return StreamingResponse(
             iter([data]),
             media_type="text/csv; charset=utf-8",
-            headers={
-                "Content-Disposition": f'attachment; filename="fiyat_listesi_{list_id}.csv"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{fname}.csv"'},
         )
     if fmt == "html":
-        trs = "".join(
-            f"<tr><td>{r['description']}</td><td>{r['supplier_name']}</td>"
-            f"<td style='text-align:right'>{r['purchase_price']:.2f}</td>"
-            f"<td style='text-align:right'>{r['blank_price']:.2f}</td>"
-            f"<td style='text-align:right'>{r['printed_price']:.2f}</td>"
-            f"<td style='text-align:right'>{r['embroidered_price']:.2f}</td>"
-            f"<td>{r['notes']}</td></tr>"
-            for r in rows
-        )
+        esc = html_lib.escape
+
+        def _tr(r: dict) -> str:
+            cells = [f"<td>{esc(r['description'])}</td>"]
+            if not customer:
+                cells.append(f"<td>{esc(r['supplier_name'])}</td>")
+                cells.append(f"<td style='text-align:right'>{r['purchase_price']:.2f}</td>")
+            cells += [
+                f"<td style='text-align:right'>{r['blank_price']:.2f}</td>",
+                f"<td style='text-align:right'>{r['printed_price']:.2f}</td>",
+                f"<td style='text-align:right'>{r['embroidered_price']:.2f}</td>",
+                f"<td>{esc(r['notes'])}</td>",
+            ]
+            return "<tr>" + "".join(cells) + "</tr>"
+
+        heads = ["Ürün"] + ([] if customer else ["Tedarikçi", "Alış"]) + ["Baskısız", "Baskılı", "Nakışlı", "Not"]
+        trs = "".join(_tr(r) for r in rows)
+        title = esc(pl.name)
         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>{pl.name}</title>
+<title>{title}</title>
 <style>
 body{{font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#0f172a}}
 h1{{font-size:20px;margin:0 0 4px}} .muted{{color:#64748b;font-size:12px;margin-bottom:16px}}
@@ -645,11 +668,10 @@ th,td{{border:1px solid #cbd5e1;padding:6px 8px}} th{{background:#0f766e;color:#
 @media print{{button{{display:none}}}}
 </style></head><body>
 <button onclick="window.print()">Yazdır</button>
-<h1>{pl.name}</h1>
-<div class="muted">Fiyat / Maliyet › Fiyat Listesi · {len(rows)} kalem</div>
-<table><thead><tr>
-<th>Ürün</th><th>Tedarikçi</th><th>Alış</th><th>Baskısız</th><th>Baskılı</th><th>Nakışlı</th><th>Not</th>
-</tr></thead><tbody>{trs or '<tr><td colspan=7>Kalem yok</td></tr>'}</tbody></table>
+<h1>{title}</h1>
+<div class="muted">Fiyat Listesi · {len(rows)} kalem · {datetime.now().strftime('%d.%m.%Y')}</div>
+<table><thead><tr>{''.join(f'<th>{h}</th>' for h in heads)}</tr></thead>
+<tbody>{trs or f'<tr><td colspan={len(heads)}>Kalem yok</td></tr>'}</tbody></table>
 </body></html>"""
         return HTMLResponse(html)
     # pdf
@@ -657,9 +679,9 @@ th,td{{border:1px solid #cbd5e1;padding:6px 8px}} th{{background:#0f766e;color:#
     from app.services.pdf import build_price_list_pdf
 
     settings_map = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
-    pdf = build_price_list_pdf(pl.name, rows, settings_map)
+    pdf = build_price_list_pdf(pl.name, rows, settings_map, customer=customer)
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="fiyat_listesi_{list_id}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{fname}.pdf"'},
     )

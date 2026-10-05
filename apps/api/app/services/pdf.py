@@ -791,8 +791,12 @@ def build_cari_statement_pdf(
 
 
 def build_price_list_pdf(
-    list_name: str, rows: list[dict[str, Any]], settings: dict[str, str] | None = None
+    list_name: str,
+    rows: list[dict[str, Any]],
+    settings: dict[str, str] | None = None,
+    customer: bool = False,
 ) -> bytes:
+    """Fiyat listesi PDF. customer=True → müşteri nüshası (alış fiyatı + tedarikçi gizli)."""
     buf, c, width, height = _new_doc()
     settings = settings or {}
     alt = _alt_baslik_from_settings(settings, "Baykuş Baskı")
@@ -802,26 +806,41 @@ def build_price_list_pdf(
     pdf_modern_kutu(c, 10.5 * cm, y, 8.2 * cm, 0.9 * cm, "Kalem", str(len(rows)))
     y -= 1.35 * cm
 
-    tablo = [
-        [
-            _s(r.get("description"))[:34],
-            _s(r.get("supplier_name"))[:18],
-            _money(r.get("purchase_price")),
-            _money(r.get("blank_price")),
-            _money(r.get("printed_price")),
-            _money(r.get("embroidered_price")),
+    if customer:
+        kolonlar = ["Ürün", "Baskısız", "Baskılı", "Nakışlı"]
+        oranlar = [3.4, 1.2, 1.2, 1.2]
+        tablo = [
+            [
+                _s(r.get("description"))[:48],
+                _money(r.get("blank_price")),
+                _money(r.get("printed_price")),
+                _money(r.get("embroidered_price")),
+            ]
+            for r in rows
         ]
-        for r in rows[:300]
-    ]
+    else:
+        kolonlar = ["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı"]
+        oranlar = [2.6, 1.6, 1.2, 1.2, 1.2, 1.2]
+        tablo = [
+            [
+                _s(r.get("description"))[:34],
+                _s(r.get("supplier_name"))[:18],
+                _money(r.get("purchase_price")),
+                _money(r.get("blank_price")),
+                _money(r.get("printed_price")),
+                _money(r.get("embroidered_price")),
+            ]
+            for r in rows
+        ]
     y, sayfa_no = pdf_excel_tablo(
         c,
         width,
         height,
         y,
         "Fiyat Kalemleri",
-        ["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı"],
+        kolonlar,
         tablo,
-        oranlar=[2.6, 1.6, 1.2, 1.2, 1.2, 1.2],
+        oranlar=oranlar,
         sayfa_baslik=f"Fiyat Listesi — {list_name}",
         alt_baslik=alt,
         settings=settings,

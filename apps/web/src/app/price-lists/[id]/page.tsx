@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PriceList, Product, apiFetch, downloadAuthFile, formatMoney, getToken } from "@/lib/api";
 import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
+import PriceListShareDialog from "@/components/PriceListShareDialog";
+import { printPriceList, priceListFileName, savePriceListPdf } from "@/lib/priceListActions";
 
 type EditItem = {
   key: string;
@@ -41,7 +43,8 @@ export default function PriceListDetailPage() {
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [customerCopy, setCustomerCopy] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [items, setItems] = useState<EditItem[]>([]);
   const [q, setQ] = useState("");
@@ -60,7 +63,6 @@ export default function PriceListDetailPage() {
       const data = await apiFetch<PriceList>(`/api/price-lists/${id}`);
       setList(data);
       setName(data.name);
-      setDescription(data.description || "");
       setIsActive(data.is_active);
       setItems(
         (data.items || []).map((it) => ({
@@ -124,7 +126,6 @@ export default function PriceListDetailPage() {
         method: "PUT",
         body: JSON.stringify({
           name: name.trim(),
-          description: description || null,
           is_active: isActive,
           items: items
             .filter((i) => i.description.trim())
@@ -159,9 +160,9 @@ export default function PriceListDetailPage() {
     }
   }
 
-  async function download(fmt: "csv" | "pdf") {
+  async function download(fmt: "csv") {
     try {
-      const res = await fetch(`${apiBase}/api/price-lists/${id}/export?fmt=${fmt}`, {
+      const res = await fetch(`${apiBase}/api/price-lists/${id}/export?fmt=${fmt}${customerCopy ? "&customer=true" : ""}`, {
         headers: authHeaders(),
         credentials: "include",
       });
@@ -170,7 +171,7 @@ export default function PriceListDetailPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `fiyat_listesi_${id}.${fmt}`;
+      a.download = priceListFileName(list?.name || String(id), fmt);
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -260,15 +261,29 @@ export default function PriceListDetailPage() {
   }
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !list) return;
     if (new URLSearchParams(window.location.search).get("print") !== "1") return;
-    const tmr = setTimeout(() => openPrint(), 400);
+    const tmr = setTimeout(() => void openPrint(), 400);
     return () => clearTimeout(tmr);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list]);
+  }, [list?.id]);
 
-  function openPrint() {
-    window.open(`${apiBase}/api/price-lists/${id}/export?fmt=html`, "_blank");
+  async function openPrint() {
+    setError("");
+    try {
+      await printPriceList(id, customerCopy);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Yazdırma hatası");
+    }
+  }
+
+  async function savePdf() {
+    setError("");
+    try {
+      await savePriceListPdf(id, list?.name || String(id), customerCopy);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "PDF hatası");
+    }
   }
 
   if (!list && !error) return <div className="text-slate-500">Yükleniyor…</div>;
@@ -289,21 +304,31 @@ export default function PriceListDetailPage() {
         ← Fiyat listeleri
       </Link>
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="text-base font-bold">{list.name}</h2>
-          <p className="text-xs text-baykus-muted">
-            Fiyat / Maliyet › Fiyat Listesi · toplu % / mutlak · Excel şablon
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={openPrint}>
+        <h2 className="text-base font-bold">{list.name}</h2>
+        <div className="flex flex-wrap gap-2 items-center">
+          <label
+            className="inline-flex items-center gap-1 text-[11px] text-baykus-muted mr-1"
+            title="Yazdır / PDF / CSV çıktısında alış fiyatı ve tedarikçi gizlenir"
+          >
+            <input type="checkbox" checked={customerCopy} onChange={(e) => setCustomerCopy(e.target.checked)} />
+            Müşteri nüshası
+          </label>
+          <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => void openPrint()}>
             Yazdır
+          </button>
+          <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => void savePdf()}>
+            PDF olarak kaydet
+          </button>
+          <button
+            type="button"
+            className="bk-btn text-xs text-white"
+            style={{ background: "#0f766e" }}
+            onClick={() => setShareOpen(true)}
+          >
+            Paylaş
           </button>
           <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => download("csv")}>
             Excel/CSV
-          </button>
-          <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => download("pdf")}>
-            PDF
           </button>
           <button
             type="button"
@@ -384,10 +409,6 @@ export default function PriceListDetailPage() {
           <label className="text-sm flex items-center gap-2 mt-5">
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
             Aktif
-          </label>
-          <label className="text-sm md:col-span-2">
-            <span className="text-[11px] text-baykus-muted">Açıklama</span>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="bk-input mt-0.5" rows={2} />
           </label>
         </div>
 
@@ -581,6 +602,10 @@ export default function PriceListDetailPage() {
           </button>
         </div>
       </form>
+
+      {shareOpen && (
+        <PriceListShareDialog listId={id} listName={list.name} onClose={() => setShareOpen(false)} />
+      )}
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

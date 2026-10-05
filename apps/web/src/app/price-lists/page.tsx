@@ -4,12 +4,15 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PriceList, apiFetch, downloadAuthFile } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import PriceListShareDialog from "@/components/PriceListShareDialog";
+import { printPriceList, savePriceListPdf } from "@/lib/priceListActions";
 
 export default function PriceListsPage() {
   const [items, setItems] = useState<PriceList[]>([]);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [shareFor, setShareFor] = useState<PriceList | null>(null);
   const [q, setQ] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
 
@@ -31,29 +34,35 @@ export default function PriceListsPage() {
     if (onlyActive) rows = rows.filter((p) => p.is_active);
     const needle = q.trim().toLowerCase();
     if (needle) {
-      rows = rows.filter((p) => [p.name, p.description].join(" ").toLowerCase().includes(needle));
+      rows = rows.filter((p) => p.name.toLowerCase().includes(needle));
     }
     return rows;
   }, [items, q, onlyActive]);
 
   async function createList(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || creating) return;
     setError("");
+    setCreating(true);
     try {
       const created = await apiFetch<PriceList>("/api/price-lists", {
         method: "POST",
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description || null,
-          items: [],
-        }),
+        body: JSON.stringify({ name: name.trim(), items: [] }),
       });
       setName("");
-      setDescription("");
       window.location.href = `/price-lists/${created.id}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Oluşturma hatası");
+      setCreating(false);
+    }
+  }
+
+  async function runAction(fn: () => Promise<void>, fallback: string) {
+    setError("");
+    try {
+      await fn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : fallback);
     }
   }
 
@@ -63,10 +72,7 @@ export default function PriceListsPage() {
   return (
     <div className="space-y-2 pb-2">
       <div className="bk-sticky-header flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-bold text-baykus-text leading-tight">Fiyat Listesi</h2>
-          <p className="text-[11px] text-baykus-muted">Fiyat / Maliyet › Fiyat Listesi · toplu %/mutlak · Excel şablon · yazdır/CSV/PDF</p>
-        </div>
+        <h2 className="text-lg font-bold text-baykus-text leading-tight">Fiyat Listesi</h2>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -113,16 +119,23 @@ export default function PriceListsPage() {
       <fieldset className="rounded border bg-white px-3 py-3">
         <legend className="px-1 text-xs font-semibold">Yeni fiyat listesi</legend>
         <form onSubmit={createList} className="flex flex-wrap gap-2 items-end text-sm">
-          <label>
+          <label className="grow min-w-[220px] max-w-[360px]">
             <span className="text-[11px] text-baykus-muted">Liste adı *</span>
-            <input required className="bk-input" value={name} onChange={(e) => setName(e.target.value)} />
+            <input
+              required
+              className="bk-input"
+              placeholder="ör. Bayi 2026, Perakende, Kurumsal"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </label>
-          <label className="grow min-w-[200px]">
-            <span className="text-[11px] text-baykus-muted">Açıklama</span>
-            <input className="bk-input" value={description} onChange={(e) => setDescription(e.target.value)} />
-          </label>
-          <button type="submit" className="bk-btn text-white text-xs" style={{ background: "#198754" }}>
-            Oluştur
+          <button
+            type="submit"
+            disabled={creating || !name.trim()}
+            className="bk-btn text-white text-xs disabled:opacity-60"
+            style={{ background: "#198754" }}
+          >
+            {creating ? "Oluşturuluyor…" : "Oluştur"}
           </button>
         </form>
       </fieldset>
@@ -140,7 +153,6 @@ export default function PriceListsPage() {
           <thead>
             <tr>
               <th>Ad</th>
-              <th>Açıklama</th>
               <th>Para birimi</th>
               <th className="text-right">Kalem</th>
               <th>Durum</th>
@@ -156,7 +168,6 @@ export default function PriceListsPage() {
                     {pl.name}
                   </Link>
                 </td>
-                <td className="text-xs text-baykus-muted max-w-[200px] truncate">{pl.description || "—"}</td>
                 <td>{pl.currency}</td>
                 <td className="text-right tabular-nums">{pl.item_count ?? pl.items?.length ?? 0}</td>
                 <td>
@@ -175,37 +186,39 @@ export default function PriceListsPage() {
                   <Link href={`/price-lists/${pl.id}`} className="text-baykus-primary hover:underline">
                     Kalemler
                   </Link>
-                  <Link href={`/price-lists/${pl.id}?print=1`} className="text-teal-700 hover:underline">
-                    Yazdır
-                  </Link>
-                  <a
-                    href={`#`}
-                    className="text-violet-700 hover:underline"
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      try {
-                        const { downloadPdf } = await import("@/lib/api");
-                        await downloadPdf(`/api/price-lists/${pl.id}/export?fmt=pdf`, `${pl.name}-fiyat.pdf`);
-                      } catch (err) {
-                        setError(err instanceof Error ? err.message : "PDF hatası");
-                      }
-                    }}
+                  <button
+                    type="button"
+                    className="text-teal-700 hover:underline"
+                    onClick={() => void runAction(() => printPriceList(pl.id), "Yazdırma hatası")}
                   >
-                    PDF
-                  </a>
+                    Yazdır
+                  </button>
+                  <button
+                    type="button"
+                    className="text-violet-700 hover:underline"
+                    onClick={() => void runAction(() => savePriceListPdf(pl.id, pl.name), "PDF hatası")}
+                  >
+                    PDF olarak kaydet
+                  </button>
+                  <button type="button" className="text-rose-700 hover:underline" onClick={() => setShareFor(pl)}>
+                    Paylaş
+                  </button>
                 </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center text-baykus-muted py-8">
-                  Liste yok
+                <td colSpan={6} className="text-center text-baykus-muted py-8">
+                  {items.length === 0 ? "Henüz fiyat listesi yok — yukarıdan istediğiniz kadar liste oluşturabilirsiniz." : "Eşleşen liste yok"}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+      {shareFor && (
+        <PriceListShareDialog listId={shareFor.id} listName={shareFor.name} onClose={() => setShareFor(null)} />
+      )}
       <StatusFooter onRefresh={load} />
     </div>
   );
