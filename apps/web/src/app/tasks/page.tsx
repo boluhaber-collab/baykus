@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 type Task = {
   id: number;
@@ -308,7 +309,7 @@ export default function TasksPage() {
                 }
                 onClick={() => fill(t)}
               >
-                <td className="whitespace-nowrap">{t.due_date}</td>
+                <td className="whitespace-nowrap">{formatTrDate(t.due_date)}</td>
                 <td>{t.due_time || "—"}</td>
                 <td className="text-xs">{t.task_type}</td>
                 <td className="font-medium">{t.title}</td>

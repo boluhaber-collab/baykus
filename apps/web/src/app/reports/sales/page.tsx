@@ -19,6 +19,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import { useDateSort } from "@/hooks/useDateSort";
+import { formatTrDate, formatTrDatesInText } from "@/lib/dates";
 
 type SalesRow = {
   id: number;
@@ -199,9 +200,9 @@ export default function SalesReportPage() {
               {formatMoney(r.paid_amount)}
             </td>
             <td className="px-4 py-3 text-right tabular-nums">{formatMoney(r.remaining_amount)}</td>
-            <td className="px-4 py-3 text-slate-500">{(r.created_at || "").slice(0, 10)}</td>
+            <td className="px-4 py-3 text-slate-500">{formatTrDate(r.created_at)}</td>
             <td className="px-4 py-3 text-slate-500 text-xs max-w-[240px] truncate" title={r.note || ""}>
-              {r.note || "—"}
+              {formatTrDatesInText(r.note) || "—"}
             </td>
           </tr>
         ))}

@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { WhatsAppLog, WhatsAppTemplate, apiFetch } from "@/lib/api";
+import { formatTrDateTime } from "@/lib/dates";
 import StatusFooter from "@/components/StatusFooter";
 
 const CATEGORIES = [
@@ -261,7 +262,7 @@ export default function WhatsAppPage() {
               {logs.map((l) => (
                 <tr key={l.id} className="border-t">
                   <td className="px-4 py-2 whitespace-nowrap">
-                    {new Date(l.created_at).toLocaleString("tr-TR")}
+                    {formatTrDateTime(l.created_at)}
                   </td>
                   <td className="px-4 py-2">{l.template_name || "—"}</td>
                   <td className="px-4 py-2">{l.phone}</td>

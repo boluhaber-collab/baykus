@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OrderListItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 type Filter = "today" | "overdue" | "due" | "upcoming";
 
@@ -153,7 +154,7 @@ export default function DeliveryTrackingPage() {
                     </span>
                   </td>
                   <td className="text-right tabular-nums">{formatMoney(Number(o.total_amount))}</td>
-                  <td className="text-xs">{d ? new Date(d).toLocaleDateString("tr-TR") : "—"}</td>
+                  <td className="text-xs">{formatTrDate(d)}</td>
                   <td className="text-xs whitespace-nowrap">
                     <Link href={`/orders/${o.id}/timeline`} className="text-baykus-primary hover:underline mr-2">
                       Yaşam

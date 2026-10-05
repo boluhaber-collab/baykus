@@ -7,6 +7,9 @@
 
 import type { ExpandDetailPayload, ExpandLineItem } from "@/components/ExpandableMovementTable";
 import { decodeHtmlEntities } from "@/lib/htmlEntities";
+import { formatTrDatesInText } from "@/lib/dates";
+
+export { formatTrDate } from "@/lib/dates";
 
 const BH_PREFIX = "BH_IMPORT:";
 
@@ -270,9 +273,9 @@ export function belgeFromNote(note: string | null | undefined): string | null {
 /** Clean Açıklama for account ledger (no BH_IMPORT / Hareket= / Kaynak=). */
 export function accountAciklama(note: string | null | undefined): string {
   const parsed = parseBhNote(note);
-  if (parsed.aciklama && !isBhMarkerOnly(parsed.aciklama)) return parsed.aciklama;
+  if (parsed.aciklama && !isBhMarkerOnly(parsed.aciklama)) return formatTrDatesInText(parsed.aciklama);
   if (!parsed.isBh && parsed.displayNote && !isBhMarkerOnly(parsed.displayNote)) {
-    return parsed.displayNote;
+    return formatTrDatesInText(parsed.displayNote);
   }
   return "";
 }
@@ -286,8 +289,12 @@ export function sanitizeDisplayNote(
   fallback = "",
 ): string {
   const parsed = parseBhNote(note);
-  if (parsed.aciklama && !isBhMarkerOnly(parsed.aciklama)) return parsed.aciklama;
-  if (parsed.displayNote && !isBhMarkerOnly(parsed.displayNote)) return parsed.displayNote;
+  if (parsed.aciklama && !isBhMarkerOnly(parsed.aciklama)) {
+    return formatTrDatesInText(parsed.aciklama);
+  }
+  if (parsed.displayNote && !isBhMarkerOnly(parsed.displayNote)) {
+    return formatTrDatesInText(parsed.displayNote);
+  }
   if (!parsed.isBh) {
     const raw = decodeHtmlEntities(note || "").trim();
     if (raw && !isBhMarkerOnly(raw)) {
@@ -295,10 +302,10 @@ export function sanitizeDisplayNote(
         .replace(STRIP_BH_TOKEN_RE, "")
         .replace(/^\s*[·|\-]\s*|\s*[·|\-]\s*$/g, "")
         .trim();
-      if (cleaned && !isBhMarkerOnly(cleaned)) return cleaned;
+      if (cleaned && !isBhMarkerOnly(cleaned)) return formatTrDatesInText(cleaned);
     }
   }
-  return fallback;
+  return formatTrDatesInText(fallback) || fallback;
 }
 
 /**
@@ -340,11 +347,3 @@ export function accountKullanici(
   return (parsed.kullanici || createdByName || "").trim();
 }
 
-/** ISO date → DD.MM.YYYY (BizimHesap style). */
-export function formatTrDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const s = String(iso).slice(0, 10);
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return s;
-  return `${m[3]}.${m[2]}.${m[1]}`;
-}

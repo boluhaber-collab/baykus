@@ -159,7 +159,7 @@ function RowIslemMenu({
       fd.append("category", "hesap-hareket");
       fd.append(
         "notes",
-        `${ledgerKind || "account"}_movement_id=${row.id} | tarih=${row.movement_date} | ${islem}`,
+        `${ledgerKind || "account"}_movement_id=${row.id} | tarih=${formatTrDate(row.movement_date, "")} | ${islem}`,
       );
       fd.append("archive_tag", `mov-${ledgerKind || "x"}-${row.id}`);
       await apiFetch("/api/documents", { method: "POST", body: fd });

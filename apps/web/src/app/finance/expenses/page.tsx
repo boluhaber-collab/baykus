@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BankAccount, CashRegister, Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { formatTrDate } from "@/lib/dates";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
 
@@ -594,9 +595,9 @@ export default function ExpensesPage() {
                   key={e.id}
                   className={st === "Gecikmiş" ? "bg-red-50" : st === "Ödenecek" ? "bg-amber-50" : undefined}
                 >
-                  <td className="text-xs whitespace-nowrap">{e.expense_date}</td>
+                  <td className="text-xs whitespace-nowrap">{formatTrDate(e.expense_date)}</td>
                   <td className="text-xs">{e.document_no || "—"}</td>
-                  <td className="text-xs">{e.due_date || "—"}</td>
+                  <td className="text-xs">{formatTrDate(e.due_date)}</td>
                   <td className="font-medium text-sm">
                     <div>{e.category_name || "—"}</div>
                     {e.category_group_name ? (

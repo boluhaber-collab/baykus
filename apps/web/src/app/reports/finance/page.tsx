@@ -22,6 +22,7 @@ import {
 
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { useDateSort } from "@/hooks/useDateSort";
+import { formatTrDate } from "@/lib/dates";
 
 type Row = {
   source: string;
@@ -167,7 +168,7 @@ export default function FinanceReportPage() {
               </span>
             </td>
             <td className="px-4 py-3 text-right tabular-nums font-medium">{formatMoney(r.amount)}</td>
-            <td className="px-4 py-3 text-slate-500">{r.movement_date || "—"}</td>
+            <td className="px-4 py-3 text-slate-500">{formatTrDate(r.movement_date)}</td>
             <td className="px-4 py-3">{r.category || "—"}</td>
             <td className="px-4 py-3">{r.party_name || "—"}</td>
             <td className="px-4 py-3 text-slate-500 max-w-[12rem] truncate">{sanitizeDisplayNote(r.note) || "—"}</td>

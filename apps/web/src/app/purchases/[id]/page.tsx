@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { isBhImportNote } from "@/lib/bhNote";
 import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
+import { formatTrDate } from "@/lib/dates";
 
 type EditLine = {
   key: string;
@@ -319,7 +320,7 @@ export default function PurchaseDetailPage() {
               {purchase.supplier_name}
             </Link>
             {" · "}
-            {purchase.purchase_date}
+            {formatTrDate(purchase.purchase_date)}
             {" · "}
             <span
               className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -653,7 +654,7 @@ export default function PurchaseDetailPage() {
               </Link>
             </div>
             <div>
-              <span className="text-slate-500">Belge tarihi:</span> {purchase.purchase_date}
+              <span className="text-slate-500">Belge tarihi:</span> {formatTrDate(purchase.purchase_date)}
             </div>
             <div>
               <span className="text-slate-500">Oluşturma:</span>{" "}

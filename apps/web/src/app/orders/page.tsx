@@ -18,6 +18,7 @@ import {
 } from "@/lib/api";
 import { HubTabs } from "@/components/hub/HubChrome";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 type NotebookTab =
   | "teklifler"
@@ -399,7 +400,7 @@ function OrdersNotebookInner() {
                     <td>{qt.status}</td>
                     <td>{formatMoney(Number(qt.total_amount))}</td>
                     <td className="text-baykus-muted">
-                      {qt.valid_until ? String(qt.valid_until).slice(0, 10) : "—"}
+                      {formatTrDate(qt.valid_until)}
                     </td>
                     <td className="text-right whitespace-nowrap space-x-2">
                       <Link href={`/quotes/${qt.id}`} className="text-baykus-primary hover:underline">
@@ -514,7 +515,7 @@ function OrdersNotebookInner() {
                       <td>{formatMoney(Number(o.total_amount))}</td>
                       <td>{formatMoney(Number(o.remaining_amount))}</td>
                       <td className="text-baykus-muted">
-                        {o.due_date ? String(o.due_date).slice(0, 10) : "—"}
+                        {formatTrDate(o.due_date)}
                       </td>
                       <td className="text-right whitespace-nowrap space-x-2">
                         <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Customer, SpecialDay, apiFetch } from "@/lib/api";
+import { formatTrDate } from "@/lib/dates";
 import LiveSearchSelect, { useCustomerSearch } from "@/components/LiveSearchSelect";
 import StatusFooter from "@/components/StatusFooter";
 
@@ -197,7 +198,7 @@ export default function SpecialDaysPage() {
                   {i.note && <div className="text-[10px] text-baykus-muted">{i.note}</div>}
                 </td>
                 <td>{i.day_type}</td>
-                <td>{i.event_date}</td>
+                <td>{formatTrDate(i.event_date)}</td>
                 <td>
                   {i.customer_id ? (
                     <Link href={`/customers/${i.customer_id}`} className="text-baykus-primary hover:underline">

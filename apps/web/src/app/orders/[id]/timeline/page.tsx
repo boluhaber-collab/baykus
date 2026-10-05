@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
+import { formatTrDateTime } from "@/lib/dates";
 
 type Event = {
   type: string;
@@ -114,7 +115,7 @@ export default function OrderTimelinePage() {
               className={`absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full ${typeColor[ev.type] || "bg-slate-300"}`}
             />
             <div className="text-[11px] text-baykus-muted">
-              {ev.at ? new Date(ev.at).toLocaleString("tr-TR") : "—"} · {typeLabel[ev.type] || ev.type}
+              {formatTrDateTime(ev.at)} · {typeLabel[ev.type] || ev.type}
             </div>
             <div className="text-sm font-medium">{ev.label}</div>
             {ev.detail && <div className="text-xs text-baykus-muted">{ev.detail}</div>}

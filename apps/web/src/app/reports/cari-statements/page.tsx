@@ -8,6 +8,7 @@ import LiveSearchSelect, { customerToOption } from "@/components/LiveSearchSelec
 import StatusFooter from "@/components/StatusFooter";
 import { ReportHeader } from "@/components/reports/ReportChrome";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { formatTrDate } from "@/lib/dates";
 
 type CustomerOpt = { id: number; name: string; company: string | null; balance: number };
 type Move = { id: number; date: string | null; type: string; debit: number; credit: number; balance: number; note: string | null };
@@ -229,7 +230,7 @@ export default function CariStatementsPage() {
           <tbody>
             {sortedRows.map((r) => (
               <tr key={r.id}>
-                <td className="text-xs">{r.date || "—"}</td>
+                <td className="text-xs">{formatTrDate(r.date)}</td>
                 <td className="text-xs">{r.type}</td>
                 <td className="text-right tabular-nums">{formatMoney(r.debit)}</td>
                 <td className="text-right tabular-nums">{formatMoney(r.credit)}</td>

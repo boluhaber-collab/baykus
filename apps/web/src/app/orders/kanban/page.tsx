@@ -13,6 +13,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 const COL_ACCENT: Record<string, string> = {
   "Sipariş Alındı": "#2563eb",
@@ -186,7 +187,7 @@ export default function OrdersKanbanPage() {
                     </div>
                     {item.due_date && (
                       <div className="text-[10px] text-baykus-muted">
-                        Teslim: {String(item.due_date).slice(0, 10)}
+                        Teslim: {formatTrDate(item.due_date)}
                       </div>
                     )}
                     <select

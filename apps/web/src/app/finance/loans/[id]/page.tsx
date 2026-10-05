@@ -11,6 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import { formatTrDate, formatTrDateTime } from "@/lib/dates";
 
 type EditState = {
   installmentId: number;
@@ -454,7 +455,7 @@ export default function LoanDetailPage() {
                 >
                   <td>{inst.sequence}</td>
                   <td>
-                    {String(inst.due_date).slice(0, 10)}
+                    {formatTrDate(inst.due_date)}
                     {isOverdue && <span className="ml-1 text-[10px] text-red-700 font-bold">GECİKTİ</span>}
                     {isSoon && <span className="ml-1 text-[10px] text-amber-800 font-bold">YAKIN</span>}
                   </td>
@@ -463,7 +464,7 @@ export default function LoanDetailPage() {
                   <td className="text-xs font-medium">{accountLabel(inst)}</td>
                   <td className="text-xs text-baykus-muted">
                     {inst.is_paid
-                      ? `${inst.payment_method || "—"} · ${inst.paid_at ? new Date(inst.paid_at).toLocaleString("tr-TR") : ""}`
+                      ? `${inst.payment_method || "—"} · ${inst.paid_at ? formatTrDateTime(inst.paid_at) : ""}`
                       : "—"}
                   </td>
                   <td className="text-right whitespace-nowrap">

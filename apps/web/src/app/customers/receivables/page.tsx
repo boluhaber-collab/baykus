@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { OpenBalanceOrder, ReceivableItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { displayCode } from "@/lib/productLabel";
+import { formatTrDate } from "@/lib/dates";
 
 type OpenBalances = {
   open_orders?: OpenBalanceOrder[];
@@ -209,7 +210,7 @@ export default function CustomerReceivablesPage() {
                   <td className="text-slate-600">{r.company || "—"}</td>
                   <td>{r.city || "—"}</td>
                   <td>{r.phone || "—"}</td>
-                  <td className="text-xs text-slate-500">{r.last_movement_date || "—"}</td>
+                  <td className="text-xs text-slate-500">{formatTrDate(r.last_movement_date)}</td>
                   <td className="text-right font-medium text-amber-700 tabular-nums">
                     {formatMoney(Number(r.balance))}
                   </td>

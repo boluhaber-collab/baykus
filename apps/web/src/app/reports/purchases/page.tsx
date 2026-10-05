@@ -6,6 +6,7 @@ import { apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
+import { formatTrDate } from "@/lib/dates";
 
 type Row = { id: number; number: string; date: string | null; supplier: string | null; status: string; amount: number };
 
@@ -136,7 +137,7 @@ export default function PurchaseReportPage() {
                     {r.number}
                   </Link>
                 </td>
-                <td className="text-xs">{r.date || "—"}</td>
+                <td className="text-xs">{formatTrDate(r.date)}</td>
                 <td>{r.supplier || "—"}</td>
                 <td className="text-xs">{r.status}</td>
                 <td className="text-right tabular-nums">{formatMoney(r.amount)}</td>

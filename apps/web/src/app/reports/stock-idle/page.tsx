@@ -13,6 +13,7 @@ import {
 import StatusFooter from "@/components/StatusFooter";
 import { ReportResponse, apiFetch, downloadReportCsv } from "@/lib/api";
 import { displaySku } from "@/lib/productLabel";
+import { formatTrDate } from "@/lib/dates";
 
 type Row = {
   product_id: number;
@@ -101,7 +102,7 @@ export default function StockIdlePage() {
             <td>{r.category || "—"}</td>
             <td>{r.warehouse || "—"}</td>
             <td className="tabular-nums">{r.qty}</td>
-            <td>{r.last_movement_at ? r.last_movement_at.slice(0, 10) : "Hiç"}</td>
+            <td>{r.last_movement_at ? formatTrDate(r.last_movement_at) : "Hiç"}</td>
             <td className="tabular-nums">{r.days_idle ?? "—"}</td>
           </tr>
         ))}

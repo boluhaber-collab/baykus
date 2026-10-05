@@ -6,6 +6,7 @@ import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
 import { PURCHASE_STATUS_LABELS, PurchaseListItem, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 export default function PurchasesPage() {
   const [items, setItems] = useState<PurchaseListItem[]>([]);
@@ -137,7 +138,7 @@ export default function PurchasesPage() {
                     {p.supplier_name}
                   </Link>
                 </td>
-                <td className="px-4 py-3">{p.purchase_date}</td>
+                <td className="px-4 py-3">{formatTrDate(p.purchase_date)}</td>
                 <td className="px-4 py-3">
                   <span
                     className={`inline-flex rounded-full px-2 py-0.5 text-xs ${

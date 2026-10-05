@@ -13,6 +13,7 @@ import {
 } from "@/components/reports/ReportChrome";
 import StatusFooter from "@/components/StatusFooter";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
+import { formatTrDate } from "@/lib/dates";
 
 type Row = {
   id: number;
@@ -118,8 +119,8 @@ export default function QuotesReportPage() {
             <td>{r.customer_name || "—"}</td>
             <td>{r.status || "—"}</td>
             <td className="text-right tabular-nums">{formatMoney(r.total_amount)}</td>
-            <td>{(r.created_at || "").slice(0, 10)}</td>
-            <td>{r.valid_until || "—"}</td>
+            <td>{formatTrDate(r.created_at)}</td>
+            <td>{formatTrDate(r.valid_until)}</td>
           </tr>
         ))}
       </ReportTable>

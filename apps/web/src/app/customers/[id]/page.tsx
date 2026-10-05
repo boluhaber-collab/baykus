@@ -20,7 +20,7 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
-import { localToday } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 import CustomerDevirModal from "@/components/CustomerDevirModal";
 import StatementPdfDateModal from "@/components/StatementPdfDateModal";
 import StatusFooter from "@/components/StatusFooter";
@@ -149,7 +149,7 @@ export default function CustomerDetailPage() {
       toplamTahsilat: totalTahsilat,
       siparisSayisi: orders.length,
       sonSatis: last
-        ? `${last.order_number} · ${last.created_at?.slice(0, 10) || ""}`
+        ? `${last.order_number} · ${formatTrDate(last.created_at, "")}`
         : "—",
       sonSatisId: last?.id,
     };
@@ -448,7 +448,7 @@ export default function CustomerDetailPage() {
         {
           key: "date",
           header: "Tarih",
-          render: (r) => <span className="whitespace-nowrap">{r.date || "—"}</span>,
+          render: (r) => <span className="whitespace-nowrap">{formatTrDate(r.date)}</span>,
         },
         {
           key: "no",
@@ -521,7 +521,7 @@ export default function CustomerDetailPage() {
         {
           key: "date",
           header: "Tarih",
-          render: (m) => <span className="whitespace-nowrap">{m.movement_date}</span>,
+          render: (m) => <span className="whitespace-nowrap">{formatTrDate(m.movement_date)}</span>,
         },
         {
           key: "tutar",
@@ -752,7 +752,7 @@ export default function CustomerDetailPage() {
                           <dt className="text-slate-500 text-xs">Özel gün</dt>
                           <dd>
                             {customer.special_day_note || ""}
-                            {customer.special_day_date ? ` (${customer.special_day_date})` : ""}
+                            {customer.special_day_date ? ` (${formatTrDate(customer.special_day_date)})` : ""}
                           </dd>
                         </div>
                       )}
@@ -1011,7 +1011,7 @@ export default function CustomerDetailPage() {
                         key: "date",
                         header: "Tarih",
                         render: (m) => (
-                          <span className="whitespace-nowrap">{m.movement_date}</span>
+                          <span className="whitespace-nowrap">{formatTrDate(m.movement_date)}</span>
                         ),
                       },
                       {
@@ -1106,7 +1106,7 @@ export default function CustomerDetailPage() {
                             {q.quote_number}
                           </Link>
                           <div className="text-xs text-slate-500 mt-0.5">
-                            {q.created_at?.slice(0, 10)} · {formatMoney(Number(q.total_amount))}
+                            {formatTrDate(q.created_at)} · {formatMoney(Number(q.total_amount))}
                           </div>
                         </div>
                         <span
@@ -1136,7 +1136,7 @@ export default function CustomerDetailPage() {
                               : t.label}
                           </span>
                           <span className="text-xs text-slate-400 whitespace-nowrap">
-                            {t.date || ""}
+                            {formatTrDate(t.date, "")}
                           </span>
                         </div>
                         {sanitizeDisplayNote(t.note) ? <p className="text-slate-500 text-xs mt-1">{sanitizeDisplayNote(t.note)}</p> : null}

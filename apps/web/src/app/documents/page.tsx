@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch, downloadAuthFile } from "@/lib/api";
+import { formatTrDateTime } from "@/lib/dates";
 import StatusFooter from "@/components/StatusFooter";
 
 type Doc = {
@@ -157,7 +158,7 @@ export default function DocumentsPage() {
                 <td className="font-mono text-[11px]">{d.original_filename}</td>
                 <td className="text-right tabular-nums">{fmtSize(d.size_bytes)}</td>
                 <td className="text-xs">
-                  {d.created_at ? new Date(d.created_at).toLocaleString("tr-TR") : "—"}
+                  {formatTrDateTime(d.created_at)}
                 </td>
                 <td className="text-right space-x-2 text-xs">
                   <button

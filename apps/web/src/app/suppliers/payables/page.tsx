@@ -7,6 +7,7 @@ import { PayableItem, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import SupplierFisPanel from "@/components/SupplierFisPanel";
 import { displayCode } from "@/lib/productLabel";
+import { formatTrDate } from "@/lib/dates";
 
 function SupplierPayablesInner() {
   const sp = useSearchParams();
@@ -163,7 +164,7 @@ function SupplierPayablesInner() {
                 </td>
                 <td>{i.city || "—"}</td>
                 <td>{i.phone || "—"}</td>
-                <td className="text-xs text-slate-500">{i.last_movement_date || "—"}</td>
+                <td className="text-xs text-slate-500">{formatTrDate(i.last_movement_date)}</td>
                 <td className="text-right font-medium tabular-nums text-rose-700">
                   {formatMoney(Number(i.balance))}
                 </td>

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { displaySku } from "@/lib/productLabel";
+import { formatTrDateTime } from "@/lib/dates";
 
 type PriceRow = {
   tarih?: string | null;
@@ -173,7 +174,7 @@ export default function ProductHistoryPage() {
             <tbody>
               {(data?.stock_movements || []).map((m) => (
                 <tr key={m.id}>
-                  <td className="whitespace-nowrap text-xs">{m.created_at?.slice(0, 19).replace("T", " ") || "—"}</td>
+                  <td className="whitespace-nowrap text-xs">{formatTrDateTime(m.created_at)}</td>
                   <td>
                     <span
                       className={`text-xs font-semibold ${

@@ -23,19 +23,14 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
-import { dateToPaidAt, localToday } from "@/lib/dates";
+import { dateToPaidAt, formatTrDate, formatTrDateTime, localToday } from "@/lib/dates";
 
 function todayISO(): string {
   return localToday();
 }
 
 function fmtDt(v?: string | null): string {
-  if (!v) return "";
-  try {
-    return new Date(v).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return String(v);
-  }
+  return formatTrDateTime(v, "");
 }
 
 export default function OrderDetailPage() {
@@ -471,7 +466,7 @@ export default function OrderDetailPage() {
               <div className="min-w-0 flex-1 text-right">
                 <div className="bk-kpi-label">Teslim Tarihi</div>
                 <div className="bk-kpi-value truncate text-sm">
-                  {order.due_date ? String(order.due_date).slice(0, 10) : "—"}
+                  {formatTrDate(order.due_date)}
                 </div>
               </div>
             </div>
@@ -637,7 +632,7 @@ export default function OrderDetailPage() {
                   {order.payments.map((pay) => (
                     <li key={pay.id} className="py-1.5 flex justify-between gap-2">
                       <span>
-                        {String(pay.paid_at).slice(0, 10)} · {pay.method}
+                        {formatTrDate(pay.paid_at)} · {pay.method}
                         {pay.notes ? ` — ${pay.notes}` : ""}
                       </span>
                       <span className="tabular-nums font-medium text-emerald-700">
@@ -657,7 +652,7 @@ export default function OrderDetailPage() {
                   {order.payments.map((pay) => (
                     <li key={pay.id} className="py-1.5 flex justify-between gap-2">
                       <span>
-                        {String(pay.paid_at).slice(0, 10)} · {pay.method}
+                        {formatTrDate(pay.paid_at)} · {pay.method}
                         {pay.notes ? ` — ${pay.notes}` : ""}
                       </span>
                       <span className="tabular-nums font-medium text-emerald-700">
@@ -730,7 +725,7 @@ export default function OrderDetailPage() {
                 {order.status_history.slice(-8).map((h) => (
                   <li key={h.id} className="flex flex-wrap gap-2">
                     <span className="text-slate-400 whitespace-nowrap">
-                      {new Date(h.created_at).toLocaleString("tr-TR")}
+                      {formatTrDateTime(h.created_at)}
                     </span>
                     <span>
                       {h.from_status ? `${h.from_status} → ` : ""}

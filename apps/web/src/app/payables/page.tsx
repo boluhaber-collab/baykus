@@ -6,6 +6,7 @@ import { PayableItem, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import SupplierFisPanel from "@/components/SupplierFisPanel";
 import { displayCode } from "@/lib/productLabel";
+import { formatTrDate } from "@/lib/dates";
 
 export default function PayablesPage() {
   const [items, setItems] = useState<PayableItem[]>([]);
@@ -128,7 +129,7 @@ export default function PayablesPage() {
                 </td>
                 <td className="px-4 py-3">{i.city || "—"}</td>
                 <td className="px-4 py-3">{i.phone || "—"}</td>
-                <td className="px-4 py-3 text-slate-500">{i.last_movement_date || "—"}</td>
+                <td className="px-4 py-3 text-slate-500">{formatTrDate(i.last_movement_date)}</td>
                 <td className="px-4 py-3 text-right font-medium tabular-nums text-amber-700">
                   {formatMoney(Number(i.balance))}
                 </td>

@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { HubActionButton, HubActionsBar, HubSection, HubTabs } from "@/components/hub/HubChrome";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 type Tab = "tedarikciler" | "borc" | "alislar" | "satinalma";
 
@@ -279,7 +280,7 @@ export default function SuppliersHubPage() {
                   <tr key={p.id}>
                     <td className="font-mono text-xs">{p.purchase_number}</td>
                     <td>{p.supplier_name || "—"}</td>
-                    <td>{p.purchase_date ? String(p.purchase_date).slice(0, 10) : "—"}</td>
+                    <td>{formatTrDate(p.purchase_date)}</td>
                     <td>{p.status}</td>
                     <td className="text-right tabular-nums">{formatMoney(Number(p.total_amount))}</td>
                     <td className="text-right">

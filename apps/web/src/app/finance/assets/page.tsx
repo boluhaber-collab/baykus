@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Asset, apiFetch, formatMoney, getApiBase, getToken } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { formatTrDate } from "@/lib/dates";
 
 const STATUSES = ["Aktif", "Bakımda", "Arızalı", "Satıldı", "Hurda"] as const;
 
@@ -285,7 +286,7 @@ export default function AssetsPage() {
                 <td className="font-medium">{a.name}</td>
                 <td>{a.category || "—"}</td>
                 <td className="font-mono text-xs">{a.serial_no || "—"}</td>
-                <td>{a.purchase_date || "—"}</td>
+                <td>{formatTrDate(a.purchase_date)}</td>
                 <td className="text-right tabular-nums">{formatMoney(Number(a.cost))}</td>
                 <td className="text-right tabular-nums">{formatMoney(Number(a.current_value ?? a.cost))}</td>
                 <td>{a.status || "—"}</td>

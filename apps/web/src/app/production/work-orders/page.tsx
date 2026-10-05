@@ -13,6 +13,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 const OPEN = ORDER_STATUSES.filter((s) => s !== "Teslim Edildi" && s !== "Sipariş İptali");
 const FLOW = ["Sipariş Alındı", "Hazırlanıyor", "Baskıda", "Hazır"] as const;
@@ -199,7 +200,7 @@ export default function WorkOrdersPage() {
                   </td>
                   <td className="text-xs">
                     {o.delivery_date || o.due_date
-                      ? new Date(o.delivery_date || o.due_date!).toLocaleDateString("tr-TR")
+                      ? formatTrDate(o.delivery_date || o.due_date)
                       : "—"}
                   </td>
                   <td className="text-right space-x-2 text-xs whitespace-nowrap">

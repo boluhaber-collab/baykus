@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
 import { displaySku } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 type Row = {
   product_id: number | null;
@@ -146,7 +147,7 @@ export default function LastPurchasePricesPage() {
                 </td>
                 <td>{r.supplier || "—"}</td>
                 <td className="text-xs">{r.purchase_number || "—"}</td>
-                <td className="text-xs">{r.purchase_date || "—"}</td>
+                <td className="text-xs">{formatTrDate(r.purchase_date)}</td>
                 <td className="text-right tabular-nums font-semibold">{formatMoney(r.unit_cost)}</td>
                 <td className="text-right tabular-nums text-xs text-baykus-muted">
                   {r.card_purchase_price != null ? formatMoney(r.card_purchase_price) : "—"}

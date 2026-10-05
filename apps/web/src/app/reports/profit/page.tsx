@@ -13,6 +13,7 @@ import {
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { useDateSort } from "@/hooks/useDateSort";
+import { formatTrDate } from "@/lib/dates";
 
 type Row = {
   section?: string;
@@ -147,7 +148,7 @@ export default function ProfitReportPage() {
           <tr key={`${r.kind}-${r.ref}-${idx}`} className="border-t border-slate-100 hover:bg-slate-50">
             <td className="px-4 py-3">{r.section || (r.kind === "order" ? "Satış" : "Satın alma")}</td>
             <td className="px-4 py-3 font-mono text-xs">{r.ref}</td>
-            <td className="px-4 py-3 text-slate-500">{r.date || "—"}</td>
+            <td className="px-4 py-3 text-slate-500">{formatTrDate(r.date)}</td>
             <td className="px-4 py-3">{r.status || r.supplier || "—"}</td>
             <td className="px-4 py-3 text-right tabular-nums font-medium">{formatMoney(r.amount)}</td>
           </tr>

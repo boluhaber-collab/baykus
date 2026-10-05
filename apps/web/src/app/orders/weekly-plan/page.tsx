@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { formatTrDate } from "@/lib/dates";
 import StatusFooter from "@/components/StatusFooter";
 
 type PlanEvent = {
@@ -42,11 +43,6 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
-function fmtTR(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
-}
-
 export default function WeeklyPlanPage() {
   const [weekStart, setWeekStart] = useState(() => toISODate(mondayOf(new Date())));
   const [data, setData] = useState<WeeklyPlan | null>(null);
@@ -69,7 +65,7 @@ export default function WeeklyPlanPage() {
 
   const rangeLabel = useMemo(() => {
     if (!data) return "";
-    return `${fmtTR(data.week_start)} - ${fmtTR(data.week_end)}`;
+    return `${formatTrDate(data.week_start)} - ${formatTrDate(data.week_end)}`;
   }, [data]);
 
   function shiftWeek(days: number) {
@@ -172,7 +168,7 @@ export default function WeeklyPlanPage() {
               style={{ background: day.is_today ? "#be123c" : "#123d2a" }}
             >
               <div>{day.label}</div>
-              <div className="opacity-90 font-normal">{fmtTR(day.date)}</div>
+              <div className="opacity-90 font-normal">{formatTrDate(day.date)}</div>
             </div>
             <div className="flex-1 p-2 space-y-1.5 overflow-auto max-h-[360px]">
               {day.events.length === 0 && (

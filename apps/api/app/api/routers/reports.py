@@ -30,6 +30,7 @@ from app.models.supplier import Purchase, Supplier, SupplierMovement
 from app.models.user import User
 
 from app.utils.bh_note import sanitize_display_note
+from app.utils.dates import format_tr_date, format_tr_datetime, format_tr_period
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -401,7 +402,7 @@ def sales_report(
                 r["total_amount"],
                 r["paid_amount"],
                 r["remaining_amount"],
-                r["created_at"] or "",
+                format_tr_date(r["created_at"], empty=""),
                 r.get("source") or "",
                 r.get("note") or "",
             ]
@@ -424,7 +425,7 @@ def sales_print(
     trs = "".join(
         f"<tr><td>{r['order_number']}</td><td>{r['customer_name'] or ''}</td>"
         f"<td>{r['status']}</td><td style='text-align:right'>{r['total_amount']:.2f}</td>"
-        f"<td>{(r['created_at'] or '')[:10]}</td>"
+        f"<td>{format_tr_date(r['created_at'], empty='')}</td>"
         f"<td>{(r.get('note') or '')[:80]}</td></tr>"
         for r in rows
     )
@@ -439,7 +440,7 @@ th,td{{border:1px solid #cbd5e1;padding:6px 8px}} th{{background:#f1f5f9;text-al
 <button onclick="window.print()">Yazdır</button>
 <h1>Satış Raporu</h1>
 <div class="meta">Adet: {summary['order_count']} · Ciro: {summary['revenue']:.2f} TRY
-· Kaynak: cari satış hareketleri · Aralık: {summary.get('date_from') or '—'} → {summary.get('date_to') or '—'}</div>
+· Kaynak: cari satış hareketleri · Aralık: {format_tr_period(date_from, date_to)}</div>
 <table><thead><tr><th>Belge/No</th><th>Müşteri</th><th>Tip</th><th>Tutar</th><th>Tarih</th><th>Açıklama</th></tr></thead>
 <tbody>{trs or '<tr><td colspan="6">Kayıt yok</td></tr>'}</tbody></table>
 </body></html>"""
@@ -932,7 +933,7 @@ def receivables_report(
                 r["debit_sum"],
                 r["credit_sum"],
                 r["balance"],
-                r["last_movement_date"] or "",
+                format_tr_date(r["last_movement_date"], empty=""),
             ]
             for r in rows_out
         ]
@@ -1036,7 +1037,7 @@ def payables_report(
                 r["debit_sum"],
                 r["credit_sum"],
                 r["balance"],
-                r["last_movement_date"] or "",
+                format_tr_date(r["last_movement_date"], empty=""),
             ]
             for r in rows_out
         ]
@@ -1155,7 +1156,7 @@ def finance_report(
                 r["movement_type"],
                 "Giriş" if r["direction"] == "in" else "Çıkış",
                 r["amount"],
-                r["movement_date"] or "",
+                format_tr_date(r["movement_date"], empty=""),
                 r["category"] or "",
                 r["party_name"] or "",
                 r["note"] or "",
@@ -1266,10 +1267,10 @@ def profit_report(
         headers = ["Bölüm", "Ref", "Tarih", "Durum/Tedarikçi", "Tutar"]
         csv_rows: list[list[Any]] = []
         for r in order_rows:
-            csv_rows.append(["Satış", r["ref"], r["date"] or "", r["status"], r["amount"]])
+            csv_rows.append(["Satış", r["ref"], format_tr_date(r["date"], empty=""), r["status"], r["amount"]])
         for r in purchase_rows:
             csv_rows.append(
-                ["Satın alma", r["ref"], r["date"] or "", r.get("supplier") or "", r["amount"]]
+                ["Satın alma", r["ref"], format_tr_date(r["date"], empty=""), r.get("supplier") or "", r["amount"]]
             )
         csv_rows.append([])
         csv_rows.append(["ÖZET", "Ciro", "", "", _f(revenue)])
@@ -1445,14 +1446,7 @@ def cari_statements_report(
                 "order_id": m.order_id,
             }
         )
-    if date_from and date_to:
-        period = f"{date_from.isoformat()} → {date_to.isoformat()}"
-    elif date_from:
-        period = f"{date_from.isoformat()} → …"
-    elif date_to:
-        period = f"… → {date_to.isoformat()}"
-    else:
-        period = "Tüm hareketler"
+    period = format_tr_period(date_from, date_to)
     summary = {
         "customer_id": customer.id,
         "customer_name": customer.name,
@@ -1993,7 +1987,7 @@ def stock_movements_report(
                     r["direction"] or "",
                     r["movement_type"] or "",
                     r["warehouse"] or "",
-                    r["created_at"] or "",
+                    format_tr_datetime(r["created_at"], empty=""),
                     r["note"] or "",
                 ]
                 for r in rows_out
@@ -2068,7 +2062,7 @@ def stock_idle_report(
                     r["category"] or "",
                     r["warehouse"] or "",
                     r["qty"],
-                    r["last_movement_at"] or "",
+                    format_tr_date(r["last_movement_at"], empty=""),
                     r["days_idle"] if r["days_idle"] is not None else "",
                 ]
                 for r in rows_out
@@ -2308,8 +2302,8 @@ def quotes_report(
                     r["customer_name"] or "",
                     r["status"] or "",
                     r["total_amount"],
-                    r["created_at"] or "",
-                    r["valid_until"] or "",
+                    format_tr_date(r["created_at"], empty=""),
+                    format_tr_date(r["valid_until"], empty=""),
                 ]
                 for r in rows_out
             ],

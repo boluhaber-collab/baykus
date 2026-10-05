@@ -15,7 +15,7 @@ import {
 } from "@/lib/api";
 
 import { sanitizeDisplayNote } from "@/lib/bhNote";
-import { localToday } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 const CASH_TYPES = [
   { value: "tahsilat", label: "Tahsilat" },
@@ -301,7 +301,7 @@ export default function CashPage() {
                       </Link>
                     </td>
                     <td className="text-xs">{o.document_type}</td>
-                    <td className="text-xs">{o.date || "—"}</td>
+                    <td className="text-xs">{formatTrDate(o.date)}</td>
                     <td>
                       <div className="text-sm">{o.customer_name || "—"}</div>
                       <div className="text-[10px] text-baykus-muted">{o.customer_phone || ""}</div>
@@ -350,7 +350,7 @@ export default function CashPage() {
                 <tbody>
                   {sortedMoves.map((m, i) => (
                     <tr key={`${m.source}-${m.date}-${i}`}>
-                      <td className="text-xs whitespace-nowrap">{m.date}</td>
+                      <td className="text-xs whitespace-nowrap">{formatTrDate(m.date)}</td>
                       <td className="text-xs">{m.source}</td>
                       <td className="text-xs">{m.account}</td>
                       <td className="text-xs">{CASH_TYPE_LABELS[m.movement_type] || m.movement_type}</td>

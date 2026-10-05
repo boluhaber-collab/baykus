@@ -6,6 +6,7 @@ import { OrderListItem, apiFetch, downloadAuthFile, downloadPdf } from "@/lib/ap
 import StatusFooter from "@/components/StatusFooter";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
+import { formatTrDate } from "@/lib/dates";
 
 type Doc = {
   id: number;
@@ -232,7 +233,7 @@ export default function ArchiveCenterPage() {
                     <td className="text-xs">{d.original_filename}</td>
                     <td className="text-xs tabular-nums">{((d.size_bytes || 0) / 1024).toFixed(1)} KB</td>
                     <td className="text-xs">
-                      {d.created_at ? new Date(d.created_at).toLocaleDateString("tr-TR") : "—"}
+                      {formatTrDate(d.created_at)}
                     </td>
                     <td className="text-right space-x-2 text-xs whitespace-nowrap">
                       <button
@@ -287,7 +288,7 @@ export default function ArchiveCenterPage() {
                     </td>
                     <td>{o.customer_name || "—"}</td>
                     <td className="text-xs">{o.status}</td>
-                    <td className="text-xs">{o.created_at ? String(o.created_at).slice(0, 10) : "—"}</td>
+                    <td className="text-xs">{formatTrDate(o.created_at)}</td>
                     <td className="text-right text-xs space-x-2">
                       <button
                         type="button"

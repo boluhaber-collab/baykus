@@ -7,6 +7,7 @@ import StatusFooter from "@/components/StatusFooter";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
+import { formatTrDate } from "@/lib/dates";
 
 type Row = {
   id: number;
@@ -141,7 +142,7 @@ export default function ExpenseReportsPage() {
           <tbody>
             {sortedRows.map((r) => (
               <tr key={r.id}>
-                <td className="text-xs">{r.date || "—"}</td>
+                <td className="text-xs">{formatTrDate(r.date)}</td>
                 <td>{r.category || "—"}</td>
                 <td className="text-xs">{r.payment_method || "—"}</td>
                 <td className="text-xs">{r.posted ? "İşlenmiş" : "Bekliyor"}</td>

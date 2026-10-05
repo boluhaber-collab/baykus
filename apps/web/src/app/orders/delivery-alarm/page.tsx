@@ -12,6 +12,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 export default function DeliveryAlarmPage() {
   const [today, setToday] = useState<OrderListItem[]>([]);
@@ -138,7 +139,7 @@ export default function DeliveryAlarmPage() {
                 </td>
                 <td>{o.customer_name || "—"}</td>
                 <td className="text-xs">{o.customer_phone || "—"}</td>
-                <td className="text-xs font-semibold">{o.delivery_date || o.due_date || "—"}</td>
+                <td className="text-xs font-semibold">{formatTrDate(o.delivery_date || o.due_date)}</td>
                 <td>
                   <span className={`inline-block rounded px-2 py-0.5 text-[11px] ${statusBadgeClass(o.status)}`}>
                     {o.status}

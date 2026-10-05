@@ -6,6 +6,7 @@ import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
 import { OrderListItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 /** Perakende Satışlar liste yaprağı — kanal=perakende */
 export default function RetailSalesPage() {
@@ -100,7 +101,7 @@ export default function RetailSalesPage() {
             {sortedRows.map((o) => (
               <tr key={o.id}>
                 <td className="text-xs whitespace-nowrap">
-                  {new Date(o.created_at).toLocaleDateString("tr-TR")}
+                  {formatTrDate(o.created_at)}
                 </td>
                 <td>
                   <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline font-medium">
@@ -111,7 +112,7 @@ export default function RetailSalesPage() {
                 <td className="text-xs">{o.customer_phone || "—"}</td>
                 <td className="text-xs">
                   {o.delivery_date
-                    ? new Date(o.delivery_date).toLocaleDateString("tr-TR")
+                    ? formatTrDate(o.delivery_date)
                     : "—"}
                 </td>
                 <td className="text-right tabular-nums">{formatMoney(Number(o.total_amount))}</td>

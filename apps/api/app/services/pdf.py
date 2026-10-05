@@ -20,6 +20,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdf_canvas
 
+from app.utils.dates import format_tr_date as _format_tr_date
 from app.utils.bh_note import sanitize_display_note
 
 API_ROOT = Path(__file__).resolve().parents[2]
@@ -75,22 +76,7 @@ def _s(v: Any, fallback: str = "") -> str:
 
 
 def _date_tr(v: Any) -> str:
-    if v is None or v == "" or v == "—":
-        return "—"
-    if hasattr(v, "strftime"):
-        try:
-            return v.strftime("%d.%m.%Y")
-        except Exception:
-            pass
-    s = str(v).strip()
-    # ISO date / datetime
-    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
-        try:
-            y, m, d = s[:10].split("-")
-            return f"{d}.{m}.{y}"
-        except Exception:
-            pass
-    return s
+    return _format_tr_date(v, empty="—")
 
 def pdf_font_ayarla() -> str:
     """Register Arial/DejaVu as BaykusFont (desktop twin)."""

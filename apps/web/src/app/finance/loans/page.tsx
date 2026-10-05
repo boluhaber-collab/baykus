@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Loan, apiFetch, formatMoney } from "@/lib/api";
+import { formatTrDate } from "@/lib/dates";
 import StatusFooter from "@/components/StatusFooter";
 
 export default function LoansPage() {
@@ -151,7 +152,7 @@ export default function LoansPage() {
       <div className="space-y-2">
         {visible.map((l) => {
           const overdue = Number(l.overdue_count || 0) > 0;
-          const nextDue = l.next_due_date ? String(l.next_due_date).slice(0, 10) : null;
+          const nextDue = l.next_due_date ? formatTrDate(l.next_due_date) : null;
           return (
             <Link
               key={l.id}

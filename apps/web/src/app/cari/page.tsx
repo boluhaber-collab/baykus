@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReceivableItem, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { displayCode } from "@/lib/productLabel";
+import { formatTrDate } from "@/lib/dates";
 
 export default function CariReceivablesPage() {
   const [items, setItems] = useState<ReceivableItem[]>([]);
@@ -138,7 +139,7 @@ export default function CariReceivablesPage() {
                 <td className="px-4 py-3 text-slate-600">{r.company || "—"}</td>
                 <td className="px-4 py-3">{r.city || "—"}</td>
                 <td className="px-4 py-3">{r.phone || "—"}</td>
-                <td className="px-4 py-3 text-slate-500">{r.last_movement_date || "—"}</td>
+                <td className="px-4 py-3 text-slate-500">{formatTrDate(r.last_movement_date)}</td>
                 <td className="px-4 py-3 text-right font-medium text-amber-700 tabular-nums">
                   {formatMoney(Number(r.balance))}
                 </td>

@@ -12,6 +12,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 export default function OverdueOrdersPage() {
   const [items, setItems] = useState<OrderListItem[]>([]);
@@ -128,7 +129,7 @@ export default function OverdueOrdersPage() {
                     </Link>
                   </td>
                   <td>{o.customer_name || "—"}</td>
-                  <td className="text-xs font-semibold text-red-800">{o.due_date || o.delivery_date || "—"}</td>
+                  <td className="text-xs font-semibold text-red-800">{formatTrDate(o.due_date || o.delivery_date)}</td>
                   <td>
                     {late != null ? (
                       <span className="rounded bg-red-100 text-red-800 px-1.5 py-0.5 text-[11px] font-bold">

@@ -10,6 +10,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 const NET = ["internet", "Trendyol", "Hepsiburada", "N11"] as const;
 
@@ -195,7 +196,7 @@ export default function EcommerceHubPage() {
                 <td className="text-right tabular-nums text-emerald-700">{formatMoney(Number(o.paid_amount))}</td>
                 <td className="text-right tabular-nums text-amber-700">{formatMoney(Number(o.remaining_amount))}</td>
                 <td className="text-xs">
-                  {o.created_at ? new Date(o.created_at).toLocaleDateString("tr-TR") : "—"}
+                  {formatTrDate(o.created_at)}
                 </td>
               </tr>
             ))}

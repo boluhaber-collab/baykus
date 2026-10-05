@@ -16,6 +16,7 @@ import {
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 export default function MutabakatPage() {
   const params = useParams();
@@ -98,7 +99,7 @@ export default function MutabakatPage() {
     window.print();
   }
 
-  const todayLabel = new Date().toLocaleDateString("tr-TR");
+  const todayLabel = formatTrDate(localToday());
   const movements = statement?.movements || [];
   const { dir: dateDir, setDir: setDateDir, sorted: sortedMoves } = useDateSort(
     movements,
@@ -190,7 +191,7 @@ export default function MutabakatPage() {
             <tbody>
               {sortedMoves.map((m) => (
                 <tr key={m.id}>
-                  <td>{m.movement_date}</td>
+                  <td>{formatTrDate(m.movement_date)}</td>
                   <td>{m.movement_type}</td>
                   <td className="text-right tabular-nums">{formatMoney(Number(m.debit || 0))}</td>
                   <td className="text-right tabular-nums">{formatMoney(Number(m.credit || 0))}</td>

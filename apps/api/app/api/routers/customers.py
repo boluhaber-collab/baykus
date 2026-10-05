@@ -32,6 +32,7 @@ from app.schemas.customer import (
     StatementOut,
 )
 
+from app.utils.dates import format_tr_period
 from app.utils.bh_note import sanitize_display_note
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -898,13 +899,7 @@ def _ascii_filename(name: str, *, fallback: str = "dosya", max_len: int = 40) ->
 
 
 def _period_label(from_date: date | None, to_date: date | None) -> str:
-    if from_date and to_date:
-        return f"{from_date.isoformat()} → {to_date.isoformat()}"
-    if from_date:
-        return f"{from_date.isoformat()} → …"
-    if to_date:
-        return f"… → {to_date.isoformat()}"
-    return "Tüm hareketler"
+    return format_tr_period(from_date, to_date)
 
 @router.get("/{customer_id}/statement", response_model=StatementOut)
 def customer_statement(

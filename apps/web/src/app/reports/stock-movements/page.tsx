@@ -14,6 +14,7 @@ import StatusFooter from "@/components/StatusFooter";
 import { ReportResponse, apiFetch, downloadReportCsv } from "@/lib/api";
 import { displaySku } from "@/lib/productLabel";
 import { useDateSort } from "@/hooks/useDateSort";
+import { formatTrDateTime } from "@/lib/dates";
 
 type Row = {
   id: number;
@@ -123,7 +124,7 @@ export default function StockMovementsReportPage() {
       >
         {sortedRows.map((r) => (
           <tr key={r.id}>
-            <td className="whitespace-nowrap">{(r.created_at || "").slice(0, 16).replace("T", " ")}</td>
+            <td className="whitespace-nowrap">{formatTrDateTime(r.created_at)}</td>
             <td>{displaySku(r.sku)}</td>
             <td className="font-medium">{r.product_name || "—"}</td>
             <td>{r.variant_name || "—"}</td>

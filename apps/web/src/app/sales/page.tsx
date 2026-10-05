@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { OrderListItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { useDateSort } from "@/hooks/useDateSort";
+import { formatTrDateTime } from "@/lib/dates";
 import SortableDateHeader from "@/components/SortableDateHeader";
 
 const DIRECT_CHANNELS = "perakende,mağaza,yeni müşteri,kayıtlı müşteri";
@@ -368,7 +369,7 @@ export default function DirektSatislarPage() {
                     }`}
                   >
                     <td className="whitespace-nowrap text-xs">
-                      {new Date(o.created_at).toLocaleString("tr-TR")}
+                      {formatTrDateTime(o.created_at)}
                     </td>
                     <td>{o.customer_name || "Perakende Satışlar"}</td>
                     <td className="font-mono text-xs">{o.order_number}</td>

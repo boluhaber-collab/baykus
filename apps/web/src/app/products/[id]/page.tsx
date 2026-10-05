@@ -12,6 +12,7 @@ import {
   stockBadgeClass,
   ProductPriceListRef,
 } from "@/lib/api";
+import { formatTrDateTime } from "@/lib/dates";
 import StatusFooter from "@/components/StatusFooter";
 import { parseProductDescription } from "@/lib/productMeta";
 import { displaySku } from "@/lib/productLabel";
@@ -689,7 +690,7 @@ export default function ProductDetailPage() {
                 {movements.map((m) => (
                   <li key={m.id} className="flex flex-wrap gap-2 border-b border-slate-50 pb-2">
                     <span className="text-slate-400 whitespace-nowrap">
-                      {new Date(m.created_at).toLocaleString("tr-TR")}
+                      {formatTrDateTime(m.created_at)}
                     </span>
                     <span
                       className={

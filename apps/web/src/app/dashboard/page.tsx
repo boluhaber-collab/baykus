@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppSettings, DashboardNote, DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
+import { formatTrDateTime } from "@/lib/dates";
 import { openGlobalSearch } from "@/components/GlobalSearchOverlay";
 import { QUICK_ACTION_CATALOG, QUICK_ACTIONS } from "@/lib/nav";
 
@@ -769,7 +770,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
                   <div className="text-[10px] text-baykus-muted mt-0.5">
-                    {new Date(n.at).toLocaleString("tr-TR")}
+                    {formatTrDateTime(n.at)}
                   </div>
                 </div>
               ))

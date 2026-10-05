@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AuditLog, apiFetch } from "@/lib/api";
+import { formatTrDateTime } from "@/lib/dates";
 import StatusFooter from "@/components/StatusFooter";
 
 const ENTITY_PRESETS = [
@@ -197,7 +198,7 @@ export default function AuditLogPage() {
               {filtered.map((row) => (
                 <tr key={row.id}>
                   <td className="whitespace-nowrap text-xs text-baykus-muted">
-                    {new Date(row.created_at).toLocaleString("tr-TR")}
+                    {formatTrDateTime(row.created_at)}
                   </td>
                   <td className="text-xs">{row.user_name || row.user_email || row.user_id || "—"}</td>
                   <td>

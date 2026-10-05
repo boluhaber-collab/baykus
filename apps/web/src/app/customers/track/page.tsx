@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Customer, apiFetch, formatMoney } from "@/lib/api";
+import { formatTrDate, formatTrDateTime } from "@/lib/dates";
 import LiveSearchSelect, { useCustomerSearch } from "@/components/LiveSearchSelect";
 import StatusFooter from "@/components/StatusFooter";
 
@@ -148,7 +149,7 @@ export default function CustomerTrackPage() {
               {focus.special_day_note && (
                 <div>
                   Özel: {focus.special_day_note}
-                  {focus.special_day_date ? ` (${focus.special_day_date})` : ""}
+                  {focus.special_day_date ? ` (${formatTrDate(focus.special_day_date)})` : ""}
                 </div>
               )}
               {focus.notes && <div className="mt-1 whitespace-pre-wrap">{focus.notes}</div>}
@@ -191,7 +192,7 @@ export default function CustomerTrackPage() {
                 }`}
               />
               <div className="text-[11px] text-baykus-muted">
-                {ev.at ? new Date(ev.at).toLocaleString("tr-TR") : "—"} · {ev.type}
+                {formatTrDateTime(ev.at)} · {ev.type}
               </div>
               <div className="text-sm">
                 <Link href={ev.href} className="text-baykus-primary hover:underline font-medium">
@@ -267,7 +268,7 @@ export default function CustomerTrackPage() {
                 {r.special_day_note && (
                   <div className="text-xs text-amber-800 mt-1">
                     Özel: {r.special_day_note}
-                    {r.special_day_date ? ` · ${r.special_day_date}` : ""}
+                    {r.special_day_date ? ` · ${formatTrDate(r.special_day_date)}` : ""}
                   </div>
                 )}
                 {r.notes && <div className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{r.notes}</div>}

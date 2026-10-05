@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { OpenBalanceOrder, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 type Party = {
   kind: string;
@@ -193,7 +194,7 @@ export default function OpenBalancesPage() {
                       </Link>
                     </td>
                     <td className="text-xs">{r.order_date || "—"}</td>
-                    <td className="text-xs">{r.due_date || "—"}</td>
+                    <td className="text-xs">{formatTrDate(r.due_date)}</td>
                     <td>
                       <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] ${statusBadgeClass(r.status)}`}>
                         {r.status}

@@ -23,7 +23,7 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
-import { localToday } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 import {
   belgeFromNote, detailFromBhNote, hareketLabel, isBhImportNote, mergeNotePreservingBh, sanitizeDisplayNote,
 } from "@/lib/bhNote";
@@ -373,7 +373,7 @@ export default function SupplierDetailPage() {
         {
           key: "date",
           header: "Tarih",
-          render: (r) => <span className="whitespace-nowrap">{r.date || "—"}</span>,
+          render: (r) => <span className="whitespace-nowrap">{formatTrDate(r.date)}</span>,
         },
         {
           key: "no",
@@ -437,7 +437,7 @@ export default function SupplierDetailPage() {
         {
           key: "date",
           header: "Tarih",
-          render: (m) => <span className="whitespace-nowrap">{m.movement_date}</span>,
+          render: (m) => <span className="whitespace-nowrap">{formatTrDate(m.movement_date)}</span>,
         },
         {
           key: "tutar",
@@ -865,7 +865,7 @@ export default function SupplierDetailPage() {
                     key: "date",
                     header: "Tarih",
                     render: (m) => (
-                      <span className="whitespace-nowrap">{m.movement_date}</span>
+                      <span className="whitespace-nowrap">{formatTrDate(m.movement_date)}</span>
                     ),
                   },
                   {

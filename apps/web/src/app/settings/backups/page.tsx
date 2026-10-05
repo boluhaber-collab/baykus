@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { BackupInfo, apiFetch, downloadAuthFile } from "@/lib/api";
+import { formatTrDateTime } from "@/lib/dates";
 import StatusFooter from "@/components/StatusFooter";
 
 type Checklist = {
@@ -184,7 +185,7 @@ function BackupsPageInner() {
               <tr key={b.filename} className="border-t">
                 <td className="px-4 py-2 font-mono text-xs">{b.filename}</td>
                 <td className="px-4 py-2">{(b.size_bytes / 1024).toFixed(1)} KB</td>
-                <td className="px-4 py-2">{new Date(b.created_at).toLocaleString("tr-TR")}</td>
+                <td className="px-4 py-2">{formatTrDateTime(b.created_at)}</td>
                 <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
                   <button
                     onClick={() => verify(b.filename)}

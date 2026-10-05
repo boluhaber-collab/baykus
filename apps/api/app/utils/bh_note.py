@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from app.utils.html_text import decode_html_entities
+from app.utils.dates import format_tr_dates_in_text
 
 BH_IMPORT_PREFIX = "BH_IMPORT:"
 
@@ -154,25 +155,26 @@ def sanitize_display_note(note: Any, fallback: str = "") -> str:
 
     If the note is only a sync marker (or empty after stripping), return *fallback*
     (default empty — callers may pass a movement-type label).
+    ISO dates inside free text are shown as dd.mm.yyyy.
     """
     raw = decode_html_entities(note).strip()
     if not raw:
-        return fallback
+        return format_tr_dates_in_text(fallback) if fallback else fallback
 
     if is_bh_marker_only(raw):
-        return fallback
+        return format_tr_dates_in_text(fallback) if fallback else fallback
 
     parsed = parse_bh_note(raw)
     if parsed.get("aciklama") and not is_bh_marker_only(parsed["aciklama"]):
-        return str(parsed["aciklama"])
+        return format_tr_dates_in_text(str(parsed["aciklama"]))
     display = parsed.get("display_note")
     if display and not is_bh_marker_only(display):
-        return str(display)
+        return format_tr_dates_in_text(str(display))
     if not parsed.get("is_bh") and raw and not is_bh_marker_only(raw):
         cleaned = _STRIP_TOKEN_RE.sub("", raw).strip(" ·|-")
         if cleaned and not is_bh_marker_only(cleaned):
-            return cleaned
-    return fallback
+            return format_tr_dates_in_text(cleaned)
+    return format_tr_dates_in_text(fallback) if fallback else fallback
 
 
 def sanitize_aciklama(note: Any, fallback: str = "") -> str:
@@ -180,10 +182,10 @@ def sanitize_aciklama(note: Any, fallback: str = "") -> str:
     parsed = parse_bh_note(note)
     acik = parsed.get("aciklama")
     if acik and not is_bh_marker_only(acik):
-        return str(acik)
+        return format_tr_dates_in_text(str(acik))
     if not parsed.get("is_bh"):
         return sanitize_display_note(note, fallback=fallback)
-    return fallback
+    return format_tr_dates_in_text(fallback) if fallback else fallback
 
 
 def extract_bh_meta_segments(note: Any) -> list[str]:

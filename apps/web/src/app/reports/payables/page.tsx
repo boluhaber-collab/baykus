@@ -13,6 +13,7 @@ import {
 import { displayCode } from "@/lib/productLabel";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 type Row = {
   supplier_id: number;
@@ -165,7 +166,7 @@ export default function PayablesReportPage() {
             <td className="px-4 py-3 text-right tabular-nums font-medium text-rose-700">
               {formatMoney(r.balance)}
             </td>
-            <td className="px-4 py-3 text-slate-500">{r.last_movement_date || "—"}</td>
+            <td className="px-4 py-3 text-slate-500">{formatTrDate(r.last_movement_date)}</td>
             <td className="px-4 py-3 text-right">
               <Link href={`/suppliers/${r.supplier_id}`} className="text-baykus-600 hover:underline text-xs">
                 Kart

@@ -13,6 +13,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import { formatTrDate } from "@/lib/dates";
 
 const FLOW = ["Sipariş Alındı", "Hazırlanıyor", "Baskıda", "Hazır", "Teslim Edildi"] as const;
 const STAGE_COLORS: Record<string, string> = {
@@ -212,7 +213,7 @@ export default function ProductionHubPage() {
                         <div className="text-[10px] mt-0.5">
                           Teslim:{" "}
                           {o.due_date || o.delivery_date
-                            ? new Date(o.due_date || o.delivery_date!).toLocaleDateString("tr-TR")
+                            ? formatTrDate(o.due_date || o.delivery_date)
                             : "—"}
                           {o.design_status ? ` · ${o.design_status}` : ""}
                         </div>
@@ -284,7 +285,7 @@ export default function ProductionHubPage() {
                     <td>{o.design_status || "—"}</td>
                     <td className="text-right tabular-nums">{formatMoney(Number(o.total_amount))}</td>
                     <td className="text-xs">
-                      {o.due_date ? new Date(o.due_date).toLocaleDateString("tr-TR") : "—"}
+                      {formatTrDate(o.due_date)}
                     </td>
                     <td className="text-right space-x-2 text-xs whitespace-nowrap">
                       {nxt && (
