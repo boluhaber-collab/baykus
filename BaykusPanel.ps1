@@ -684,12 +684,25 @@ function Invoke-BaykusNewRelease {
       } else {
         $lblHint.Text = 'main dalından son kod alınıyor...'
         [System.Windows.Forms.Application]::DoEvents()
-        $pullOut = git pull --ff-only origin main 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
+        $pullOk = $false
+        $pullOut = ''
+        $oldEap = $ErrorActionPreference
+        try {
+          $ErrorActionPreference = 'Continue'
+          $pullOut = (& git pull --ff-only origin main 2>&1 | ForEach-Object { "$_" }) -join "`n"
+          $pullOk = ($LASTEXITCODE -eq 0)
+        } catch {
+          $pullOut = "$($_.Exception.Message)"
+          $pullOk = $false
+        } finally { $ErrorActionPreference = $oldEap }
+        if (-not $pullOk) {
           $form.Cursor = [System.Windows.Forms.Cursors]::Default
-          $go = [System.Windows.Forms.MessageBox]::Show(
-            "Son kod alınamadı.`n$pullOut`n`nMevcut dosyalarla paket oluşturulsun mu?",
-            'Yeni Sürüm', 'YesNo', 'Warning')
+          if ($pullOut -match 'resolve host|unable to access|Could not connect|timed out|Failed to connect|network') {
+            $msg = "İnternet bağlantısı yok veya GitHub'a ulaşılamadı.`n`nBilgisayardaki mevcut dosyalarla paket oluşturulsun mu?"
+          } else {
+            $msg = "Son kod alınamadı (git pull başarısız).`n`nBilgisayardaki mevcut dosyalarla paket oluşturulsun mu?"
+          }
+          $go = [System.Windows.Forms.MessageBox]::Show($msg, 'Yeni Sürüm', 'YesNo', 'Warning')
           if ($go -ne [System.Windows.Forms.DialogResult]::Yes) { return }
           $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         }
