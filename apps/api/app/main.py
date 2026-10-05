@@ -47,6 +47,13 @@ def _ensure_lookup_indexes() -> None:
         ensure_hot_indexes()
     except Exception:
         pass
+    # Direkt satış Sipariş Alındı → Teslim Edildi (satış faturası); status-only, no ledger re-post
+    try:
+        from app.services.direct_sale_invoice_migrate import run_startup_migrate
+
+        run_startup_migrate()
+    except Exception:
+        pass
 
 
 # Lock mode gate runs inside CORS (added last = outermost in Starlette)

@@ -10,6 +10,7 @@ from app.models.customer import Customer
 from app.models.order import (
     DEFAULT_DESIGN_STATUS,
     DEFAULT_ORDER_STATUS,
+    INVOICE_DIRECT_CHANNELS,
     ORDER_STATUSES,
     DESIGN_STATUSES,
     ORDER_CHANNELS,
@@ -572,8 +573,8 @@ def create_order(
     _apply_sale_side_effects(db, order, user, mov_date=mov_date)
 
     # Kapora / split deposit — only when explicit payment amount > 0.
-    # Unpaid (veresiye teslim or açık sipariş): cari sale debit + stock only; do NOT touch kasa/banka.
-    # Veresiye from /sales/create is status Teslim Edildi; açık sipariş stays Sipariş Alındı.
+    # Unpaid (veresiye / unpaid invoice): cari sale debit + stock only; do NOT touch kasa/banka.
+    # Direkt satış channels (perakende / yeni-kayıtlı müşteri) are always Teslim Edildi (satış faturası).
     from app.services.split_payments import lines_total, normalize_payment_lines, post_finance_lines
 
     deposit_lines = normalize_payment_lines(payments=getattr(payload, "payments", None))
@@ -643,11 +644,16 @@ def create_order(
             )
 
     # Delivered sale leaves the open order / design workflow.
-    # Paid (kapora) is always Teslim Edildi. Unpaid Teslim Edildi (veresiye) stays
-    # completed: cari debit already posted, no kasa/banka. Sipariş Alındı is untouched.
+    # Paid (kapora) → Teslim Edildi. Invoice-direct channels (perakende / müşteri satış)
+    # always Teslim Edildi whether paid or unpaid (cari borç only when unpaid).
+    # Workshop Sipariş Alındı (e.g. mağaza / internet via Sipariş Merkezi) is untouched.
     paid = bool(deposit_lines) and dep_paid > 0
-    if paid and order.status != "Sipariş İptali" and order.status != "Teslim Edildi":
-        order.status = "Teslim Edildi"
+    ch = (order.channel or "").strip()
+    is_invoice_direct = ch in INVOICE_DIRECT_CHANNELS
+    if order.status != "Sipariş İptali":
+        if paid or is_invoice_direct:
+            if order.status != "Teslim Edildi":
+                order.status = "Teslim Edildi"
     delivered = order.status == "Teslim Edildi"
     if delivered:
         if (order.design_status or DEFAULT_DESIGN_STATUS) in (

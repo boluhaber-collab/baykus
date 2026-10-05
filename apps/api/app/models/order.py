@@ -37,6 +37,13 @@ DIRECT_SALE_CHANNELS = frozenset({
     "mağaza",
     "magaza",
 })
+# Channels that are always a satış faturası (invoice) on create — never stay Sipariş Alındı.
+# "mağaza" is excluded: Sipariş Merkezi / OrderForm also uses it for workshop jobs.
+INVOICE_DIRECT_CHANNELS = frozenset({
+    "perakende",
+    "yeni müşteri",
+    "kayıtlı müşteri",
+})
 DEFAULT_ORDER_CHANNEL = "mağaza"
 
 # Desktop Tasarım Onay Akışı labels (siparis_detay_penceresi_ac)

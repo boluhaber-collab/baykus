@@ -203,13 +203,15 @@ export default function PerakendeSatisGirPage() {
     }
     setBusy(true);
     try {
-      const status = delivered ? "Teslim Edildi" : "Sipariş Alındı";
+      // Perakende direkt satış = satış faturası; asla Sipariş Alındı bırakılmaz.
+      const status = "Teslim Edildi";
       const noteParts = [
         aciklama.trim(),
         `Tarih ${tarih} ${saat}`,
         payments.length > 1 ? `Çoklu tahsilat (${payments.length} satır)` : "Tahsilat",
+        delivered ? "Teslim edildi" : null,
       ].filter(Boolean);
-      // Single create: stok↓ + (optional) cari sale + kapora payment + kasa/banka
+      // Single create: stok↓ + kapora payment + kasa/banka (cari yok — müşterisiz perakende)
       await apiFetch<{ id: number; order_number: string }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
@@ -217,9 +219,9 @@ export default function PerakendeSatisGirPage() {
           status,
           notes: noteParts.join(" · ") || null,
           channel: "perakende",
-          design_status: "Bekliyor",
-          due_date: delivered ? tarih : null,
-          delivery_date: delivered ? tarih : null,
+          design_status: "Onaylandı",
+          due_date: tarih || null,
+          delivery_date: tarih || localToday(),
           movement_date: tarih || localToday(),
           deposit_amount: tahsilatNum > 0 ? tahsilatNum : 0,
           discount_amount: 0,
@@ -319,6 +321,9 @@ export default function PerakendeSatisGirPage() {
               onChange={(e) => setDelivered(e.target.checked)}
             />
             Ürün müşteriye teslim edildi
+            <span className="text-[10px] text-baykus-muted font-normal">
+              (perakende kayıt her zaman satış faturası · Teslim Edildi)
+            </span>
           </label>
 
           <div>

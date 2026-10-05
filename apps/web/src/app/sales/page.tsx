@@ -10,7 +10,7 @@ import SortableDateHeader from "@/components/SortableDateHeader";
 
 const DIRECT_CHANNELS = "perakende,mağaza,yeni müşteri,kayıtlı müşteri";
 
-const BELGE_TIPLERI = ["Tüm Belge Tipleri", "Perakende Satış", "Sipariş", "Teklif"] as const;
+const BELGE_TIPLERI = ["Tüm Belge Tipleri", "Perakende Satış", "Satış Faturası", "Teklif"] as const;
 const DONEMLER = ["Son 30 Gün", "Son 3 Ay", "Son 6 Ay", "Son 1 Yıl", "Tümü"] as const;
 const ARA_TIPLERI = ["Tümü", "Müşteri İsmi / Belge No", "Sipariş No", "Ürün"] as const;
 
@@ -32,7 +32,16 @@ function isCancelled(status: string): boolean {
 function belgeTipi(o: OrderListItem): string {
   const ch = (o.channel || "").toLowerCase();
   if (ch === "perakende") return "Perakende Satış";
-  return "Sipariş";
+  // Direkt Satışlar listesinde sipariş iş akışı yok — müşteri satışı = satış faturası
+  return "Satış Faturası";
+}
+
+/** Direkt satış satırında durum etiketi: açık Sipariş* → Satış Faturası göster. */
+function durumEtiketi(status: string): string {
+  if (isCancelled(status)) return status;
+  if (status === "Teslim Edildi") return "Teslim Edildi";
+  if (status === "Sipariş Alındı" || status === "Sipariş") return "Satış Faturası";
+  return status;
 }
 
 export default function DirektSatislarPage() {
@@ -79,7 +88,7 @@ export default function DirektSatislarPage() {
           if ((o.channel || "").toLowerCase() !== "perakende") return false;
         } else if (belge === "Teklif") {
           return false; // teklifler ayrı modül; direkt satış listesinde yok
-        } else if (belge === "Sipariş") {
+        } else if (belge === "Satış Faturası") {
           if ((o.channel || "").toLowerCase() === "perakende") return false;
         }
       }
@@ -369,9 +378,14 @@ export default function DirektSatislarPage() {
                     </td>
                     <td>
                       <span
-                        className={`inline-block rounded px-2 py-0.5 text-[11px] ${statusBadgeClass(o.status)}`}
+                        className={`inline-block rounded px-2 py-0.5 text-[11px] ${statusBadgeClass(
+                          o.status === "Sipariş Alındı" || o.status === "Sipariş"
+                            ? "Teslim Edildi"
+                            : o.status,
+                        )}`}
+                        title={o.status !== durumEtiketi(o.status) ? `Kayıt durumu: ${o.status}` : undefined}
                       >
-                        {o.status}
+                        {durumEtiketi(o.status)}
                       </span>
                       <span className="ml-2 text-[10px] text-baykus-muted">{belgeTipi(o)}</span>
                     </td>

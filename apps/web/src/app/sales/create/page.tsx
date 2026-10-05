@@ -125,8 +125,9 @@ function CreateSaleInner() {
   const [notes, setNotes] = useState("");
   const [saleDate, setSaleDate] = useState(() => localToday());
   const [dueDate, setDueDate] = useState("");
-  // Kayıtlı müşteri: varsayılan veresiye = teslim edilmiş cari satış
+  // Kayıtlı müşteri: varsayılan veresiye = satış faturası / cari borç
   // (kapora yok, kasa/banka yok, cari borç, stok↓, durum Teslim Edildi).
+  // Direkt satışlarda kapora 0 da satış faturasıdır (Sipariş Alındı kalmaz).
   const [veresiye, setVeresiye] = useState(mappedInitial === "kayitli");
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
@@ -397,17 +398,24 @@ function CreateSaleInner() {
         return;
       }
 
+      // Direkt satış (perakende / yeni / kayıtlı) = satış faturası → her zaman Teslim Edildi.
+      // İnternet = sipariş iş akışı (kapora yoksa Sipariş Alındı kalabilir).
+      const isDirectInvoice = saleType === "perakende" || saleType === "yeni" || saleType === "kayitli";
       const orderChannel =
         saleType === "internet"
           ? channel || "internet"
           : saleType === "perakende"
             ? "perakende"
-            : "mağaza";
+            : saleType === "yeni"
+              ? "yeni müşteri"
+              : saleType === "kayitli"
+                ? "kayıtlı müşteri"
+                : "mağaza";
 
-      // Veresiye = teslim edilmiş cari satış (Teslim Edildi, kasa/banka yok).
-      // Kapora > 0 = tahsilatlı teslim. Veresiye kapalı + kapora 0 = açık sipariş.
+      // Unpaid (veresiye veya kapora 0) → cari borç only; paid → kasa/banka + cari.
       const paidNow = !veresiye && amount > 0;
-      const delivered = veresiye || paidNow;
+      const unpaidInvoice = isDirectInvoice && !paidNow;
+      const delivered = isDirectInvoice || paidNow || veresiye;
       const created = await apiFetch<{ id: number }>("/api/orders", {
         method: "POST",
         body: JSON.stringify({
@@ -427,10 +435,10 @@ function CreateSaleInner() {
       });
 
       setMsg(
-        veresiye
-          ? "Satış tamamlandı · Teslim Edildi · cari borç + stok↓ · kasa/banka yok (tahsilat sonra)"
+        unpaidInvoice || veresiye
+          ? "Satış faturası · Teslim Edildi · cari borç + stok↓ · kasa/banka yok (tahsilat sonra)"
           : paidNow
-            ? "Satış tamamlandı · stok↓ · cari + kasa/banka işlendi"
+            ? "Satış faturası · Teslim Edildi · stok↓ · cari + kasa/banka işlendi"
             : "Sipariş kaydedildi · Sipariş Alındı · açık iş akışı (henüz teslim değil)",
       );
       router.push(delivered && cid ? `/customers/${cid}` : `/orders/${created.id}`);
@@ -769,7 +777,7 @@ function CreateSaleInner() {
                 checked={veresiye}
                 onChange={(e) => setVeresiye(e.target.checked)}
               />
-              Veresiye / sonra tahsilat (teslim edildi · kapora yok · kasa/banka yok · cari borç + stok↓)
+              Veresiye / sonra tahsilat (satış faturası · kapora yok · kasa/banka yok · cari borç + stok↓)
             </label>
             {!veresiye && (
               <SplitPaymentRows
@@ -792,11 +800,15 @@ function CreateSaleInner() {
                 Kalan: <strong className="tabular-nums text-red-700">{formatMoney(remaining)}</strong>
               </div>
               <div className="text-[10px] text-baykus-muted">
-                {veresiye
-                  ? "Veresiye teslim → Teslim Edildi · cari borç + stok↓ · kasa/banka yok (tahsilatı sonra cariye girin)"
-                  : payAmountNum <= 0
-                    ? "Kapora yok ve veresiye kapalı → Sipariş Alındı (açık sipariş). Teslim edilmiş borç için veresiyeyi işaretleyin."
-                    : "Kapora > 0 → kasa/banka tahsilat + Teslim Edildi"}
+                {saleType === "internet"
+                  ? veresiye
+                    ? "Veresiye → Teslim Edildi · cari borç + stok↓ · kasa/banka yok"
+                    : payAmountNum <= 0
+                      ? "Kapora yok → Sipariş Alındı (internet sipariş iş akışı)"
+                      : "Kapora > 0 → kasa/banka tahsilat + Teslim Edildi"
+                  : veresiye || payAmountNum <= 0
+                    ? "Satış faturası · Teslim Edildi · ödeme yok → cari borç + stok↓ · kasa/banka yok (tahsilatı sonra girin)"
+                    : "Satış faturası · Teslim Edildi · kapora → kasa/banka tahsilat + cari"}
               </div>
             </div>
           </fieldset>
