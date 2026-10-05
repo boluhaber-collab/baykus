@@ -49,6 +49,19 @@ body {
     border-color: var(--baykus-primary);
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
   }
+  /* Price/amount fields: type directly — hide browser spinner arrows */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button,
+  input.money::-webkit-inner-spin-button,
+  input.money::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"],
+  input.money {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
   .bk-btn {
     display: inline-flex;
     align-items: center;
