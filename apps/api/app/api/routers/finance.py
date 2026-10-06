@@ -48,6 +48,7 @@ from app.schemas.finance import (
 )
 
 from app.utils.bh_note import merge_bh_preserved_note, sanitize_display_note
+from app.utils.sale_payment_note import rewrite_kapora_note_if_fully_paid
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -283,7 +284,7 @@ def _cash_movement_out(
         amount=_dec(m.amount),
         movement_date=m.movement_date,
         category=m.category,
-        note=m.note,
+        note=rewrite_kapora_note_if_fully_paid(db, m.note),
         customer_id=m.customer_id,
         customer_name=cust_name,
         bank_account_id=m.bank_account_id,
@@ -314,7 +315,7 @@ def _bank_movement_out(
         amount=_dec(m.amount),
         movement_date=m.movement_date,
         category=m.category,
-        note=m.note,
+        note=rewrite_kapora_note_if_fully_paid(db, m.note),
         customer_id=m.customer_id,
         customer_name=cust_name,
         cash_register_id=m.cash_register_id,
@@ -525,7 +526,7 @@ def finance_summary(
                 movement_type=m.movement_type,
                 amount=_dec(m.amount),
                 movement_date=m.movement_date,
-                note=m.note,
+                note=rewrite_kapora_note_if_fully_paid(db, m.note),
                 account_name=m.cash_register.name if m.cash_register else "Kasa",
                 direction=_cash_direction(m.movement_type),
                 created_at=m.created_at,
@@ -544,7 +545,7 @@ def finance_summary(
                 movement_type=m.movement_type,
                 amount=_dec(m.amount),
                 movement_date=m.movement_date,
-                note=m.note,
+                note=rewrite_kapora_note_if_fully_paid(db, m.note),
                 account_name=m.bank_account.name if m.bank_account else None,
                 direction=_bank_direction(m.movement_type),
                 created_at=m.created_at,
@@ -755,8 +756,8 @@ def cash_daily_panel(
                 "ledger_kind": "cash",
                 "account": reg_name,
                 "movement_type": m.movement_type,
-                # Raw note — UI sanitizes for display; BH_IMPORT gate needs prefix
-                "note": m.note,
+                # Display note (Kapora→Tahsilat when fully paid); BH_IMPORT still on raw DB for gates
+                "note": rewrite_kapora_note_if_fully_paid(db, m.note),
                 "in_amount": amt if direction == "in" else 0,
                 "out_amount": amt if direction == "out" else 0,
                 "payment_type": m.category or m.movement_type,
@@ -778,7 +779,7 @@ def cash_daily_panel(
                 "ledger_kind": "bank",
                 "account": acc_name,
                 "movement_type": m.movement_type,
-                "note": m.note,
+                "note": rewrite_kapora_note_if_fully_paid(db, m.note),
                 "in_amount": amt if direction == "in" else 0,
                 "out_amount": amt if direction == "out" else 0,
                 "payment_type": m.category or m.movement_type,

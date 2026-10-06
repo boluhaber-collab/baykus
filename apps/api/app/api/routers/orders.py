@@ -601,10 +601,24 @@ def create_order(
         order.deposit_amount = dep_paid
 
     if deposit_lines and dep_paid > 0:
-        note = f"Kapora {order.order_number}"
+        from app.utils.sale_payment_note import order_payment_finance_note
+
+        # Kapora only for partial prepayment; full peşin / invoice payment → Satış tahsilatı
+        note = order_payment_finance_note(
+            order.order_number,
+            total=_dec(order.total_amount),
+            paid=dep_paid,
+        )
         for idx, line in enumerate(deposit_lines, start=1):
             line_note = note if len(deposit_lines) == 1 else f"{note} ({idx}/{len(deposit_lines)})"
-            method = line.get("method") or ("eft" if line.get("bank_account_id") else "kapora")
+            # method = payment channel; "kapora" only as legacy label for partial deposits
+            if line.get("bank_account_id"):
+                default_method = "eft"
+            elif note.startswith("Kapora"):
+                default_method = "kapora"
+            else:
+                default_method = "nakit"
+            method = line.get("method") or default_method
             db.add(
                 Payment(
                     order_id=order.id,
