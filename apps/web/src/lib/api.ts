@@ -582,14 +582,20 @@ export type CashDailyPanel = {
     href: string;
   }[];
   movements: {
+    id: number;
     date: string;
     source: string;
+    ledger_kind: "cash" | "bank" | string;
     account: string;
     movement_type: string;
     note: string | null;
     in_amount: number;
     out_amount: number;
     payment_type: string;
+    amount: number;
+    cash_register_id?: number | null;
+    bank_account_id?: number | null;
+    transfer_group_id?: string | null;
   }[];
 };
 

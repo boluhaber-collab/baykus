@@ -204,7 +204,7 @@ Spec: `docs/DIRECT_SALES_SPEC.md` · ekran görüntüleri: `docs/parity-shots/`
 
 | Özellik | Web | Durum |
 |---------|-----|-------|
-| Günlük Kasa masaüstü özet | `/finance/cash` — Kasa Özeti kartları + sipariş tablosu + Kasa/Banka hareketleri (Giriş/Çıkış) · `GET /api/finance/cash/daily` | done |
+| Günlük Kasa masaüstü özet | `/finance/cash` — Kasa Özeti kartları + sipariş tablosu + Kasa/Banka hareketleri (Giriş/Çıkış) · **Düzenle** → aynı PUT cascade (transfer peers + cari) · Tarih GG.AA.YYYY · `GET /api/finance/cash/daily` | done |
 | Açık Bakiyeler sipariş satırları | `/finance/open-balances` — Ara/Durum filtre · geciken/teslim satır renkleri · cari sekmesi | done |
 | Hesaplarım tür grupları | `/finance/banks` — Banka/POS/Kart/Ortak paneller + kasa devir · `account_type`/`institution` | done |
 | Hesap detay (BH ledger) | `/finance/banks/[id]` + `/finance/cash/[id]` — Bakiye header · action chips · BH ledger cols + rightmost **İşlem▾** (Yazdır / Düzenle / Sil / +Belge Ekle) · Düzenle+Sil only when note lacks `BH_IMPORT:` · API refuses BH edit/delete · transfer peers + linked cari/supplier cascade · `bhNote.ts` | done |

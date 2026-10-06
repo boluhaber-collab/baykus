@@ -726,9 +726,10 @@ def cash_daily_panel(
         .scalar()
     )
 
-    # Combined movements
+    # Combined movements (ids + ledger_kind for Günlük Kasa Düzenle → same PUT as Hesaplarım)
     cash_movs = (
         db.query(CashMovement)
+        .options(joinedload(CashMovement.cash_register))
         .filter(CashMovement.movement_date >= d0, CashMovement.movement_date <= d1)
         .order_by(CashMovement.movement_date.desc(), CashMovement.id.desc())
         .limit(300)
@@ -745,16 +746,24 @@ def cash_daily_panel(
     for m in cash_movs:
         direction = _cash_direction(m.movement_type)
         amt = float(_dec(m.amount))
+        reg_name = m.cash_register.name if m.cash_register is not None else "Kasa"
         movements.append(
             {
+                "id": m.id,
                 "date": m.movement_date.isoformat(),
                 "source": "Kasa",
-                "account": "Ana Kasa",
+                "ledger_kind": "cash",
+                "account": reg_name,
                 "movement_type": m.movement_type,
-                "note": sanitize_display_note(m.note) or m.category,
+                # Raw note — UI sanitizes for display; BH_IMPORT gate needs prefix
+                "note": m.note,
                 "in_amount": amt if direction == "in" else 0,
                 "out_amount": amt if direction == "out" else 0,
                 "payment_type": m.category or m.movement_type,
+                "amount": amt,
+                "cash_register_id": m.cash_register_id,
+                "bank_account_id": m.bank_account_id,
+                "transfer_group_id": m.transfer_group_id,
             }
         )
     for m in bank_movs:
@@ -763,17 +772,23 @@ def cash_daily_panel(
         acc_name = m.bank_account.name if m.bank_account is not None else "Banka"
         movements.append(
             {
+                "id": m.id,
                 "date": m.movement_date.isoformat(),
                 "source": "Banka",
+                "ledger_kind": "bank",
                 "account": acc_name,
                 "movement_type": m.movement_type,
-                "note": sanitize_display_note(m.note) or m.category,
+                "note": m.note,
                 "in_amount": amt if direction == "in" else 0,
                 "out_amount": amt if direction == "out" else 0,
                 "payment_type": m.category or m.movement_type,
+                "amount": amt,
+                "cash_register_id": m.cash_register_id,
+                "bank_account_id": m.bank_account_id,
+                "transfer_group_id": m.transfer_group_id,
             }
         )
-    movements.sort(key=lambda x: x["date"], reverse=True)
+    movements.sort(key=lambda x: (x["date"], x["id"]), reverse=True)
 
     cost = cost_sum
     gross = revenue - cost
