@@ -34,8 +34,10 @@ from app.schemas.finance import (
     BankAccountUpdate,
     BankMovementCreate,
     BankMovementOut,
+    BankMovementUpdate,
     CashMovementCreate,
     CashMovementOut,
+    CashMovementUpdate,
     CashRegisterCreate,
     CashRegisterOut,
     CashRegisterUpdate,
@@ -68,6 +70,95 @@ def _refuse_bh_import_delete(note: str | None) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="BizimHesap aktarım kayıtları silinemez",
         )
+
+
+def _refuse_bh_import_edit(note: str | None) -> None:
+    if _is_bh_import_note(note):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="BizimHesap aktarım kayıtları düzenlenemez",
+        )
+
+
+def _apply_ledger_amount(entity, amount: Decimal) -> None:
+    """Keep debit/credit single-sided when cascading amount to cari/supplier."""
+    debit = _dec(getattr(entity, "debit", 0))
+    credit = _dec(getattr(entity, "credit", 0))
+    if credit > 0 and debit <= 0:
+        entity.credit = amount
+        entity.debit = Decimal("0")
+    elif debit > 0 and credit <= 0:
+        entity.debit = amount
+        entity.credit = Decimal("0")
+    elif credit >= debit:
+        entity.credit = amount
+        entity.debit = Decimal("0")
+    else:
+        entity.debit = amount
+        entity.credit = Decimal("0")
+
+
+def _cascade_linked_party_ledger(
+    db: Session,
+    *,
+    cari_movement_id: int | None,
+    supplier_movement_id: int | None,
+    amount: Decimal | None,
+    movement_date: date | None,
+    note: str | None,
+    note_set: bool,
+) -> None:
+    """Sync linked cari/supplier rows when editing a finance movement (payment/collection)."""
+    if cari_movement_id:
+        cm = db.get(CariMovement, cari_movement_id)
+        if cm:
+            _refuse_bh_import_edit(cm.note)
+            if amount is not None:
+                _apply_ledger_amount(cm, amount)
+            if movement_date is not None:
+                cm.movement_date = movement_date
+            if note_set:
+                cm.note = merge_bh_preserved_note(cm.note, note)
+    if supplier_movement_id:
+        sm = db.get(SupplierMovement, supplier_movement_id)
+        if sm:
+            _refuse_bh_import_edit(sm.note)
+            if amount is not None:
+                _apply_ledger_amount(sm, amount)
+            if movement_date is not None:
+                sm.movement_date = movement_date
+            if note_set:
+                sm.note = merge_bh_preserved_note(sm.note, note)
+
+
+def _transfer_peers(db: Session, group_id: str) -> tuple[list[CashMovement], list[BankMovement]]:
+    peers_cash = (
+        db.query(CashMovement).filter(CashMovement.transfer_group_id == group_id).all()
+    )
+    peers_bank = (
+        db.query(BankMovement).filter(BankMovement.transfer_group_id == group_id).all()
+    )
+    return peers_cash, peers_bank
+
+
+def _apply_movement_fields(
+    m: CashMovement | BankMovement,
+    *,
+    amount: Decimal | None,
+    movement_date: date | None,
+    note: str | None,
+    note_set: bool,
+    category: str | None,
+    category_set: bool,
+) -> None:
+    if amount is not None:
+        m.amount = amount
+    if movement_date is not None:
+        m.movement_date = movement_date
+    if note_set:
+        m.note = merge_bh_preserved_note(m.note, note)
+    if category_set:
+        m.category = category
 
 
 
@@ -902,6 +993,89 @@ def delete_cash_movement(
     db.commit()
 
 
+@router.put("/cash/movements/{movement_id}", response_model=CashMovementOut)
+def update_cash_movement(
+    movement_id: int,
+    payload: CashMovementUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*WRITE_ROLES)),
+) -> CashMovementOut:
+    """Düzenle — amount/date/note/(kasa); transfer peers + linked cari/supplier cascade."""
+    m = db.get(CashMovement, movement_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Kasa hareketi bulunamadı")
+    _refuse_bh_import_edit(m.note)
+
+    data = payload.model_dump(exclude_unset=True)
+    amount = data.get("amount")
+    if amount is not None:
+        amount = _dec(amount)
+    movement_date = data.get("movement_date")
+    note_set = "note" in data
+    note = data.get("note") if note_set else None
+    category_set = "category" in data
+    category = data.get("category") if category_set else None
+    new_register_id = data.get("cash_register_id")
+
+    group_id = m.transfer_group_id
+    if group_id:
+        if new_register_id is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Transfer hareketlerinde hesap değiştirilemez — tutar/tarih/açıklama güncellenir",
+            )
+        peers_cash, peers_bank = _transfer_peers(db, group_id)
+        for peer in peers_cash + peers_bank:
+            _refuse_bh_import_edit(peer.note)
+        for peer in peers_cash + peers_bank:
+            _apply_movement_fields(
+                peer,
+                amount=amount,
+                movement_date=movement_date,
+                note=note,
+                note_set=note_set,
+                category=category,
+                category_set=category_set,
+            )
+            _cascade_linked_party_ledger(
+                db,
+                cari_movement_id=getattr(peer, "cari_movement_id", None),
+                supplier_movement_id=getattr(peer, "supplier_movement_id", None),
+                amount=amount,
+                movement_date=movement_date,
+                note=note,
+                note_set=note_set,
+            )
+    else:
+        if new_register_id is not None and new_register_id != m.cash_register_id:
+            reg = db.get(CashRegister, new_register_id)
+            if not reg or not reg.is_active:
+                raise HTTPException(status_code=404, detail="Kasa bulunamadı")
+            m.cash_register_id = reg.id
+        _apply_movement_fields(
+            m,
+            amount=amount,
+            movement_date=movement_date,
+            note=note,
+            note_set=note_set,
+            category=category,
+            category_set=category_set,
+        )
+        _cascade_linked_party_ledger(
+            db,
+            cari_movement_id=m.cari_movement_id,
+            supplier_movement_id=m.supplier_movement_id,
+            amount=amount,
+            movement_date=movement_date,
+            note=note,
+            note_set=note_set,
+        )
+
+    db.commit()
+    db.refresh(m)
+    return _cash_movement_out(m, db=db)
+
+
 # ─── Banks ─────────────────────────────────────────────────────────────────
 
 
@@ -1143,6 +1317,89 @@ def delete_bank_movement(
     else:
         db.delete(m)
     db.commit()
+
+
+@router.put("/bank-movements/{movement_id}", response_model=BankMovementOut)
+def update_bank_movement(
+    movement_id: int,
+    payload: BankMovementUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*WRITE_ROLES)),
+) -> BankMovementOut:
+    """Düzenle — amount/date/note/(hesap); transfer peers + linked cari/supplier cascade."""
+    m = db.get(BankMovement, movement_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Banka hareketi bulunamadı")
+    _refuse_bh_import_edit(m.note)
+
+    data = payload.model_dump(exclude_unset=True)
+    amount = data.get("amount")
+    if amount is not None:
+        amount = _dec(amount)
+    movement_date = data.get("movement_date")
+    note_set = "note" in data
+    note = data.get("note") if note_set else None
+    category_set = "category" in data
+    category = data.get("category") if category_set else None
+    new_bank_id = data.get("bank_account_id")
+
+    group_id = m.transfer_group_id
+    if group_id:
+        if new_bank_id is not None:
+            raise HTTPException(
+                status_code=400,
+                detail="Transfer hareketlerinde hesap değiştirilemez — tutar/tarih/açıklama güncellenir",
+            )
+        peers_cash, peers_bank = _transfer_peers(db, group_id)
+        for peer in peers_cash + peers_bank:
+            _refuse_bh_import_edit(peer.note)
+        for peer in peers_cash + peers_bank:
+            _apply_movement_fields(
+                peer,
+                amount=amount,
+                movement_date=movement_date,
+                note=note,
+                note_set=note_set,
+                category=category,
+                category_set=category_set,
+            )
+            _cascade_linked_party_ledger(
+                db,
+                cari_movement_id=getattr(peer, "cari_movement_id", None),
+                supplier_movement_id=getattr(peer, "supplier_movement_id", None),
+                amount=amount,
+                movement_date=movement_date,
+                note=note,
+                note_set=note_set,
+            )
+    else:
+        if new_bank_id is not None and new_bank_id != m.bank_account_id:
+            acc = db.get(BankAccount, new_bank_id)
+            if not acc or not acc.is_active:
+                raise HTTPException(status_code=404, detail="Banka hesabı bulunamadı")
+            m.bank_account_id = acc.id
+        _apply_movement_fields(
+            m,
+            amount=amount,
+            movement_date=movement_date,
+            note=note,
+            note_set=note_set,
+            category=category,
+            category_set=category_set,
+        )
+        _cascade_linked_party_ledger(
+            db,
+            cari_movement_id=m.cari_movement_id,
+            supplier_movement_id=m.supplier_movement_id,
+            amount=amount,
+            movement_date=movement_date,
+            note=note,
+            note_set=note_set,
+        )
+
+    db.commit()
+    db.refresh(m)
+    return _bank_movement_out(m, db=db)
 
 
 # ─── Transfers ─────────────────────────────────────────────────────────────

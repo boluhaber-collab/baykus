@@ -39,6 +39,16 @@ class CashMovementCreate(BaseModel):
     cash_register_id: int | None = None
 
 
+class CashMovementUpdate(BaseModel):
+    """Edit kasa hareket — amount/date/note/account; transfers cascade via transfer_group_id."""
+
+    amount: Decimal | None = Field(default=None, gt=0)
+    movement_date: date | None = None
+    note: str | None = None
+    category: str | None = Field(default=None, max_length=100)
+    cash_register_id: int | None = None  # non-transfer only
+
+
 class CashMovementOut(BaseModel):
     id: int
     cash_register_id: int
@@ -108,6 +118,16 @@ class BankMovementCreate(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     note: str | None = None
     customer_id: int | None = None
+
+
+class BankMovementUpdate(BaseModel):
+    """Edit banka hareket — amount/date/note/account; transfers cascade via transfer_group_id."""
+
+    amount: Decimal | None = Field(default=None, gt=0)
+    movement_date: date | None = None
+    note: str | None = None
+    category: str | None = Field(default=None, max_length=100)
+    bank_account_id: int | None = None  # non-transfer only
 
 
 class BankMovementOut(BaseModel):

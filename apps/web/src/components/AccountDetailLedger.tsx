@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch, formatMoney } from "@/lib/api";
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch, formatMoney, type BankAccount, type CashRegister } from "@/lib/api";
 import {
   accountAciklama,
   accountHesap,
@@ -12,6 +12,7 @@ import {
   isBhImportNote,
 } from "@/lib/bhNote";
 import { DEFAULT_DATE_SORT, DateSortDir, sortByDate } from "@/lib/dateSort";
+import { toIsoDate } from "@/lib/dates";
 import SortableDateHeader from "@/components/SortableDateHeader";
 
 export type AccountLedgerRow = {
@@ -25,6 +26,9 @@ export type AccountLedgerRow = {
   customer_name?: string | null;
   bank_account_name?: string | null;
   created_by_user_name?: string | null;
+  cash_register_id?: number | null;
+  bank_account_id?: number | null;
+  transfer_group_id?: string | null;
 };
 
 export type AccountLedgerKind = "cash" | "bank";
@@ -46,7 +50,7 @@ export type AccountDetailLedgerProps = {
   movements: AccountLedgerRow[];
   hareketFallback: Record<string, string>;
   emptyLabel?: string;
-  /** cash → DELETE /api/finance/cash/movements/{id}; bank → /api/finance/bank-movements/{id} */
+  /** cash → DELETE/PUT /api/finance/cash/movements/{id}; bank → /api/finance/bank-movements/{id} */
   ledgerKind?: AccountLedgerKind;
   onRowMutated?: () => void | Promise<void>;
   onRowError?: (message: string) => void;
@@ -94,6 +98,7 @@ function RowIslemMenu({
   accountTitle,
   islem,
   ledgerKind,
+  onEdit,
   onRowMutated,
   onRowError,
   onRowOk,
@@ -102,6 +107,7 @@ function RowIslemMenu({
   accountTitle: string;
   islem: string;
   ledgerKind?: AccountLedgerKind;
+  onEdit?: (row: AccountLedgerRow) => void;
   onRowMutated?: () => void | Promise<void>;
   onRowError?: (message: string) => void;
   onRowOk?: (message: string) => void;
@@ -111,7 +117,7 @@ function RowIslemMenu({
   const wrapRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const imported = isBhImportNote(row.note);
-  const canDelete = Boolean(ledgerKind) && !imported;
+  const canMutate = Boolean(ledgerKind) && !imported;
 
   useEffect(() => {
     if (!open) return;
@@ -203,17 +209,36 @@ function RowIslemMenu({
           >
             Yazdır
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            disabled
-            title="Hareket düzenleme henüz desteklenmiyor"
-            className="bk-row-islem-disabled"
-          >
-            Düzenle
-            <span className="bk-row-islem-hint">yakında</span>
-          </button>
-          {canDelete ? (
+          {canMutate ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onEdit?.(row);
+              }}
+            >
+              Düzenle
+            </button>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              disabled
+              title={
+                imported
+                  ? "BizimHesap aktarım kaydı — düzenlenemez"
+                  : "Düzenleme bu hesap türü için bağlı değil"
+              }
+              className="bk-row-islem-disabled"
+            >
+              Düzenle
+              <span className="bk-row-islem-hint">
+                {imported ? "aktarım" : "yok"}
+              </span>
+            </button>
+          )}
+          {canMutate ? (
             <button
               type="button"
               role="menuitem"
@@ -282,6 +307,15 @@ export default function AccountDetailLedger({
   onRowOk,
 }: AccountDetailLedgerProps) {
   const [dateDir, setDateDir] = useState<DateSortDir>(DEFAULT_DATE_SORT);
+  const [editing, setEditing] = useState<AccountLedgerRow | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [editAccountId, setEditAccountId] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [cashOptions, setCashOptions] = useState<CashRegister[]>([]);
+  const [bankOptions, setBankOptions] = useState<BankAccount[]>([]);
+
   const sortedMovements = useMemo(
     () =>
       sortByDate(
@@ -292,6 +326,99 @@ export default function AccountDetailLedger({
       ),
     [movements, dateDir],
   );
+
+  const isTransfer = Boolean(editing?.transfer_group_id);
+
+  useEffect(() => {
+    if (!editing || !ledgerKind || isTransfer) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (ledgerKind === "cash") {
+          const rows = await apiFetch<CashRegister[]>("/api/finance/cash?active=true");
+          if (!cancelled) setCashOptions(rows);
+        } else {
+          const rows = await apiFetch<BankAccount[]>("/api/finance/banks?active=true");
+          if (!cancelled) setBankOptions(rows);
+        }
+      } catch {
+        /* picker optional — save still works without account change */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editing, ledgerKind, isTransfer]);
+
+  function openEdit(row: AccountLedgerRow) {
+    if (isBhImportNote(row.note)) {
+      onRowError?.("BizimHesap aktarım kaydı — düzenlenemez");
+      return;
+    }
+    if (!ledgerKind) {
+      onRowError?.("Düzenleme bu hesap türü için bağlı değil");
+      return;
+    }
+    setEditing(row);
+    setEditAmount(String(row.amount ?? ""));
+    setEditDate(toIsoDate(row.movement_date));
+    setEditNote(accountAciklama(row.note) || "");
+    const accId =
+      ledgerKind === "cash"
+        ? row.cash_register_id
+        : row.bank_account_id;
+    setEditAccountId(accId != null ? String(accId) : "");
+  }
+
+  function closeEdit() {
+    setEditing(null);
+    setEditBusy(false);
+  }
+
+  async function onSaveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editing || !ledgerKind) return;
+    const amt = Number(editAmount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      onRowError?.("Tutar 0'dan büyük olmalıdır");
+      return;
+    }
+    setEditBusy(true);
+    try {
+      const body: Record<string, unknown> = {
+        amount: amt,
+        movement_date: editDate || null,
+        note: editNote.trim() || null,
+      };
+      if (!isTransfer && editAccountId) {
+        const idNum = Number(editAccountId);
+        if (Number.isFinite(idNum) && idNum > 0) {
+          if (ledgerKind === "cash") body.cash_register_id = idNum;
+          else body.bank_account_id = idNum;
+        }
+      }
+      const path =
+        ledgerKind === "cash"
+          ? `/api/finance/cash/movements/${editing.id}`
+          : `/api/finance/bank-movements/${editing.id}`;
+      await apiFetch(path, { method: "PUT", body: JSON.stringify(body) });
+      onRowOk?.(
+        isTransfer
+          ? "Hareket güncellendi (transfer eşleri dahil)"
+          : "Hareket güncellendi",
+      );
+      closeEdit();
+      await onRowMutated?.();
+    } catch (err) {
+      onRowError?.(err instanceof Error ? err.message : "Düzenleme hatası");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  const editIslem = editing
+    ? hareketLabel(editing.movement_type, editing.note, hareketFallback)
+    : "";
 
   return (
     <div className="space-y-3">
@@ -333,7 +460,102 @@ export default function AccountDetailLedger({
       {error ? <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div> : null}
       {okMsg ? <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{okMsg}</div> : null}
 
-      {panel}
+      {editing ? (
+        <form
+          onSubmit={(e) => void onSaveEdit(e)}
+          className="rounded border border-sky-200 bg-sky-50 p-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm"
+        >
+          <div className="sm:col-span-2 lg:col-span-4 font-semibold text-slate-800">
+            Hareketi Düzenle · #{editing.id}
+            {editIslem ? (
+              <span className="ml-2 font-normal text-baykus-muted">({editIslem})</span>
+            ) : null}
+            {isTransfer ? (
+              <span className="ml-2 text-xs font-normal text-amber-800">
+                Transfer — tutar/tarih/açıklama eş harekete de uygulanır
+              </span>
+            ) : null}
+          </div>
+          <label className="text-xs">
+            <span className="block mb-0.5 opacity-80">Tutar *</span>
+            <input
+              required
+              type="number"
+              min="0.01"
+              step="0.01"
+              className="bk-input"
+              value={editAmount}
+              onChange={(e) => setEditAmount(e.target.value)}
+            />
+          </label>
+          <label className="text-xs">
+            <span className="block mb-0.5 opacity-80">Tarih</span>
+            <input
+              type="date"
+              className="bk-input"
+              value={editDate}
+              onChange={(e) => setEditDate(e.target.value)}
+            />
+          </label>
+          {!isTransfer && ledgerKind === "cash" && cashOptions.length > 0 ? (
+            <label className="text-xs">
+              <span className="block mb-0.5 opacity-80">Kasa</span>
+              <select
+                className="bk-input"
+                value={editAccountId}
+                onChange={(e) => setEditAccountId(e.target.value)}
+              >
+                {cashOptions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {!isTransfer && ledgerKind === "bank" && bankOptions.length > 0 ? (
+            <label className="text-xs">
+              <span className="block mb-0.5 opacity-80">Hesap</span>
+              <select
+                className="bk-input"
+                value={editAccountId}
+                onChange={(e) => setEditAccountId(e.target.value)}
+              >
+                {bankOptions.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                    {a.institution ? ` · ${a.institution}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label className={`text-xs ${isTransfer ? "sm:col-span-2" : "sm:col-span-2 lg:col-span-2"}`}>
+            <span className="block mb-0.5 opacity-80">Açıklama</span>
+            <input
+              className="bk-input"
+              value={editNote}
+              onChange={(e) => setEditNote(e.target.value)}
+              placeholder="İsteğe bağlı"
+            />
+          </label>
+          <div className="flex items-end gap-2 lg:col-span-4">
+            <button type="submit" disabled={editBusy} className="bk-btn bk-btn-primary text-xs">
+              {editBusy ? "…" : "Kaydet"}
+            </button>
+            <button
+              type="button"
+              className="bk-btn bk-btn-ghost text-xs"
+              disabled={editBusy}
+              onClick={closeEdit}
+            >
+              İptal
+            </button>
+          </div>
+        </form>
+      ) : (
+        panel
+      )}
 
       <div className="bk-table-wrap">
         <table className="bk-table text-sm">
@@ -369,8 +591,9 @@ export default function AccountDetailLedger({
               const kullanici = accountKullanici(m.note, m.created_by_user_name);
               const hesap = accountHesap(m.note, m.customer_name);
               const aciklama = accountAciklama(m.note);
+              const rowHighlight = editing?.id === m.id ? "bg-sky-50/80" : undefined;
               return (
-                <tr key={m.id}>
+                <tr key={m.id} className={rowHighlight}>
                   <td className="whitespace-nowrap text-xs">{formatTrDate(m.movement_date)}</td>
                   <td className="whitespace-nowrap font-medium">{islem}</td>
                   <td className="text-xs text-slate-600">{kullanici || "—"}</td>
@@ -395,6 +618,7 @@ export default function AccountDetailLedger({
                       accountTitle={title}
                       islem={islem}
                       ledgerKind={ledgerKind}
+                      onEdit={openEdit}
                       onRowMutated={onRowMutated}
                       onRowError={onRowError}
                       onRowOk={onRowOk}
