@@ -6,23 +6,34 @@ import re
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
 from app.models.customer import Customer
 from app.models.mail import MailMessage
+from app.models.settings_model import AppSetting
 from app.models.supplier import Supplier
 from app.models.user import User
 from app.schemas.mail import (
     MailActionResult,
+    MailAttachmentOut,
     MailMessageOut,
     MailMessageUpdate,
     MailSendRequest,
     MailSettingsOut,
     MailSettingsUpdate,
+    MailSyncStatusOut,
 )
 from app.services.mail_config import MASK, MailConfig, load_mail_config, public_settings_dict, save_mail_config
-from app.services.mail_transport import fetch_recent_imap, send_email, test_imap, test_smtp
+from app.services.mail_sync import (
+    build_eml_bytes,
+    load_sync_state,
+    parse_attachments_meta,
+    resolve_attachment_path,
+    run_manual_sync,
+)
+from app.services.mail_transport import send_email, test_imap, test_smtp
 
 router = APIRouter(prefix="/mail", tags=["mail"])
 
@@ -126,6 +137,16 @@ def _out(row: MailMessage, db: Session | None = None) -> MailMessageOut:
         c = db.query(Customer).filter(Customer.id == row.customer_id).first()
         if c:
             name = (c.company or "").strip() or c.name
+    atts = [
+        MailAttachmentOut(
+            filename=str(a.get("filename") or a.get("stored_name") or "ek"),
+            content_type=str(a.get("content_type") or "application/octet-stream"),
+            size=int(a.get("size") or 0),
+            stored_name=str(a.get("stored_name") or ""),
+        )
+        for a in parse_attachments_meta(getattr(row, "attachments_json", None))
+        if a.get("stored_name")
+    ]
     return MailMessageOut(
         id=row.id,
         folder=row.folder,
@@ -144,7 +165,18 @@ def _out(row: MailMessage, db: Session | None = None) -> MailMessageOut:
         customer_name=name,
         error=row.error,
         created_at=row.created_at,
+        attachments=atts,
     )
+
+
+def _settings_map(db: Session) -> dict[str, str]:
+    return {s.key: (s.value or "") for s in db.query(AppSetting).all()}
+
+
+def _safe_download_name(name: str, fallback: str) -> str:
+    raw = (name or fallback or "dosya").strip() or fallback
+    cleaned = re.sub(r'[\\/:*?"<>|]+', "_", raw)
+    return cleaned[:120] or fallback
 
 
 @router.get("/settings", response_model=MailSettingsOut)
@@ -347,6 +379,31 @@ def send_mail(
     return _out(row, db)
 
 
+@router.get("/sync-status", response_model=MailSyncStatusOut)
+def sync_status(
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+) -> MailSyncStatusOut:
+    st = load_sync_state()
+    last_at = st.get("last_sync_at")
+    parsed_at: datetime | None = None
+    if isinstance(last_at, str) and last_at.strip():
+        try:
+            parsed_at = datetime.fromisoformat(last_at.replace("Z", ""))
+        except Exception:
+            parsed_at = None
+    cfg = load_mail_config()
+    return MailSyncStatusOut(
+        last_sync_at=parsed_at,
+        last_ok=st.get("last_ok"),
+        last_message=str(st.get("last_message") or ""),
+        imported=int(st.get("imported") or 0),
+        linked=int(st.get("linked") or 0),
+        skipped=bool(st.get("skipped")),
+        imap_configured=bool(cfg.imap_configured),
+        autosync_interval_minutes=30,
+    )
+
+
 @router.post("/sync", response_model=MailActionResult)
 def sync_inbox(
     limit: int = Query(40, ge=1, le=100),
@@ -354,53 +411,86 @@ def sync_inbox(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış", "muhasebe")),
 ) -> MailActionResult:
-    result = fetch_recent_imap(limit=limit, unseen_only=unseen_only)
-    if not result.get("ok"):
-        return MailActionResult(ok=False, message=str(result.get("message") or "Senkron başarısız"), imported=0, linked=0)
-
-    imported = 0
-    linked = 0
-    for m in result.get("messages") or []:
-        mid = m.get("message_id")
-        uid = m.get("imap_uid")
-        exists = None
-        if mid:
-            exists = db.query(MailMessage).filter(MailMessage.message_id == mid).first()
-        if not exists and uid:
-            exists = (
-                db.query(MailMessage)
-                .filter(MailMessage.folder == "inbox", MailMessage.imap_uid == str(uid))
-                .first()
-            )
-        if exists:
-            continue
-        cust_id = _match_customer(db, m.get("from_addr") or "")
-        sup_id = _match_supplier(db, m.get("from_addr") or "") if not cust_id else None
-        if cust_id or sup_id:
-            linked += 1
-        row = MailMessage(
-            folder="inbox",
-            direction="in",
-            message_id=mid,
-            imap_uid=str(uid) if uid else None,
-            from_addr=m.get("from_addr") or "",
-            to_addrs=m.get("to_addrs") or "",
-            cc_addrs=m.get("cc_addrs"),
-            subject=m.get("subject") or "(konu yok)",
-            body_text=m.get("body_text") or "",
-            body_html=m.get("body_html"),
-            date_sent=m.get("date_sent"),
-            is_read=bool(m.get("is_read")),
-            customer_id=cust_id,
-            supplier_id=sup_id,
-        )
-        db.add(row)
-        imported += 1
-    db.commit()
+    result = run_manual_sync(db, limit=limit, unseen_only=unseen_only)
     return MailActionResult(
-        ok=True,
-        message=f"{imported} yeni mesaj içe aktarıldı"
-        + (f", {linked} müşteri/tedarikçiye bağlandı" if linked else ""),
-        imported=imported,
-        linked=linked,
+        ok=bool(result.get("ok")),
+        message=str(result.get("message") or ""),
+        imported=int(result.get("imported") or 0),
+        linked=int(result.get("linked") or 0),
+    )
+
+
+@router.get("/messages/{message_id}/pdf")
+def message_pdf(
+    message_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+) -> Response:
+    row = db.query(MailMessage).filter(MailMessage.id == message_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Mesaj bulunamadı")
+    from app.services.pdf import build_mail_message_pdf
+
+    meta = parse_attachments_meta(getattr(row, "attachments_json", None))
+    pdf = build_mail_message_pdf(
+        subject=row.subject or "(konu yok)",
+        from_addr=row.from_addr or "",
+        to_addrs=row.to_addrs or "",
+        cc_addrs=row.cc_addrs,
+        date_sent=row.date_sent,
+        body_text=row.body_text or "",
+        folder=row.folder or "inbox",
+        settings=_settings_map(db),
+        attachment_names=[str(a.get("filename") or "") for a in meta if a.get("filename")],
+    )
+    fname = _safe_download_name(row.subject or f"mail-{row.id}", f"mail-{row.id}") + ".pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/messages/{message_id}/eml")
+def message_eml(
+    message_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+) -> Response:
+    row = db.query(MailMessage).filter(MailMessage.id == message_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Mesaj bulunamadı")
+    raw = build_eml_bytes(row)
+    fname = _safe_download_name(row.subject or f"mail-{row.id}", f"mail-{row.id}") + ".eml"
+    return Response(
+        content=raw,
+        media_type="message/rfc822",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/messages/{message_id}/attachments/{stored_name}")
+def download_attachment(
+    message_id: int,
+    stored_name: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+) -> Response:
+    row = db.query(MailMessage).filter(MailMessage.id == message_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Mesaj bulunamadı")
+    meta = parse_attachments_meta(getattr(row, "attachments_json", None))
+    match = next((a for a in meta if str(a.get("stored_name") or "") == stored_name), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="Ek bulunamadı")
+    path = resolve_attachment_path(message_id, stored_name)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Ek dosyası bulunamadı")
+    data = path.read_bytes()
+    fname = _safe_download_name(str(match.get("filename") or stored_name), stored_name)
+    ctype = str(match.get("content_type") or "application/octet-stream")
+    return Response(
+        content=data,
+        media_type=ctype,
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )

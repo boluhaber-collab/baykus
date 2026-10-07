@@ -51,6 +51,24 @@ class MailActionResult(BaseModel):
     linked: int | None = None
 
 
+class MailSyncStatusOut(BaseModel):
+    last_sync_at: datetime | None = None
+    last_ok: bool | None = None
+    last_message: str = ""
+    imported: int = 0
+    linked: int = 0
+    skipped: bool = False
+    imap_configured: bool = False
+    autosync_interval_minutes: int = 30
+
+
+class MailAttachmentOut(BaseModel):
+    filename: str
+    content_type: str = "application/octet-stream"
+    size: int = 0
+    stored_name: str
+
+
 class MailSendRequest(BaseModel):
     to: str = Field(..., min_length=1)
     subject: str = ""
@@ -78,6 +96,7 @@ class MailMessageOut(BaseModel):
     customer_name: str | None = None
     error: str | None = None
     created_at: datetime | None = None
+    attachments: list[MailAttachmentOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

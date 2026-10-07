@@ -76,6 +76,43 @@ def _decode_header_value(raw: str | None) -> str:
         return raw
 
 
+def _extract_attachments(msg: email.message.Message) -> list[dict[str, Any]]:
+    """Return attachment payloads (filename, content_type, data bytes). Cap size per file."""
+    out: list[dict[str, Any]] = []
+    max_bytes = 15 * 1024 * 1024
+    for part in msg.walk():
+        if part.is_multipart():
+            continue
+        ctype = (part.get_content_type() or "").lower()
+        disp = str(part.get("Content-Disposition") or "")
+        filename = part.get_filename()
+        is_attach = "attachment" in disp.lower() or bool(filename)
+        if not is_attach:
+            continue
+        # Skip pure body parts mistaken as attach
+        if not filename and ctype in ("text/plain", "text/html"):
+            continue
+        try:
+            payload = part.get_payload(decode=True)
+        except Exception:
+            payload = None
+        if not isinstance(payload, (bytes, bytearray)) or not payload:
+            continue
+        if len(payload) > max_bytes:
+            continue
+        fname = _decode_header_value(filename) if filename else f"ek-{len(out) + 1}"
+        out.append(
+            {
+                "filename": (fname or f"ek-{len(out) + 1}")[:200],
+                "content_type": ctype or "application/octet-stream",
+                "data": bytes(payload),
+            }
+        )
+        if len(out) >= 20:
+            break
+    return out
+
+
 def _extract_body(msg: email.message.Message) -> tuple[str, str | None]:
     text_parts: list[str] = []
     html_parts: list[str] = []
@@ -319,6 +356,7 @@ def fetch_recent_imap(
                 continue
             msg = email.message_from_bytes(bytes(raw))
             body_text, body_html = _extract_body(msg)
+            attachments = _extract_attachments(msg)
             date_sent = None
             date_hdr = msg.get("Date")
             if date_hdr:
@@ -342,6 +380,7 @@ def fetch_recent_imap(
                     "body_html": (body_html[:200000] if body_html else None),
                     "date_sent": date_sent,
                     "is_read": not unseen_only,
+                    "attachments": attachments,
                 }
             )
         return {

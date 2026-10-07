@@ -3,9 +3,17 @@
 import Link from "next/link";
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Customer, apiFetch } from "@/lib/api";
+import { Customer, apiFetch, downloadAuthFile, downloadPdf } from "@/lib/api";
 import { formatTrDateTime } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 import StatusFooter from "@/components/StatusFooter";
+
+type MailAttachment = {
+  filename: string;
+  content_type: string;
+  size: number;
+  stored_name: string;
+};
 
 type MailMsg = {
   id: number;
@@ -22,6 +30,7 @@ type MailMsg = {
   customer_id?: number | null;
   customer_name?: string | null;
   error?: string | null;
+  attachments?: MailAttachment[];
 };
 
 type MailSettings = {
@@ -30,7 +39,25 @@ type MailSettings = {
   from_email?: string;
 };
 
+type SyncStatus = {
+  last_sync_at?: string | null;
+  last_ok?: boolean | null;
+  last_message?: string;
+  imported?: number;
+  imap_configured?: boolean;
+  autosync_interval_minutes?: number;
+};
+
 type Tab = "inbox" | "sent" | "compose";
+
+const LIST_POLL_MS = 5 * 60 * 1000; // 5 dk — yerel liste yenileme
+
+function formatBytes(n: number): string {
+  if (!n || n < 0) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function MailPageInner() {
   const sp = useSearchParams();
@@ -42,6 +69,7 @@ function MailPageInner() {
   const [messages, setMessages] = useState<MailMsg[]>([]);
   const [selected, setSelected] = useState<MailMsg | null>(null);
   const [settings, setSettings] = useState<MailSettings | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -63,22 +91,35 @@ function MailPageInner() {
     }
   }, []);
 
-  const loadMessages = useCallback(async (folder: "inbox" | "sent") => {
-    setError("");
+  const loadSyncStatus = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ folder, limit: "100" });
-      if (q.trim()) params.set("q", q.trim());
-      if (customerIdParam) params.set("customer_id", customerIdParam);
-      const rows = await apiFetch<MailMsg[]>(`/api/mail/messages?${params}`);
-      setMessages(rows);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Liste yüklenemedi");
+      const s = await apiFetch<SyncStatus>("/api/mail/sync-status");
+      setSyncStatus(s);
+    } catch {
+      /* ignore */
     }
-  }, [q, customerIdParam]);
+  }, []);
+
+  const loadMessages = useCallback(
+    async (folder: "inbox" | "sent") => {
+      setError("");
+      try {
+        const params = new URLSearchParams({ folder, limit: "100" });
+        if (q.trim()) params.set("q", q.trim());
+        if (customerIdParam) params.set("customer_id", customerIdParam);
+        const rows = await apiFetch<MailMsg[]>(`/api/mail/messages?${params}`);
+        setMessages(rows);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Liste yüklenemedi");
+      }
+    },
+    [q, customerIdParam],
+  );
 
   useEffect(() => {
     void loadSettings();
-  }, [loadSettings]);
+    void loadSyncStatus();
+  }, [loadSettings, loadSyncStatus]);
 
   useEffect(() => {
     if (tab === "inbox" || tab === "sent") {
@@ -86,6 +127,16 @@ function MailPageInner() {
       setSelected(null);
     }
   }, [tab, loadMessages]);
+
+  // Yerel listeyi 5 dakikada bir yenile + senkron durumunu oku
+  useEffect(() => {
+    if (tab !== "inbox" && tab !== "sent") return;
+    const id = window.setInterval(() => {
+      void loadMessages(tab);
+      void loadSyncStatus();
+    }, LIST_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [tab, loadMessages, loadSyncStatus]);
 
   // Prefill from customer
   useEffect(() => {
@@ -107,7 +158,15 @@ function MailPageInner() {
     })();
   }, [customerIdParam]);
 
-  const unread = useMemo(() => messages.filter((m) => !m.is_read && m.folder === "inbox").length, [messages]);
+  const unread = useMemo(
+    () => messages.filter((m) => !m.is_read && m.folder === "inbox").length,
+    [messages],
+  );
+
+  const sonSenkronLabel = useMemo(() => {
+    if (!syncStatus?.last_sync_at) return "Henüz senkron yok";
+    return formatTrDateTime(syncStatus.last_sync_at);
+  }, [syncStatus]);
 
   async function openMessage(m: MailMsg) {
     setError("");
@@ -129,6 +188,7 @@ function MailPageInner() {
         method: "POST",
       });
       setMsg(r.message);
+      await loadSyncStatus();
       if (tab === "inbox") await loadMessages("inbox");
       else setTab("inbox");
     } catch (e) {
@@ -176,6 +236,42 @@ function MailPageInner() {
     setTab("compose");
   }
 
+  async function printSelected() {
+    if (!selected) return;
+    setError("");
+    try {
+      await printPdfFromApi(`/api/mail/messages/${selected.id}/pdf`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Yazdırma hatası");
+    }
+  }
+
+  async function downloadSelectedPdf() {
+    if (!selected) return;
+    setError("");
+    try {
+      const safe = (selected.subject || `mail-${selected.id}`)
+        .replace(/[\\/:*?"<>|]+/g, "_")
+        .slice(0, 80);
+      await downloadPdf(`/api/mail/messages/${selected.id}/pdf`, `${safe || "mail"}.pdf`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "PDF indirilemedi");
+    }
+  }
+
+  async function downloadSelectedEml() {
+    if (!selected) return;
+    setError("");
+    try {
+      const safe = (selected.subject || `mail-${selected.id}`)
+        .replace(/[\\/:*?"<>|]+/g, "_")
+        .slice(0, 80);
+      await downloadAuthFile(`/api/mail/messages/${selected.id}/eml`, `${safe || "mail"}.eml`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "EML indirilemedi");
+    }
+  }
+
   const input =
     "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-baykus-500";
 
@@ -185,11 +281,20 @@ function MailPageInner() {
         <div>
           <h1 className="text-lg font-bold text-baykus-text leading-tight">E-Posta</h1>
           <p className="text-[11px] text-baykus-muted">
-            SMTP ile gönder · IMAP ile gelen kutusu · müşteri carisine bağlanır
+            SMTP ile gönder · IMAP ile gelen kutusu · otomatik senkron 30 dk
+          </p>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Son senkron: <span className="font-medium text-slate-700">{sonSenkronLabel}</span>
+            {syncStatus?.last_ok === false && syncStatus.last_message ? (
+              <span className="text-amber-700"> · {syncStatus.last_message}</span>
+            ) : null}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/settings/mail" className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">
+          <Link
+            href="/settings/mail"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+          >
             E-Posta Ayarları
           </Link>
           <button
@@ -284,7 +389,9 @@ function MailPageInner() {
                   <div className="text-sm text-slate-900 truncate">{m.subject || "(konu yok)"}</div>
                   <div className="text-[11px] text-slate-400 flex justify-between gap-2">
                     <span className="truncate">{m.customer_name || ""}</span>
-                    <span className="shrink-0">{m.date_sent ? formatTrDateTime(m.date_sent) : ""}</span>
+                    <span className="shrink-0">
+                      {m.date_sent ? formatTrDateTime(m.date_sent) : ""}
+                    </span>
                   </div>
                   {m.error && <div className="text-[11px] text-red-600 truncate">{m.error}</div>}
                 </button>
@@ -333,14 +440,67 @@ function MailPageInner() {
                       )}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={replyTo}
-                    className="rounded-lg bg-baykus-700 text-white px-3 py-1.5 text-sm"
-                  >
-                    Yanıtla
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void printSelected()}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+                    >
+                      Yazdır
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void downloadSelectedPdf()}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+                    >
+                      PDF İndir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void downloadSelectedEml()}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+                    >
+                      EML İndir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={replyTo}
+                      className="rounded-lg bg-baykus-700 text-white px-3 py-1.5 text-sm"
+                    >
+                      Yanıtla
+                    </button>
+                  </div>
                 </div>
+
+                {selected.attachments && selected.attachments.length > 0 && (
+                  <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-xs font-semibold text-slate-600 mb-1">Ekler</div>
+                    <ul className="space-y-1">
+                      {selected.attachments.map((a) => (
+                        <li key={a.stored_name} className="text-sm">
+                          <button
+                            type="button"
+                            className="text-baykus-700 hover:underline"
+                            onClick={() =>
+                              void downloadAuthFile(
+                                `/api/mail/messages/${selected.id}/attachments/${encodeURIComponent(a.stored_name)}`,
+                                a.filename || a.stored_name,
+                              )
+                            }
+                          >
+                            {a.filename || a.stored_name}
+                          </button>
+                          {a.size ? (
+                            <span className="text-[11px] text-slate-400 ml-2">
+                              {formatBytes(a.size)}
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 <pre className="whitespace-pre-wrap text-sm text-slate-800 font-sans border-t pt-3">
                   {selected.body_text || "(içerik yok)"}
                 </pre>
@@ -416,6 +576,7 @@ function MailPageInner() {
       <StatusFooter
         onRefresh={() => {
           void loadSettings();
+          void loadSyncStatus();
           if (tab === "inbox" || tab === "sent") void loadMessages(tab);
         }}
       />

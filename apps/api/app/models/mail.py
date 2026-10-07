@@ -34,4 +34,6 @@ class MailMessage(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     error: Mapped[str | None] = mapped_column(String(500))
+    # JSON list: [{filename, content_type, size, stored_name}]
+    attachments_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

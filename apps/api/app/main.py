@@ -85,6 +85,14 @@ def _ensure_lookup_indexes() -> None:
     except Exception as _exc:
         print(f"[baykus] startup mail migrate error: {_exc}", flush=True)
 
+    # E-posta: IMAP otomatik senkron (30 dk)
+    try:
+        from app.services.mail_sync import start_mail_autosync
+
+        start_mail_autosync()
+    except Exception as _exc:
+        print(f"[baykus] mail autosync start error: {_exc}", flush=True)
+
 
 # Lock mode gate runs inside CORS (added last = outermost in Starlette)
 app.add_middleware(LockModeMiddleware)

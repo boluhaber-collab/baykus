@@ -1031,3 +1031,103 @@ def build_purchase_pdf(purchase: Any, settings: dict[str, str] | None = None) ->
     pdf_modern_altbilgi(c, width, sayfa_no, settings)
     c.save()
     return buf.getvalue()
+
+
+def build_mail_message_pdf(
+    *,
+    subject: str,
+    from_addr: str,
+    to_addrs: str,
+    cc_addrs: str | None,
+    date_sent: Any,
+    body_text: str,
+    folder: str = "inbox",
+    settings: dict[str, str] | None = None,
+    attachment_names: list[str] | None = None,
+) -> bytes:
+    """E-posta dökümü — antetli letterhead, Kimden/Kime/Tarih/Konu + gövde."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    buf, c, width, height = _new_doc()
+    settings = settings or {}
+    alt = _alt_baslik_from_settings(settings, "Baykuş Baskı")
+    title = "Gelen E-Posta" if folder == "inbox" else "Gönderilen E-Posta"
+    y = pdf_modern_baslik(c, width, height, title, alt, settings)
+    font = pdf_font_ayarla()
+
+    bilgiler = [
+        ("Konu", _s(subject, "(konu yok)")[:80]),
+        ("Tarih", _date_tr(date_sent)),
+        ("Kimden", _s(from_addr)[:80]),
+        ("Kime", _s(to_addrs)[:80]),
+    ]
+    if cc_addrs:
+        bilgiler.append(("Cc", _s(cc_addrs)[:80]))
+    y = _info_boxes_two_col(c, y, bilgiler, per_col=3)
+
+    if attachment_names:
+        names = ", ".join(_s(n) for n in attachment_names[:8])
+        if len(attachment_names) > 8:
+            names += f" (+{len(attachment_names) - 8})"
+        pdf_modern_kutu(c, 1.4 * cm, y, 18.3 * cm, 0.74 * cm, "Ekler", names[:120])
+        y -= 1.1 * cm
+
+    # Body
+    y, sayfa_no = _ensure_space(c, width, height, y, 2.5 * cm, 1, title, alt, settings)
+    c.setFont(font, 9)
+    c.setFillColorRGB(0.2, 0.2, 0.2)
+    c.drawString(1.4 * cm, y, "Mesaj")
+    y -= 0.35 * cm
+    c.setStrokeColorRGB(0.85, 0.85, 0.85)
+    c.line(1.4 * cm, y, width - 1.4 * cm, y)
+    y -= 0.45 * cm
+    c.setFillColorRGB(0.1, 0.1, 0.1)
+    c.setFont(font, 9.5)
+
+    max_w = width - 2.8 * cm
+    body = (body_text or "(içerik yok)").replace("\r\n", "\n").replace("\r", "\n")
+    # Cap very long bodies for PDF
+    if len(body) > 20000:
+        body = body[:20000] + "\n\n[… içerik kısaltıldı …]"
+
+    def wrap_line(line: str) -> list[str]:
+        if not line:
+            return [""]
+        words = line.split(" ")
+        lines: list[str] = []
+        cur = ""
+        for w in words:
+            trial = w if not cur else f"{cur} {w}"
+            if stringWidth(trial, font, 9.5) <= max_w:
+                cur = trial
+            else:
+                if cur:
+                    lines.append(cur)
+                # hard-break oversized token
+                if stringWidth(w, font, 9.5) > max_w:
+                    chunk = ""
+                    for ch in w:
+                        if stringWidth(chunk + ch, font, 9.5) <= max_w:
+                            chunk += ch
+                        else:
+                            if chunk:
+                                lines.append(chunk)
+                            chunk = ch
+                    cur = chunk
+                else:
+                    cur = w
+        if cur or not lines:
+            lines.append(cur)
+        return lines
+
+    for para in body.split("\n"):
+        for line in wrap_line(para):
+            y, sayfa_no = _ensure_space(c, width, height, y, 1.8 * cm, sayfa_no, title, alt, settings)
+            c.setFont(font, 9.5)
+            c.setFillColorRGB(0.1, 0.1, 0.1)
+            c.drawString(1.4 * cm, y, line)
+            y -= 0.38 * cm
+
+    pdf_modern_altbilgi(c, width, sayfa_no, settings)
+    c.save()
+    return buf.getvalue()
