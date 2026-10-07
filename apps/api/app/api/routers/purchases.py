@@ -457,6 +457,32 @@ def get_purchase(
     return _purchase_out(purchase)
 
 
+@router.get("/{purchase_id}/pdf")
+def purchase_pdf(
+    purchase_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ_ROLES)),
+):
+    """Satın alma belgesi — antetli letterhead PDF."""
+    from fastapi.responses import Response
+    from app.models.settings_model import AppSetting
+    from app.services.pdf import build_purchase_pdf
+    from sqlalchemy.orm.exc import NoResultFound
+
+    try:
+        purchase = _reload_purchase(db, purchase_id)
+    except NoResultFound:
+        raise HTTPException(status_code=404, detail="Satın alma bulunamadı")
+    settings_map = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
+    pdf_bytes = build_purchase_pdf(purchase, settings_map)
+    num = purchase.purchase_number or purchase_id
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="alis-{num}.pdf"'},
+    )
+
+
 @router.put("/{purchase_id}", response_model=PurchaseOut)
 def update_purchase(
     purchase_id: int,

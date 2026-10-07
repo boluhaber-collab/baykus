@@ -896,3 +896,138 @@ def build_supplier_voucher_pdf(
     pdf_modern_altbilgi(c, width, 1, settings)
     c.save()
     return buf.getvalue()
+
+
+def build_tabular_report_pdf(
+    title: str,
+    columns: list[str],
+    rows: list[list[Any]],
+    settings: dict[str, str] | None = None,
+    *,
+    subtitle: str | None = None,
+    summary_boxes: list[tuple[str, str]] | None = None,
+    table_title: str = "",
+    ratios: list[float] | None = None,
+    max_rows: int = 500,
+) -> bytes:
+    """Generic antetli list/report PDF — sales, stock, receivables, purchases, etc."""
+    buf, c, width, height = _new_doc()
+    settings = settings or {}
+    alt = _alt_baslik_from_settings(settings, subtitle or "Baykuş Baskı")
+    y = pdf_modern_baslik(c, width, height, title, alt, settings)
+
+    boxes = list(summary_boxes or [])
+    if boxes:
+        # Lay out as pairs across the page (max 4 boxes)
+        boxes = boxes[:4]
+        n = len(boxes)
+        gap = 0.3 * cm
+        usable = 18.2 * cm
+        box_w = (usable - gap * (n - 1)) / n if n else usable
+        x = 1.4 * cm
+        for label, value in boxes:
+            pdf_modern_kutu(c, x, y, box_w, 0.9 * cm, label, str(value))
+            x += box_w + gap
+        y -= 1.35 * cm
+
+    limited = rows[:max_rows]
+    if not limited:
+        limited = [["—"] + [""] * (len(columns) - 1)] if columns else [["Kayıt yok"]]
+
+    y, sayfa_no = pdf_excel_tablo(
+        c,
+        width,
+        height,
+        y,
+        table_title or title,
+        columns,
+        limited,
+        oranlar=ratios,
+        sayfa_baslik=title,
+        alt_baslik=alt,
+        settings=settings,
+    )
+    if len(rows) > max_rows:
+        font = pdf_font_ayarla()
+        c.setFont(font, 8)
+        c.setFillColorRGB(0.35, 0.35, 0.35)
+        c.drawString(1.4 * cm, 1.65 * cm, f"Not: İlk {max_rows} satır yazdırıldı (toplam {len(rows)}).")
+        c.setFillColorRGB(0, 0, 0)
+    pdf_modern_altbilgi(c, width, sayfa_no, settings)
+    c.save()
+    return buf.getvalue()
+
+
+def build_purchase_pdf(purchase: Any, settings: dict[str, str] | None = None) -> bytes:
+    """Satın alma belgesi PDF — antetli letterhead."""
+    buf, c, width, height = _new_doc()
+    settings = settings or {}
+    alt = _alt_baslik_from_settings(settings, "Baykuş Baskı")
+    y = pdf_modern_baslik(c, width, height, "Satın Alma Belgesi", alt, settings)
+
+    supplier = getattr(purchase, "supplier", None)
+    supplier_name = getattr(supplier, "name", None) or "—"
+    bilgiler = [
+        ("Belge No", _s(getattr(purchase, "purchase_number", None), "—")),
+        ("Tarih", _date_tr(getattr(purchase, "purchase_date", None))),
+        ("Tedarikçi", _s(supplier_name)),
+        ("Durum", _s(getattr(purchase, "status", None), "—")),
+        ("Ara toplam", _money(getattr(purchase, "subtotal", 0))),
+        ("KDV / vergi", _money(getattr(purchase, "tax_amount", 0))),
+    ]
+    y = _info_boxes_two_col(c, y, bilgiler, per_col=3)
+
+    pdf_modern_kutu(
+        c,
+        10.7 * cm,
+        y,
+        8.6 * cm,
+        1.15 * cm,
+        "Genel Toplam",
+        _money(getattr(purchase, "total_amount", 0)),
+        fill=(0.90, 0.96, 0.92),
+    )
+    y -= 1.55 * cm
+
+    satirlar: list[list[Any]] = []
+    for line in getattr(purchase, "lines", None) or []:
+        satirlar.append(
+            [
+                _s(getattr(line, "description", None))[:48],
+                _qty(getattr(line, "quantity", 0)),
+                _money(getattr(line, "unit_cost", 0)),
+                _money(getattr(line, "line_total", None) or (
+                    float(getattr(line, "quantity", 0) or 0)
+                    * float(getattr(line, "unit_cost", 0) or 0)
+                )),
+            ]
+        )
+    if not satirlar:
+        satirlar.append(["Kalem yok", "", "", ""])
+
+    y, sayfa_no = pdf_excel_tablo(
+        c,
+        width,
+        height,
+        y,
+        "Kalemler",
+        ["Ürün / Açıklama", "Miktar", "Birim", "Tutar"],
+        satirlar,
+        oranlar=[4.0, 1.0, 1.4, 1.4],
+        sayfa_baslik="Satın Alma Belgesi",
+        alt_baslik=alt,
+        settings=settings,
+    )
+
+    notes = _display_note(getattr(purchase, "notes", None))
+    if notes:
+        font = pdf_font_ayarla()
+        y, sayfa_no = _ensure_space(c, width, height, y, 1.5 * cm, sayfa_no, "Satın Alma Belgesi", alt, settings)
+        c.setFont(font, 8.5)
+        c.setFillColorRGB(0.25, 0.25, 0.25)
+        c.drawString(1.4 * cm, y, f"Not: {notes[:120]}")
+        c.setFillColorRGB(0, 0, 0)
+
+    pdf_modern_altbilgi(c, width, sayfa_no, settings)
+    c.save()
+    return buf.getvalue()

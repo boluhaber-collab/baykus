@@ -26,6 +26,7 @@ import {
   sortSizes,
   stockFiltersToProductQuery,
 } from "@/lib/stockFilters";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 type StockRow = {
   product_id: number;
@@ -338,7 +339,18 @@ export default function StockReportPage() {
             >
               CSV indir
             </button>
-            <button onClick={() => window.print()} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50">
+            <button
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await printPdfFromApi(`/api/reports/stock?${qs}&format=pdf`);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Yazdırma hatası");
+                  }
+                })();
+              }}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+            >
               Yazdır
             </button>
           </>

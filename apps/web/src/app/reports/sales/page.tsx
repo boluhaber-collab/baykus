@@ -20,6 +20,7 @@ import {
 } from "@/lib/api";
 import { useDateSort } from "@/hooks/useDateSort";
 import { formatTrDate, formatTrDatesInText, localToday } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 type SalesRow = {
   id: number;
@@ -118,7 +119,15 @@ export default function SalesReportPage() {
               CSV indir
             </button>
             <button
-              onClick={() => window.print()}
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await printPdfFromApi(`/api/reports/sales?${qs}&format=pdf`);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Yazdırma hatası");
+                  }
+                })();
+              }}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
             >
               Yazdır

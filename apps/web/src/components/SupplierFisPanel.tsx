@@ -5,6 +5,7 @@ import { PayableItem, Supplier, apiFetch, downloadPdf, formatMoney } from "@/lib
 import LiveSearchSelect, { useSupplierSearch } from "@/components/LiveSearchSelect";
 import { displayCode } from "@/lib/productLabel";
 import { localToday } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 export type FisTip = "Alacak Fişi" | "Borç Fişi";
 
@@ -140,80 +141,45 @@ export default function SupplierFisPanel({
     }
   }
 
-  async function printPdf() {
+  function voucherPdfPath(): string | null {
     const sid = Number(supplierId);
+    if (!sid) return null;
     const amount = Number(String(tutar).replace(",", "."));
-    if (!sid || !(amount > 0)) {
-      // print last saved via query if we have lastId — else draft from form
-      if (!sid) {
-        setError("Yazdırma için tedarikçi seçin.");
-        return;
-      }
-    }
-    try {
-      const p = new URLSearchParams({
-        tip: fisTip,
-        amount: String(amount > 0 ? amount : 0),
-        date: tarih,
-        due: vade,
-        note: aciklama.trim(),
-      });
-      if (lastId) p.set("movement_id", String(lastId));
-      await downloadPdf(
-        `/api/suppliers/${sid}/voucher-pdf?${p}`,
-        `tedarikci-fis-${sid}.pdf`,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "PDF hatası");
-    }
-  }
-
-  function printHtml() {
-    const sid = Number(supplierId);
-    if (!sid) {
-      setError("Yazdırma için tedarikçi seçin.");
-      return;
-    }
-    const amount = Number(String(tutar).replace(",", ".")) || 0;
     const p = new URLSearchParams({
       tip: fisTip,
-      amount: String(amount),
+      amount: String(amount > 0 ? amount : 0),
       date: tarih,
       due: vade,
       note: aciklama.trim(),
     });
     if (lastId) p.set("movement_id", String(lastId));
-    const token = typeof window !== "undefined" ? localStorage.getItem("baykus_token") : null;
-    // Open API HTML print (auth via query token fallback not available) — use window print of local sheet
-    const w = window.open("", "_blank", "width=720,height=640");
-    if (!w) return;
-    w.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"/><title>${fisTip}</title>
-<style>
-body{font-family:Segoe UI,system-ui,sans-serif;margin:28px;color:#0f172a}
-h1{font-size:1.35rem;margin:0 0 4px;color:#0f766e}
-.box{border:1px solid #cbd5e1;border-radius:8px;padding:16px;margin-top:16px}
-.row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9}
-.label{color:#64748b;font-size:12px}.val{font-weight:600}
-.badge{display:inline-block;background:#62c9aa;color:#fff;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:700}
-@media print{button{display:none}}
-</style></head><body>
-<button onclick="window.print()">Yazdır</button>
-<div class="badge">Borç-Alacak Fişi</div>
-<h1>${fisTip}</h1>
-<p style="color:#64748b;font-size:13px">Kasa/banka hareketi oluşturmaz · cari bakiyeyi düzenler</p>
-<div class="box">
-<div class="row"><span class="label">Tedarikçi</span><span class="val">${selectedName || "#" + sid}</span></div>
-<div class="row"><span class="label">İşlem Tipi</span><span class="val">${fisTip}</span></div>
-<div class="row"><span class="label">İşlem Tarihi</span><span class="val">${tarih}</span></div>
-<div class="row"><span class="label">Vade</span><span class="val">${vade || "—"}</span></div>
-<div class="row"><span class="label">Tutar</span><span class="val">${formatMoney(amount)}</span></div>
-<div class="row"><span class="label">Açıklama</span><span class="val">${aciklama.trim() || "—"}</span></div>
-</div>
-<p style="margin-top:24px;font-size:11px;color:#94a3b8">Baykuş Baskı · Tedarikçi cari fişi</p>
-<script>setTimeout(function(){window.print()},300)</script>
-</body></html>`);
-    w.document.close();
-    void token;
+    return `/api/suppliers/${sid}/voucher-pdf?${p}`;
+  }
+
+  async function printPdf() {
+    const path = voucherPdfPath();
+    if (!path) {
+      setError("Yazdırma için tedarikçi seçin.");
+      return;
+    }
+    try {
+      await downloadPdf(path, `tedarikci-fis-${Number(supplierId)}.pdf`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "PDF hatası");
+    }
+  }
+
+  async function printLetterhead() {
+    const path = voucherPdfPath();
+    if (!path) {
+      setError("Yazdırma için tedarikçi seçin.");
+      return;
+    }
+    try {
+      await printPdfFromApi(path);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Yazdırma hatası");
+    }
   }
 
   const body = (
@@ -292,7 +258,7 @@ h1{font-size:1.35rem;margin:0 0 4px;color:#0f766e}
             Vazgeç
           </button>
         )}
-        <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={printHtml} disabled={busy}>
+        <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => void printLetterhead()} disabled={busy}>
           Yazdır
         </button>
         <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => void printPdf()} disabled={busy}>

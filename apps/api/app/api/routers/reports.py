@@ -62,6 +62,27 @@ def _day_end(d: date) -> datetime:
     return datetime.combine(d, time(23, 59, 59))
 
 
+
+def _wants_pdf(fmt: str | None) -> bool:
+    return bool(fmt) and str(fmt).lower() == "pdf"
+
+
+def _app_settings_map(db: Session) -> dict[str, str]:
+    from app.models.settings_model import AppSetting
+
+    return {s.key: (s.value or "") for s in db.query(AppSetting).all()}
+
+
+def _pdf_response(content: bytes, filename: str):
+    from fastapi.responses import Response
+
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 def _wants_csv(request: Request, fmt: str | None) -> bool:
     if fmt and fmt.lower() == "csv":
         return True
@@ -410,6 +431,37 @@ def sales_report(
         ]
         return _csv_response("satis_raporu.csv", headers, csv_rows)
 
+    if _wants_pdf(format):
+        from app.services.pdf import build_tabular_report_pdf, _money
+
+        tablo = [
+            [
+                r["order_number"],
+                (r["customer_name"] or "")[:28],
+                r["status"],
+                _money(r["total_amount"]),
+                _money(r["paid_amount"]),
+                _money(r["remaining_amount"]),
+                format_tr_date(r["created_at"], empty=""),
+            ]
+            for r in rows_out
+        ]
+        pdf = build_tabular_report_pdf(
+            "Satış Raporu",
+            ["Belge/No", "Müşteri", "Tip", "Tutar", "Ödenen", "Kalan", "Tarih"],
+            tablo,
+            _app_settings_map(db),
+            subtitle=format_tr_period(date_from, date_to),
+            summary_boxes=[
+                ("Adet", str(summary.get("sale_count") or summary.get("order_count") or len(rows_out))),
+                ("Ciro", _money(summary.get("revenue") or 0)),
+                ("Kalan", _money(summary.get("remaining") or 0)),
+            ],
+            table_title="Satış hareketleri",
+            ratios=[1.4, 2.2, 1.2, 1.2, 1.2, 1.2, 1.1],
+        )
+        return _pdf_response(pdf, "satis_raporu.pdf")
+
     return {"summary": summary, "rows": rows_out}
 
 
@@ -515,8 +567,9 @@ def stock_report(
     # Direct calls (stock_print) may pass FastAPI Query defaults; only real ints page.
     page_skip = skip if isinstance(skip, int) and skip > 0 else 0
     page_limit = limit if isinstance(limit, int) and limit > 0 else None
-    # CSV always exports the full filtered set.
-    if _wants_csv(request, format if isinstance(format, str) or format is None else None):
+    # CSV / PDF always export the full filtered set.
+    _fmt = format if isinstance(format, str) or format is None else None
+    if _wants_csv(request, _fmt) or _wants_pdf(_fmt):
         page_limit = None
         page_skip = 0
 
@@ -759,6 +812,38 @@ def stock_report(
         ]
         return _csv_response("stok_raporu.csv", headers, csv_rows)
 
+    if _wants_pdf(format if isinstance(format, str) or format is None else None):
+        from app.services.pdf import build_tabular_report_pdf, _money
+
+        tablo = [
+            [
+                r["sku"] or "",
+                (r["name"] or "")[:28],
+                (r.get("variant_name") or "")[:14],
+                str(r["qty"]),
+                _money(r["unit_cost"] if value_basis == "cost" else r["unit_sale"]),
+                _money(r["value"]),
+                r.get("warehouse") or "",
+            ]
+            for r in rows_out
+        ]
+        pdf = build_tabular_report_pdf(
+            "Stok Değeri",
+            ["SKU", "Ürün", "Varyant", "Stok", "Birim", "Değer", "Depo"],
+            tablo,
+            _app_settings_map(db),
+            subtitle=f"Baz: {'maliyet' if value_basis == 'cost' else 'satış'}",
+            summary_boxes=[
+                ("Satır", str(summary.get("row_count") or len(rows_out))),
+                ("Toplam stok", str(summary.get("total_qty") or "")),
+                ("Toplam değer", _money(summary.get("total_value") or 0)),
+            ],
+            table_title="Stok listesi",
+            ratios=[1.4, 2.4, 1.3, 0.8, 1.2, 1.3, 1.2],
+            max_rows=800,
+        )
+        return _pdf_response(pdf, "stok_raporu.pdf")
+
     return {
         "summary": summary,
         "rows": rows_out,
@@ -939,6 +1024,35 @@ def receivables_report(
         ]
         return _csv_response("cari_alacak_raporu.csv", headers, csv_rows)
 
+    if _wants_pdf(format):
+        from app.services.pdf import build_tabular_report_pdf, _money
+
+        tablo = [
+            [
+                r["code"] or "",
+                (r["name"] or "")[:30],
+                (r.get("city") or "")[:14],
+                _money(r["balance"]),
+                format_tr_date(r.get("last_movement_date"), empty=""),
+            ]
+            for r in rows_out
+        ]
+        pdf = build_tabular_report_pdf(
+            "Cari / Alacak Raporu",
+            ["Kod", "Müşteri", "Şehir", "Bakiye", "Son hareket"],
+            tablo,
+            _app_settings_map(db),
+            subtitle="Müşteri bakiyeleri",
+            summary_boxes=[
+                ("Müşteri", str(summary.get("customer_count") or len(rows_out))),
+                ("Alacak (+)", _money(summary.get("total_receivables") or 0)),
+                ("Net", _money(summary.get("net") or 0)),
+            ],
+            table_title="Müşteri bakiyeleri",
+            ratios=[1.2, 3.0, 1.4, 1.5, 1.4],
+        )
+        return _pdf_response(pdf, "cari_alacak_raporu.pdf")
+
     return {"summary": summary, "rows": rows_out}
 
 
@@ -1042,6 +1156,34 @@ def payables_report(
             for r in rows_out
         ]
         return _csv_response("tedarikci_borc_raporu.csv", headers, csv_rows)
+
+    if _wants_pdf(format):
+        from app.services.pdf import build_tabular_report_pdf, _money
+
+        tablo = [
+            [
+                r["code"] or "",
+                (r["name"] or "")[:30],
+                (r.get("city") or "")[:14],
+                _money(r["balance"]),
+                format_tr_date(r.get("last_movement_date"), empty=""),
+            ]
+            for r in rows_out
+        ]
+        pdf = build_tabular_report_pdf(
+            "Tedarikçi Borç Raporu",
+            ["Kod", "Tedarikçi", "Şehir", "Bakiye", "Son hareket"],
+            tablo,
+            _app_settings_map(db),
+            subtitle="Tedarikçi borç bakiyeleri",
+            summary_boxes=[
+                ("Tedarikçi", str(summary.get("supplier_count") or len(rows_out))),
+                ("Borç toplam", _money(summary.get("total_payables") or 0)),
+            ],
+            table_title="Tedarikçi bakiyeleri",
+            ratios=[1.2, 3.0, 1.4, 1.5, 1.4],
+        )
+        return _pdf_response(pdf, "tedarikci_borc_raporu.pdf")
 
     return {"summary": summary, "rows": rows_out}
 
@@ -1376,6 +1518,34 @@ def purchases_report(
             ["id", "belge", "tarih", "tedarikci", "durum", "tutar"],
             [[d["id"], d["number"], d["date"], d["supplier"], d["status"], d["amount"]] for d in detail],
         )
+    if _wants_pdf(format):
+        from app.services.pdf import build_tabular_report_pdf, _money
+
+        status_tr = {"draft": "Taslak", "confirmed": "Onaylı", "cancelled": "İptal"}
+        tablo = [
+            [
+                d["number"] or "",
+                format_tr_date(d["date"], empty=""),
+                (d["supplier"] or "")[:28],
+                status_tr.get(d["status"], d["status"] or ""),
+                _money(d["amount"]),
+            ]
+            for d in detail
+        ]
+        pdf = build_tabular_report_pdf(
+            "Alış Raporu",
+            ["Belge", "Tarih", "Tedarikçi", "Durum", "Tutar"],
+            tablo,
+            _app_settings_map(db),
+            subtitle=format_tr_period(date_from, date_to),
+            summary_boxes=[
+                ("Belge", str(summary.get("count") or len(detail))),
+                ("Toplam", _money(summary.get("total") or 0)),
+            ],
+            table_title="Satın alma belgeleri",
+            ratios=[1.6, 1.2, 2.8, 1.2, 1.4],
+        )
+        return _pdf_response(pdf, "alis_raporu.pdf")
     return {"summary": summary, "rows": detail}
 
 
@@ -1460,7 +1630,7 @@ def cari_statements_report(
         "period": period,
         "assumptions": [
             "Borç (debit) alacağı artırır; alacak (credit) tahsilattır.",
-            "CSV / basit PDF / yazdırılabilir HTML — masaüstü ReportLab Cari Döküm şablonu değildir.",
+            "CSV / antetli PDF / HTML — cari ekstre çıktıları.",
             "Tarih aralığı boşsa tüm hareketler; doluysa dönem başı açılış bakiyesi dahil.",
         ],
     }
@@ -1517,7 +1687,7 @@ tr:nth-child(even){{background:#f8fafc}}
 <button onclick="window.print()">Yazdır</button>
 <h1>Cari Döküm / Ekstre</h1>
 <div class="meta">Müşteri: <b>{customer.name}</b> · Kapanış: <b>{summary['closing_balance']:.2f} ₺</b>
-· Web basit ekstre (masaüstü ReportLab şablonu değil)</div>
+· Cari ekstre</div>
 <table><thead><tr><th>Tarih</th><th>Tip</th><th>Borç</th><th>Alacak</th><th>Bakiye</th><th>Not</th></tr></thead>
 <tbody>{rows_html}</tbody></table>
 </body></html>"""

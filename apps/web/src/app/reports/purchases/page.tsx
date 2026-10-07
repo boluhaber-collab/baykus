@@ -7,11 +7,15 @@ import StatusFooter from "@/components/StatusFooter";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
 import { formatTrDate, localToday } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 type Row = { id: number; number: string; date: string | null; supplier: string | null; status: string; amount: number };
 
 export default function PurchaseReportPage() {
-  const [from, setFrom] = useState(`${now.getFullYear()}-01-01`);
+  const [from, setFrom] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-01-01`;
+  });
   const [to, setTo] = useState(localToday());
   const [rows, setRows] = useState<Row[]>([]);
   const [summary, setSummary] = useState<{ count: number; total: number } | null>(null);
@@ -96,7 +100,20 @@ export default function PurchaseReportPage() {
         <button type="button" className="bk-btn bk-btn-ghost text-xs" disabled={csvBusy} onClick={exportCsv}>
           CSV
         </button>
-        <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => window.print()}>
+        <button
+          type="button"
+          className="bk-btn bk-btn-ghost text-xs"
+          onClick={() => {
+            void (async () => {
+              try {
+                const p = new URLSearchParams({ date_from: from, date_to: to, format: "pdf" });
+                await printPdfFromApi(`/api/reports/purchases?${p}`);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Yazdırma hatası");
+              }
+            })();
+          }}
+        >
           Yazdır
         </button>
       </div>

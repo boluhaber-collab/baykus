@@ -14,6 +14,7 @@ import { displayCode } from "@/lib/productLabel";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { formatTrDate } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 type Row = {
   supplier_id: number;
@@ -102,7 +103,18 @@ export default function PayablesReportPage() {
               CSV indir
             </button>
             <button
-              onClick={() => window.print()}
+              onClick={() => {
+                void (async () => {
+                  try {
+                    const path = qs
+                      ? `/api/reports/payables?${qs}&format=pdf`
+                      : "/api/reports/payables?format=pdf";
+                    await printPdfFromApi(path);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Yazdırma hatası");
+                  }
+                })();
+              }}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
             >
               Yazdır

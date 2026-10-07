@@ -6,6 +6,7 @@ import { ReceivableItem, apiFetch, downloadReportCsv, formatMoney } from "@/lib/
 import StatusFooter from "@/components/StatusFooter";
 import { displayCode } from "@/lib/productLabel";
 import { formatTrDate } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 export default function CariReceivablesPage() {
   const [items, setItems] = useState<ReceivableItem[]>([]);
@@ -81,7 +82,18 @@ export default function CariReceivablesPage() {
           >
             CSV
           </button>
-          <button onClick={() => window.print()} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50">
+          <button
+            onClick={() => {
+              void (async () => {
+                try {
+                  await printPdfFromApi("/api/reports/receivables?format=pdf");
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Yazdırma hatası");
+                }
+              })();
+            }}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+          >
             Yazdır
           </button>
           <button onClick={load} className="rounded-lg bg-slate-800 text-white px-4 py-2 text-sm">

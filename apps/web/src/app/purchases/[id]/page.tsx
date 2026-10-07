@@ -14,6 +14,7 @@ import {
 import { isBhImportNote } from "@/lib/bhNote";
 import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 import { formatTrDate, formatTrDateTime } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 type EditLine = {
   key: string;
@@ -86,10 +87,15 @@ export default function PurchaseDetailPage() {
   useEffect(() => {
     if (typeof window === "undefined" || !purchase) return;
     if (new URLSearchParams(window.location.search).get("print") === "1") {
-      const t = setTimeout(() => window.print(), 400);
-      return () => clearTimeout(t);
+      void (async () => {
+        try {
+          await printPdfFromApi(`/api/purchases/${id}/pdf`);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Yazdırma hatası");
+        }
+      })();
     }
-  }, [purchase]);
+  }, [purchase, id]);
 
   useEffect(() => {
     if (!editing) return;
@@ -424,7 +430,15 @@ export default function PurchaseDetailPage() {
           </Link>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => {
+              void (async () => {
+                try {
+                  await printPdfFromApi(`/api/purchases/${id}/pdf`);
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Yazdırma hatası");
+                }
+              })();
+            }}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
           >
             Yazdır

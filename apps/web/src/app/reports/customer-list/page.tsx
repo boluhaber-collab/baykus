@@ -13,6 +13,7 @@ import {
 import { displayCode } from "@/lib/productLabel";
 import StatusFooter from "@/components/StatusFooter";
 import { Customer, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 type PartyKind = "customer" | "supplier";
 
@@ -227,7 +228,22 @@ export default function CustomerListReportPage() {
             >
               CSV indir
             </button>
-            <button className="rounded bg-slate-500 text-white px-3 py-1.5 text-xs font-bold" onClick={() => window.print()}>
+            <button
+              className="rounded bg-slate-500 text-white px-3 py-1.5 text-xs font-bold"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    const path =
+                      party === "customer"
+                        ? "/api/reports/receivables?format=pdf"
+                        : "/api/reports/payables?format=pdf";
+                    await printPdfFromApi(path);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Yazdırma hatası");
+                  }
+                })();
+              }}
+            >
               Yazdır
             </button>
           </div>

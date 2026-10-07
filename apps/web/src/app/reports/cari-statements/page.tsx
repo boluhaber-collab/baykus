@@ -9,6 +9,7 @@ import StatusFooter from "@/components/StatusFooter";
 import { ReportHeader } from "@/components/reports/ReportChrome";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { formatTrDate, localToday } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 type CustomerOpt = { id: number; name: string; company: string | null; balance: number };
 type Move = { id: number; date: string | null; type: string; debit: number; credit: number; balance: number; note: string | null };
@@ -125,24 +126,15 @@ export default function CariStatementsPage() {
     }
   }
 
-  function openPrintable() {
+  async function openPrintable() {
     if (!customerId) return;
-    const url = `${getApiBase()}/api/reports/cari-statements?customer_id=${customerId}&format=html${dateQs()}`;
-    // open with token via blob fetch
-    void (async () => {
-      try {
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-        if (!res.ok) throw new Error(`HTML ${res.status}`);
-        const html = await res.text();
-        const w = window.open("", "_blank");
-        if (w) {
-          w.document.write(html);
-          w.document.close();
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Yazdır sayfası hatası");
-      }
-    })();
+    try {
+      await printPdfFromApi(
+        `/api/reports/cari-statements?customer_id=${customerId}&format=pdf${dateQs()}`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Yazdırma hatası");
+    }
   }
 
   return (
@@ -188,7 +180,7 @@ export default function CariStatementsPage() {
           {pdfBusy ? "…" : "PDF indir"}
         </button>
         <button type="button" className="bk-btn bk-btn-ghost text-xs" disabled={!customerId} onClick={openPrintable}>
-          Yazdır / HTML
+          Yazdır
         </button>
       </div>
 

@@ -17,6 +17,7 @@ import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
 import { formatTrDate, localToday } from "@/lib/dates";
+import { printPdfFromApi } from "@/lib/printPdf";
 
 export default function MutabakatPage() {
   const params = useParams();
@@ -95,8 +96,15 @@ export default function MutabakatPage() {
     }
   }
 
-  function printLetter() {
-    window.print();
+  async function printLetter() {
+    try {
+      const qs = new URLSearchParams({ customer_id: String(id), format: "pdf" });
+      if (from) qs.set("date_from", from);
+      if (to) qs.set("date_to", to);
+      await printPdfFromApi(`/api/reports/cari-statements?${qs}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Yazdırma hatası");
+    }
   }
 
   const todayLabel = formatTrDate(localToday());
@@ -127,7 +135,7 @@ export default function MutabakatPage() {
           <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => void exportPdf()} disabled={busy}>
             PDF
           </button>
-          <button type="button" className="bk-btn bk-btn-primary text-xs" onClick={printLetter}>
+          <button type="button" className="bk-btn bk-btn-primary text-xs" onClick={() => void printLetter()} disabled={busy}>
             Yazdır
           </button>
         </div>
