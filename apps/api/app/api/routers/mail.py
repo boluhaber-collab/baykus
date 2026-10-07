@@ -27,6 +27,63 @@ from app.services.mail_transport import fetch_recent_imap, send_email, test_imap
 router = APIRouter(prefix="/mail", tags=["mail"])
 
 
+def _cfg_from_test_payload(payload: MailSettingsUpdate | None) -> MailConfig:
+    """Merge optional test body with saved mail_config; blank passwords keep saved."""
+    cur = load_mail_config()
+    if payload is None:
+        return cur
+    data = payload.model_dump(exclude_unset=True)
+    data.pop("clear_smtp_password", None)
+    data.pop("clear_imap_password", None)
+
+    def take_str(key: str, attr: str) -> str:
+        if key not in data or data[key] is None:
+            return getattr(cur, attr)
+        return str(data[key]).strip()
+
+    def take_int(key: str, attr: str, default: int) -> int:
+        if key not in data or data[key] is None:
+            return int(getattr(cur, attr) or default)
+        try:
+            return int(data[key])
+        except Exception:
+            return int(getattr(cur, attr) or default)
+
+    def take_bool(key: str, attr: str) -> bool:
+        if key not in data or data[key] is None:
+            return bool(getattr(cur, attr))
+        return bool(data[key])
+
+    smtp_pw = cur.smtp_password
+    if "smtp_password" in data and data["smtp_password"] is not None:
+        pw = str(data["smtp_password"])
+        if pw and pw != MASK:
+            smtp_pw = pw
+    imap_pw = cur.imap_password
+    if "imap_password" in data and data["imap_password"] is not None:
+        pw = str(data["imap_password"])
+        if pw and pw != MASK:
+            imap_pw = pw
+
+    return MailConfig(
+        smtp_host=take_str("smtp_host", "smtp_host"),
+        smtp_port=take_int("smtp_port", "smtp_port", 587),
+        smtp_user=take_str("smtp_user", "smtp_user"),
+        smtp_password=smtp_pw,
+        smtp_use_tls=take_bool("smtp_use_tls", "smtp_use_tls"),
+        from_name=take_str("from_name", "from_name") or "Baykuş Baskı",
+        from_email=take_str("from_email", "from_email"),
+        imap_host=take_str("imap_host", "imap_host"),
+        imap_port=take_int("imap_port", "imap_port", 993),
+        imap_user=take_str("imap_user", "imap_user"),
+        imap_password=imap_pw,
+        imap_use_ssl=take_bool("imap_use_ssl", "imap_use_ssl"),
+        imap_folder=take_str("imap_folder", "imap_folder") or "INBOX",
+    )
+
+
+
+
 def _email_from_addr(raw: str) -> str:
     """Extract bare email from 'Name <a@b.com>' or bare address."""
     if not raw:
@@ -139,14 +196,22 @@ def update_settings(
 
 
 @router.post("/settings/test-smtp", response_model=MailActionResult)
-def api_test_smtp(_: User = Depends(require_roles("admin"))) -> MailActionResult:
-    r = test_smtp()
+def api_test_smtp(
+    payload: MailSettingsUpdate = MailSettingsUpdate(),
+    _: User = Depends(require_roles("admin")),
+) -> MailActionResult:
+    cfg = _cfg_from_test_payload(payload)
+    r = test_smtp(cfg)
     return MailActionResult(ok=bool(r.get("ok")), message=str(r.get("message") or ""))
 
 
 @router.post("/settings/test-imap", response_model=MailActionResult)
-def api_test_imap(_: User = Depends(require_roles("admin"))) -> MailActionResult:
-    r = test_imap()
+def api_test_imap(
+    payload: MailSettingsUpdate = MailSettingsUpdate(),
+    _: User = Depends(require_roles("admin")),
+) -> MailActionResult:
+    cfg = _cfg_from_test_payload(payload)
+    r = test_imap(cfg)
     return MailActionResult(ok=bool(r.get("ok")), message=str(r.get("message") or ""))
 
 

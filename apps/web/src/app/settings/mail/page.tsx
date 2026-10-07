@@ -43,6 +43,11 @@ const EMPTY: MailSettings = {
   config_path: "",
 };
 
+function domainFromEmail(email: string): string {
+  const m = (email || "").trim().toLowerCase().match(/@([^@\s>]+)$/);
+  return m ? m[1] : "";
+}
+
 export default function MailSettingsPage() {
   const [form, setForm] = useState<MailSettings>(EMPTY);
   const [smtpPw, setSmtpPw] = useState("");
@@ -67,37 +72,46 @@ export default function MailSettingsPage() {
     void load();
   }, [load]);
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
+  function settingsBody(includePasswords: boolean): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      smtp_host: form.smtp_host,
+      smtp_port: Number(form.smtp_port) || 587,
+      smtp_user: form.smtp_user,
+      smtp_use_tls: form.smtp_use_tls,
+      from_name: form.from_name,
+      from_email: form.from_email,
+      imap_host: form.imap_host,
+      imap_port: Number(form.imap_port) || 993,
+      imap_user: form.imap_user,
+      imap_use_ssl: form.imap_use_ssl,
+      imap_folder: form.imap_folder || "INBOX",
+    };
+    if (includePasswords) {
+      // Blank password fields → omit so API keeps / uses saved password
+      if (smtpPw.trim()) body.smtp_password = smtpPw.trim();
+      if (imapPw.trim()) body.imap_password = imapPw.trim();
+    }
+    return body;
+  }
+
+  async function save(e?: FormEvent) {
+    if (e) e.preventDefault();
     setBusy(true);
     setError("");
     setMsg("");
     try {
-      const body: Record<string, unknown> = {
-        smtp_host: form.smtp_host,
-        smtp_port: Number(form.smtp_port) || 587,
-        smtp_user: form.smtp_user,
-        smtp_use_tls: form.smtp_use_tls,
-        from_name: form.from_name,
-        from_email: form.from_email,
-        imap_host: form.imap_host,
-        imap_port: Number(form.imap_port) || 993,
-        imap_user: form.imap_user,
-        imap_use_ssl: form.imap_use_ssl,
-        imap_folder: form.imap_folder || "INBOX",
-      };
-      if (smtpPw) body.smtp_password = smtpPw;
-      if (imapPw) body.imap_password = imapPw;
       const s = await apiFetch<MailSettings>("/api/mail/settings", {
         method: "PUT",
-        body: JSON.stringify(body),
+        body: JSON.stringify(settingsBody(true)),
       });
       setForm(s);
       setSmtpPw("");
       setImapPw("");
       setMsg("E-posta ayarları kaydedildi (yerel dosya — veritabanında şifre yok)");
+      return s;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kayıt hatası");
+      return null;
     } finally {
       setBusy(false);
     }
@@ -108,10 +122,26 @@ export default function MailSettingsPage() {
     setError("");
     setMsg("");
     try {
-      const r = await apiFetch<{ ok: boolean; message: string }>(
-        `/api/mail/settings/test-${kind}`,
-        { method: "POST" },
-      );
+      // Capture form+typed passwords now (blank password → omitted → API uses saved)
+      const payload = settingsBody(true);
+
+      // Auto-save so Kaydet is not required before test
+      try {
+        const saved = await apiFetch<MailSettings>("/api/mail/settings", {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        setForm(saved);
+        setSmtpPw("");
+        setImapPw("");
+      } catch (saveErr) {
+        console.warn("mail settings auto-save failed", saveErr);
+      }
+
+      const r = await apiFetch<{ ok: boolean; message: string }>(`/api/mail/settings/test-${kind}`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
       if (r.ok) setMsg(r.message);
       else setError(r.message);
     } catch (err) {
@@ -121,7 +151,7 @@ export default function MailSettingsPage() {
     }
   }
 
-  function applyPreset(kind: "gmail" | "outlook" | "yandex") {
+  function applyPreset(kind: "gmail" | "outlook" | "yandex" | "cpanel") {
     if (kind === "gmail") {
       setForm((f) => ({
         ...f,
@@ -133,6 +163,7 @@ export default function MailSettingsPage() {
         imap_use_ssl: true,
         imap_folder: "INBOX",
       }));
+      setMsg("Gmail şablonu uygulandı — Uygulama şifresi kullanın (normal şifre genelde çalışmaz)");
     } else if (kind === "outlook") {
       setForm((f) => ({
         ...f,
@@ -144,7 +175,8 @@ export default function MailSettingsPage() {
         imap_use_ssl: true,
         imap_folder: "INBOX",
       }));
-    } else {
+      setMsg("Outlook şablonu uygulandı — kullanıcı/şifre ve gönderen adresini doldurun");
+    } else if (kind === "yandex") {
       setForm((f) => ({
         ...f,
         smtp_host: "smtp.yandex.com",
@@ -155,8 +187,29 @@ export default function MailSettingsPage() {
         imap_use_ssl: true,
         imap_folder: "INBOX",
       }));
+      setMsg("Yandex şablonu uygulandı — kullanıcı/şifre ve gönderen adresini doldurun");
+    } else {
+      setForm((f) => {
+        const domain =
+          domainFromEmail(f.from_email) ||
+          domainFromEmail(f.smtp_user) ||
+          "";
+        const host = domain ? `mail.${domain}` : "mail.ornek.com";
+        return {
+          ...f,
+          smtp_host: host,
+          smtp_port: 465,
+          smtp_use_tls: false,
+          imap_host: host,
+          imap_port: 993,
+          imap_use_ssl: true,
+          imap_folder: "INBOX",
+        };
+      });
+      setMsg(
+        "cPanel / Hosting şablonu uygulandı — sunucu mail.<alanadı> (gönderen veya kullanıcı e-postasından), SMTP 465 SSL, IMAP 993 SSL. Alan adı boşsa önce e-posta adresini yazıp şablona tekrar basın.",
+      );
     }
-    setMsg("Hazır şablon uygulandı — kullanıcı/şifre ve gönderen adresini doldurun");
   }
 
   const input =
@@ -182,9 +235,16 @@ export default function MailSettingsPage() {
       <div className="rounded border border-sky-200 bg-sky-50 text-sky-950 px-3 py-2 text-sm space-y-1">
         <p className="font-semibold text-[13px]">Nasıl yapılandırılır?</p>
         <ol className="list-decimal ml-4 text-xs space-y-0.5">
-          <li>Hazır şablon seçin (Gmail / Outlook / Yandex) veya kendi sunucu bilgilerinizi girin.</li>
+          <li>Hazır şablon seçin (Gmail / Outlook / Yandex / cPanel) veya kendi sunucu bilgilerinizi girin.</li>
           <li>Gmail için &quot;Uygulama şifresi&quot; kullanın (normal hesap şifresi çoğu zaman çalışmaz).</li>
-          <li>Kaydet → SMTP Test / IMAP Test ile doğrulayın.</li>
+          <li>
+            cPanel / hosting e-postası için genelde sunucu <code className="bg-white/70 px-1 rounded">mail.alanadiniz.com</code>,
+            SMTP 465 (SSL) ve IMAP 993 (SSL) kullanılır.
+          </li>
+          <li>
+            Alanları doldurup <strong>SMTP Test / IMAP Test</strong>e basın — formdaki değerler gönderilir ve otomatik kaydedilir
+            (şifre alanı boşsa kayıtlı şifre kullanılır).
+          </li>
           <li>
             <Link href="/mail" className="underline font-medium">
               E-Posta
@@ -197,7 +257,7 @@ export default function MailSettingsPage() {
         )}
       </div>
 
-      {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
+      {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm whitespace-pre-wrap">{error}</div>}
       {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
       <div className="flex flex-wrap gap-2">
@@ -209,6 +269,9 @@ export default function MailSettingsPage() {
         </button>
         <button type="button" className="rounded border px-3 py-1.5 text-xs" onClick={() => applyPreset("yandex")}>
           Yandex şablonu
+        </button>
+        <button type="button" className="rounded border px-3 py-1.5 text-xs" onClick={() => applyPreset("cpanel")}>
+          cPanel / Hosting
         </button>
         <span
           className={`rounded px-2 py-1 text-xs ${form.smtp_configured ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}
@@ -222,7 +285,7 @@ export default function MailSettingsPage() {
         </span>
       </div>
 
-      <form onSubmit={save} className="space-y-4">
+      <form onSubmit={(e) => void save(e)} className="space-y-4">
         <section className="rounded border bg-white p-4 space-y-3">
           <h2 className="font-semibold text-sm">SMTP — Gönderim</h2>
           <div className="grid sm:grid-cols-2 gap-3">

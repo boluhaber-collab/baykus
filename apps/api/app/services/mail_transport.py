@@ -14,6 +14,58 @@ from typing import Any
 
 from app.services.mail_config import MailConfig, load_mail_config
 
+def _friendly_mail_error(kind: str, exc: BaseException, *, host: str = "", use_gmail_hint: bool = False) -> str:
+    """Map common SMTP/IMAP failures to clear Turkish guidance (never echo passwords)."""
+    raw = str(exc) or type(exc).__name__
+    low = raw.lower()
+    host_l = (host or "").lower()
+    gmailish = "gmail" in host_l or use_gmail_hint
+    auth = any(
+        x in low
+        for x in (
+            "authentication",
+            "auth failed",
+            "username and password not accepted",
+            "invalid credentials",
+            "535",
+            "534",
+            "login failed",
+            "authenticationfailed",
+            "invalid login",
+            "please log in via your web browser",
+            "application-specific password",
+        )
+    )
+    if auth:
+        if gmailish:
+            return (
+                f"{kind} kimlik doğrulama başarısız. Gmail için normal hesap şifresi genelde çalışmaz — "
+                "Google Hesap › Güvenlik › Uygulama şifreleri ile 16 haneli uygulama şifresi oluşturup buraya yazın."
+            )
+        return (
+            f"{kind} kimlik doğrulama başarısız (kullanıcı/şifre reddedildi). "
+            "Şifreyi kontrol edin; Gmail kullanıyorsanız uygulama şifresi gerekir. "
+            "cPanel/hosting e-postasıysa sunucu olarak mail.<alanadı> deneyin (örn. mail.bitisort.com)."
+        )
+    if any(x in low for x in ("getaddrinfo", "name or service not known", "nodename nor servname", "temporary failure in name resolution")):
+        return (
+            f"{kind} sunucu adresi çözülemedi ({host or '?'}). Adresi kontrol edin; "
+            "cPanel/hosting için mail.<alanadı> (örn. mail.bitisort.com) deneyin."
+        )
+    if any(x in low for x in ("connection refused", "timed out", "timeout", "connection reset", "network is unreachable")):
+        return (
+            f"{kind} bağlantı kurulamadı ({host or '?'}): {raw}. "
+            "Port/SSL ayarını kontrol edin (587 STARTTLS veya 465 SSL). "
+            "Hosting e-postasıysa mail.<alanadı> ve 465/993 deneyin."
+        )
+    if "certificate" in low or "ssl" in low:
+        return (
+            f"{kind} SSL/TLS hatası: {raw}. Port 587 için STARTTLS açık, 465 için STARTTLS kapalı (SSL) olmalı."
+        )
+    return f"{kind} hata: {raw}"
+
+
+
 
 def _decode_header_value(raw: str | None) -> str:
     if not raw:
@@ -93,7 +145,15 @@ def test_smtp(cfg: MailConfig | None = None) -> dict[str, Any]:
                 smtp.login(c.smtp_user, c.smtp_password)
         return {"ok": True, "message": f"SMTP bağlantısı başarılı ({c.smtp_host}:{c.smtp_port})"}
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "message": f"SMTP hata: {exc}"}
+        return {
+            "ok": False,
+            "message": _friendly_mail_error(
+                "SMTP",
+                exc,
+                host=c.smtp_host,
+                use_gmail_hint="gmail" in (c.smtp_host or "").lower(),
+            ),
+        }
 
 
 def test_imap(cfg: MailConfig | None = None) -> dict[str, Any]:
@@ -124,7 +184,15 @@ def test_imap(cfg: MailConfig | None = None) -> dict[str, Any]:
             except Exception:
                 pass
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "message": f"IMAP hata: {exc}"}
+        return {
+            "ok": False,
+            "message": _friendly_mail_error(
+                "IMAP",
+                exc,
+                host=c.imap_host,
+                use_gmail_hint="gmail" in (c.imap_host or "").lower(),
+            ),
+        }
 
 
 def send_email(
