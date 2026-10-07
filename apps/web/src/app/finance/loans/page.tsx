@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Loan, apiFetch, formatMoney } from "@/lib/api";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 import StatusFooter from "@/components/StatusFooter";
 
 export default function LoansPage() {
@@ -15,7 +15,7 @@ export default function LoansPage() {
     lender: "",
     principal_amount: "",
     interest_rate: "",
-    start_date: new Date().toISOString().slice(0, 10),
+    start_date: localToday(),
     installment_count: "6",
     notes: "",
   });

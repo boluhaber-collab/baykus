@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PayableItem, Supplier, apiFetch, downloadPdf, formatMoney } from "@/lib/api";
 import LiveSearchSelect, { useSupplierSearch } from "@/components/LiveSearchSelect";
 import { displayCode } from "@/lib/productLabel";
+import { localToday } from "@/lib/dates";
 
 export type FisTip = "Alacak Fişi" | "Borç Fişi";
 
@@ -21,7 +22,7 @@ type Props = {
 };
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 /**

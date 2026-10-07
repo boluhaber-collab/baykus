@@ -11,6 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import { localToday } from "@/lib/dates";
 import LiveSearchSelect, { useProductSearch, useSupplierSearch } from "@/components/LiveSearchSelect";
 import StockDetailFilters from "@/components/StockDetailFilters";
 import {
@@ -54,7 +55,7 @@ function NewPurchaseForm() {
     inStockOnly: false,
   });
   const [supplierId, setSupplierId] = useState(presetSupplier);
-  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [purchaseDate, setPurchaseDate] = useState(() => localToday());
   const [notes, setNotes] = useState("");
   const [taxAmount, setTaxAmount] = useState("0");
   const [confirmOnSave, setConfirmOnSave] = useState(true);

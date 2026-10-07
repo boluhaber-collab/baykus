@@ -186,6 +186,7 @@ def _apply_stock_delta(
             after = before + qty_int if increase else before - qty_int
             variant.stock_qty = after
             product.stock_qty = sum(v.stock_qty for v in product.variants)
+            stock_at = datetime.combine(purchase.purchase_date, datetime.utcnow().time())
             db.add(
                 StockMovement(
                     product_id=product.id,
@@ -198,6 +199,7 @@ def _apply_stock_delta(
                     note=f"{note_prefix}{purchase.purchase_number}: {line.description}",
                     warehouse=product.warehouse or DEFAULT_WAREHOUSE,
                     created_by_user_id=user_id,
+                    created_at=stock_at,
                 )
             )
         elif line.product_id:
@@ -209,6 +211,7 @@ def _apply_stock_delta(
             before = product.stock_qty or 0
             after = before + qty_int if increase else before - qty_int
             product.stock_qty = after
+            stock_at = datetime.combine(purchase.purchase_date, datetime.utcnow().time())
             db.add(
                 StockMovement(
                     product_id=product.id,
@@ -221,6 +224,7 @@ def _apply_stock_delta(
                     note=f"{note_prefix}{purchase.purchase_number}: {line.description}",
                     warehouse=product.warehouse or DEFAULT_WAREHOUSE,
                     created_by_user_id=user_id,
+                    created_at=stock_at,
                 )
             )
 

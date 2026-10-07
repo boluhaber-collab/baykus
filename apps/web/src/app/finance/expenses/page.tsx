@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BankAccount, CashRegister, Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
 
@@ -58,7 +58,10 @@ function periodFrom(key: string): string | "" {
   if (!p || p.days == null) return "";
   const d = new Date(today);
   d.setDate(d.getDate() - p.days);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export default function ExpensesPage() {
@@ -79,7 +82,7 @@ export default function ExpensesPage() {
   const [form, setForm] = useState({
     category_id: "",
     amount: "",
-    expense_date: new Date().toISOString().slice(0, 10),
+    expense_date: localToday(),
     due_date: "",
     document_no: "",
     payment_method: "nakit",

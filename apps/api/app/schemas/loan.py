@@ -90,6 +90,8 @@ class LoanInstallmentPay(BaseModel):
     bank_account_id: int | None = None
     notes: str | None = None
     post_finance: bool = True
+    # Ödeme / kasa-banka hareket tarihi — geçmiş tarih serbest (boş = bugün)
+    payment_date: date | None = None
 
     @field_validator("payment_method")
     @classmethod
@@ -109,6 +111,8 @@ class LoanInstallmentUpdate(BaseModel):
     cash_register_id: int | None = None
     bank_account_id: int | None = None
     post_finance: bool = True
+    # Ödeme tarihi (kasa/banka hareket + paid_at) — geçmiş tarih serbest
+    payment_date: date | None = None
 
     @field_validator("payment_method")
     @classmethod

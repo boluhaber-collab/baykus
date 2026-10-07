@@ -179,9 +179,10 @@ def _post_finance(
     bank_account_id: int | None,
     notes: str | None,
     post_finance: bool,
+    payment_date: date | None = None,
 ) -> None:
     """Create cash/bank outflow for a paid installment; sets inst account + movement ids."""
-    today = date.today()
+    mov_date = payment_date or date.today()
     cash_mov_id = None
     bank_mov_id = None
     inst.cash_register_id = None
@@ -197,7 +198,7 @@ def _post_finance(
             cash_register_id=reg.id,
             movement_type="odeme",
             amount=_d(inst.amount),
-            movement_date=today,
+            movement_date=mov_date,
             category="kredi_taksit",
             note=f"Kredi taksit: {loan.title} #{inst.sequence}"
             + (f" — {notes}" if notes else ""),
@@ -217,7 +218,7 @@ def _post_finance(
             bank_account_id=acc.id,
             movement_type="withdrawal",
             amount=_d(inst.amount),
-            movement_date=today,
+            movement_date=mov_date,
             category="kredi_taksit",
             note=f"Kredi taksit: {loan.title} #{inst.sequence}"
             + (f" — {notes}" if notes else ""),
@@ -399,6 +400,7 @@ def pay_installment(
     if inst.is_paid:
         raise HTTPException(status_code=400, detail="Taksit zaten ödenmiş")
 
+    pay_day = payload.payment_date or date.today()
     _post_finance(
         db,
         loan,
@@ -409,10 +411,11 @@ def pay_installment(
         bank_account_id=payload.bank_account_id,
         notes=payload.notes,
         post_finance=payload.post_finance and payload.payment_method != "none",
+        payment_date=pay_day,
     )
 
     inst.is_paid = True
-    inst.paid_at = datetime.utcnow()
+    inst.paid_at = datetime.combine(pay_day, datetime.utcnow().time())
     inst.payment_method = payload.payment_method
     if payload.notes:
         inst.notes = payload.notes
@@ -497,7 +500,14 @@ def update_installment(
 
     # Payment edit (paid rows): reverse old legs then re-post
     payment_touch = any(
-        k in data for k in ("payment_method", "cash_register_id", "bank_account_id", "post_finance")
+        k in data
+        for k in (
+            "payment_method",
+            "cash_register_id",
+            "bank_account_id",
+            "post_finance",
+            "payment_date",
+        )
     )
     if payment_touch:
         if not inst.is_paid:
@@ -509,6 +519,12 @@ def update_installment(
         post_finance = data.get("post_finance", True) and method != "none"
         cash_id = data.get("cash_register_id", inst.cash_register_id)
         bank_id = data.get("bank_account_id", inst.bank_account_id)
+        if "payment_date" in data and data["payment_date"] is not None:
+            pay_day = data["payment_date"]
+        elif inst.paid_at:
+            pay_day = inst.paid_at.date() if hasattr(inst.paid_at, "date") else date.today()
+        else:
+            pay_day = date.today()
         _reverse_finance(db, inst)
         _post_finance(
             db,
@@ -520,8 +536,10 @@ def update_installment(
             bank_account_id=bank_id,
             notes=inst.notes,
             post_finance=post_finance,
+            payment_date=pay_day,
         )
         inst.payment_method = method
+        inst.paid_at = datetime.combine(pay_day, datetime.utcnow().time())
         if method == "none":
             inst.cash_register_id = None
             inst.bank_account_id = None

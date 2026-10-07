@@ -11,7 +11,7 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
-import { formatTrDate, formatTrDateTime } from "@/lib/dates";
+import { formatTrDate, formatTrDateTime, localToday, toIsoDate } from "@/lib/dates";
 
 type EditState = {
   installmentId: number;
@@ -22,6 +22,7 @@ type EditState = {
   cash_register_id: string;
   bank_account_id: string;
   is_paid: boolean;
+  payment_date: string;
 };
 
 export default function LoanDetailPage() {
@@ -35,6 +36,7 @@ export default function LoanDetailPage() {
   const [method, setMethod] = useState("banka");
   const [cashRegisterId, setCashRegisterId] = useState("");
   const [bankAccountId, setBankAccountId] = useState("");
+  const [paymentDate, setPaymentDate] = useState(() => localToday());
   const [edit, setEdit] = useState<EditState | null>(null);
 
   const load = useCallback(async () => {
@@ -115,6 +117,7 @@ export default function LoanDetailPage() {
             method === "nakit" && cashRegisterId ? Number(cashRegisterId) : null,
           bank_account_id:
             method === "banka" && bankAccountId ? Number(bankAccountId) : null,
+          payment_date: paymentDate || localToday(),
         }),
       });
       setLoan(updated);
@@ -161,6 +164,9 @@ export default function LoanDetailPage() {
         : cashRegisterId,
       bank_account_id: inst.bank_account_id ? String(inst.bank_account_id) : bankAccountId,
       is_paid: inst.is_paid,
+      payment_date: inst.paid_at
+        ? toIsoDate(inst.paid_at)
+        : String(inst.due_date).slice(0, 10) || localToday(),
     });
   }
 
@@ -196,6 +202,7 @@ export default function LoanDetailPage() {
           edit.payment_method === "banka" && edit.bank_account_id
             ? Number(edit.bank_account_id)
             : null;
+        body.payment_date = edit.payment_date || localToday();
       }
       const updated = await apiFetch<Loan>(
         `/api/loans/${id}/installments/${edit.installmentId}`,
@@ -277,7 +284,15 @@ export default function LoanDetailPage() {
         <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={removeLoan} style={{ color: "#b94a48" }}>
           Krediyi Sil
         </button>
-        <span className="text-baykus-muted text-xs ml-auto">Ödeme hesabı:</span>
+        <span className="text-baykus-muted text-xs ml-auto">Ödeme tarihi:</span>
+        <input
+          type="date"
+          value={paymentDate}
+          onChange={(e) => setPaymentDate(e.target.value)}
+          className="bk-input text-xs max-w-[150px]"
+          title="Kasa/banka hareket tarihi (geçmiş tarih serbest)"
+        />
+        <span className="text-baykus-muted text-xs">Ödeme hesabı:</span>
         <select value={method} onChange={(e) => setMethod(e.target.value)} className="bk-input text-xs max-w-[160px]">
           <option value="banka">Banka</option>
           <option value="nakit">Nakit (kasa)</option>
@@ -347,6 +362,16 @@ export default function LoanDetailPage() {
           </label>
           {edit.is_paid && (
             <>
+              <label className="text-xs">
+                <span className="text-baykus-muted">Ödeme tarihi</span>
+                <input
+                  type="date"
+                  className="bk-input mt-1 w-full"
+                  value={edit.payment_date}
+                  onChange={(e) => setEdit({ ...edit, payment_date: e.target.value })}
+                  required
+                />
+              </label>
               <label className="text-xs">
                 <span className="text-baykus-muted">Ödeme yöntemi</span>
                 <select
