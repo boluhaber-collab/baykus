@@ -256,6 +256,35 @@ export default function CustomerDetailPage() {
     }
   }
 
+  async function editCollectionRow(m: CariMovement) {
+    try {
+      if (isBhImportNote(m.note)) {
+        throw new Error("BizimHesap aktarım kayıtları düzenlenemez");
+      }
+      const curAmt = Number(m.credit) > 0 ? Number(m.credit) : Number(m.debit);
+      const amtStr = window.prompt("Tutar (₺)", String(curAmt));
+      if (amtStr == null) return;
+      const amount = Number(String(amtStr).replace(",", "."));
+      if (!(amount > 0)) throw new Error("Geçerli tutar girin");
+      const dateStr = window.prompt("Tarih (YYYY-AA-GG)", String(m.movement_date || "").slice(0, 10));
+      if (dateStr == null) return;
+      const noteStr = window.prompt("Açıklama", sanitizeDisplayNote(m.note) || "");
+      if (noteStr == null) return;
+      await apiFetch(`/api/customers/${id}/movements/${m.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          amount,
+          movement_date: dateStr.slice(0, 10) || null,
+          note: noteStr.trim() || null,
+        }),
+      });
+      setOkMsg("Tahsilat güncellendi · cari + kasa/banka");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Tahsilat güncellenemedi");
+    }
+  }
+
   async function saveEdit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -499,6 +528,8 @@ export default function CustomerDetailPage() {
       emptyText="Tahsilat yok"
       onDelete={(m) => deleteCollectionRow(m)}
       canDelete={(m) => !isBhImportNote(m.note)}
+      onEdit={(m) => editCollectionRow(m)}
+      canEdit={(m) => !isBhImportNote(m.note)}
       deleteConfirm={(m) =>
         `Tahsilat ${formatMoney(Number(m.credit) || Number(m.debit))} silinsin mi?\nCari + kasa/banka hareketi kaldırılır.`
       }

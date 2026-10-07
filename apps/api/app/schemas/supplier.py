@@ -62,6 +62,14 @@ class SupplierMovementCreate(BaseModel):
     payments: list[PaymentLineIn] | None = None
 
 
+class SupplierMovementUpdate(BaseModel):
+    """Edit supplier hareket — amount/date/note; cascades to linked kasa/banka."""
+
+    amount: Decimal | None = Field(default=None, gt=0)
+    movement_date: date | None = None
+    note: str | None = None
+
+
 class SupplierMovementOut(BaseModel):
     id: int
     supplier_id: int

@@ -69,6 +69,14 @@ class CariMovementCreate(BaseModel):
     payments: list[PaymentLineIn] | None = None
 
 
+class CariMovementUpdate(BaseModel):
+    """Edit cari hareket — amount/date/note; cascades to linked kasa/banka."""
+
+    amount: Decimal | None = Field(default=None, gt=0)
+    movement_date: date | None = None
+    note: str | None = None
+
+
 class CariMovementOut(BaseModel):
     id: int
     customer_id: int

@@ -23,6 +23,7 @@ from app.schemas.supplier import (
     SupplierDetailOut,
     SupplierMovementCreate,
     SupplierMovementOut,
+    SupplierMovementUpdate,
     SupplierOut,
     SupplierPurchaseBrief,
     SupplierStatementOut,
@@ -30,7 +31,7 @@ from app.schemas.supplier import (
 )
 
 from app.utils.dates import format_tr_period
-from app.utils.bh_note import sanitize_display_note
+from app.utils.bh_note import merge_bh_preserved_note, sanitize_display_note
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
@@ -415,6 +416,83 @@ def create_movement(
     return _movement_out(movement)
 
 
+
+
+
+@router.put(
+    "/{supplier_id}/movements/{movement_id}",
+    response_model=SupplierMovementOut,
+)
+def update_movement(
+    supplier_id: int,
+    movement_id: int,
+    payload: SupplierMovementUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*LEDGER_WRITE_ROLES)),
+) -> SupplierMovementOut:
+    """Düzenle — tutar/tarih/açıklama; bağlı kasa/banka cascade. Alış (purchase) kilitli."""
+    from app.models.finance import BankMovement, CashMovement
+    from app.services.audit import write_audit
+
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Tedarikçi bulunamadı")
+    movement = db.get(SupplierMovement, movement_id)
+    if not movement or movement.supplier_id != supplier_id:
+        raise HTTPException(status_code=404, detail="Tedarikçi hareketi bulunamadı")
+
+    note = movement.note or ""
+    if "BH_IMPORT:" in note:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="BizimHesap aktarım kayıtları düzenlenemez",
+        )
+    if movement.movement_type == "purchase" and movement.purchase_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Alış hareketi satın alma üzerinden düzenlenir",
+        )
+
+    data = payload.model_dump(exclude_unset=True)
+    amount = data.get("amount")
+    if amount is not None:
+        amount = Decimal(str(amount))
+        if movement.credit and movement.credit > 0 and (not movement.debit or movement.debit <= 0):
+            movement.credit = amount
+            movement.debit = Decimal("0")
+        else:
+            movement.debit = amount
+            movement.credit = Decimal("0")
+    if "movement_date" in data and data["movement_date"] is not None:
+        movement.movement_date = data["movement_date"]
+    if "note" in data:
+        movement.note = merge_bh_preserved_note(movement.note, data.get("note"))
+
+    for m in db.query(CashMovement).filter(CashMovement.supplier_movement_id == movement.id).all():
+        if amount is not None:
+            m.amount = amount
+        if "movement_date" in data and data["movement_date"] is not None:
+            m.movement_date = data["movement_date"]
+        if "note" in data:
+            m.note = merge_bh_preserved_note(m.note, data.get("note"))
+    for m in db.query(BankMovement).filter(BankMovement.supplier_movement_id == movement.id).all():
+        if amount is not None:
+            m.amount = amount
+        if "movement_date" in data and data["movement_date"] is not None:
+            m.movement_date = data["movement_date"]
+        if "note" in data:
+            m.note = merge_bh_preserved_note(m.note, data.get("note"))
+
+    db.commit()
+    db.refresh(movement)
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="supplier_movement",
+        entity_id=movement.id,
+        detail={"supplier_id": supplier_id, "amount": float(amount) if amount is not None else None},
+    )
+    return _movement_out(movement)
 
 
 @router.delete(

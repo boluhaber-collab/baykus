@@ -19,6 +19,7 @@ from app.models.user import User
 from app.schemas.customer import (
     CariMovementCreate,
     CariMovementOut,
+    CariMovementUpdate,
     CustomerCreate,
     CustomerDetailOut,
     CustomerDevirIn,
@@ -33,7 +34,7 @@ from app.schemas.customer import (
 )
 
 from app.utils.dates import format_tr_period
-from app.utils.bh_note import sanitize_display_note
+from app.utils.bh_note import merge_bh_preserved_note, sanitize_display_note
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -794,6 +795,98 @@ def create_movement(
     return _movement_out(movement)
 
 
+
+
+
+@router.put(
+    "/{customer_id}/movements/{movement_id}",
+    response_model=CariMovementOut,
+)
+def update_movement(
+    customer_id: int,
+    movement_id: int,
+    payload: CariMovementUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*CARI_WRITE_ROLES)),
+) -> CariMovementOut:
+    """Düzenle — tutar/tarih/açıklama; bağlı kasa/banka cascade. Satış (order) kilitli."""
+    from app.models.finance import BankMovement, CashMovement
+
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Müşteri bulunamadı")
+    movement = db.get(CariMovement, movement_id)
+    if not movement or movement.customer_id != customer_id:
+        raise HTTPException(status_code=404, detail="Cari hareket bulunamadı")
+
+    note = movement.note or ""
+    if "BH_IMPORT:" in note:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="BizimHesap aktarım kayıtları düzenlenemez",
+        )
+    if movement.movement_type == "sale" and movement.order_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Satış hareketi sipariş üzerinden düzenlenir",
+        )
+
+    data = payload.model_dump(exclude_unset=True)
+    amount = data.get("amount")
+    old_amt = movement.credit if (movement.credit or 0) > 0 else movement.debit
+    old_note = movement.note
+    if amount is not None:
+        amount = Decimal(str(amount))
+        # Keep single-sided debit/credit
+        if movement.credit and movement.credit > 0 and (not movement.debit or movement.debit <= 0):
+            movement.credit = amount
+            movement.debit = Decimal("0")
+        else:
+            movement.debit = amount
+            movement.credit = Decimal("0")
+    if "movement_date" in data and data["movement_date"] is not None:
+        movement.movement_date = data["movement_date"]
+    if "note" in data:
+        movement.note = merge_bh_preserved_note(movement.note, data.get("note"))
+
+    # Cascade to linked finance
+    for m in db.query(CashMovement).filter(CashMovement.cari_movement_id == movement.id).all():
+        if amount is not None:
+            m.amount = amount
+        if "movement_date" in data and data["movement_date"] is not None:
+            m.movement_date = data["movement_date"]
+        if "note" in data:
+            m.note = merge_bh_preserved_note(m.note, data.get("note"))
+    for m in db.query(BankMovement).filter(BankMovement.cari_movement_id == movement.id).all():
+        if amount is not None:
+            m.amount = amount
+        if "movement_date" in data and data["movement_date"] is not None:
+            m.movement_date = data["movement_date"]
+        if "note" in data:
+            m.note = merge_bh_preserved_note(m.note, data.get("note"))
+
+    # Matching Payment on order
+    if movement.order_id and movement.movement_type in ("payment", "deposit") and amount is not None:
+        pays = db.query(Payment).filter(Payment.order_id == movement.order_id).all()
+        for p in pays:
+            if abs(Decimal(str(p.amount or 0)) - Decimal(str(old_amt or 0))) < Decimal("0.02") or (
+                old_note and (p.notes or "") == old_note
+            ):
+                p.amount = amount
+                if "note" in data:
+                    p.notes = movement.note
+                break
+
+    db.commit()
+    db.refresh(movement)
+    write_audit(
+        user_id=user.id,
+        action="update",
+        entity_type="cari_movement",
+        entity_id=movement.id,
+        detail={"customer_id": customer_id, "amount": float(amount) if amount is not None else None},
+    )
+    return _movement_out(movement)
 
 
 @router.delete(

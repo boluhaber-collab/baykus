@@ -69,6 +69,9 @@ export type ExpandableMovementTableProps<T extends { id: number | string }> = {
   deleteConfirm?: string | ((row: T) => string);
   /** Return false to hide Sil (e.g. BH_IMPORT rows). Default: allow when onDelete set. */
   canDelete?: (row: T) => boolean;
+  /** When set, expanded panel shows Düzenle (amount/date/note → kasa/banka cascade). */
+  onEdit?: (row: T) => void | Promise<void>;
+  canEdit?: (row: T) => boolean;
 };
 
 type CacheEntry = ExpandDetailPayload & { loading?: boolean; error?: string | null };
@@ -97,6 +100,7 @@ function ExpandPanel({
   onDelete,
   deleteBusy,
   deleteDisabledReason,
+  onEdit,
 }: {
   detail: CacheEntry | undefined;
   fallbackNote?: string | null;
@@ -104,13 +108,14 @@ function ExpandPanel({
   onDelete?: () => void;
   deleteBusy?: boolean;
   deleteDisabledReason?: string | null;
+  onEdit?: () => void;
 }) {
   const loading = detail?.loading;
   const error = detail?.error;
   const lines = detail?.lines || [];
   const note = sanitizeDisplayNote(detail?.note ?? fallbackNote ?? "");
   const userName = decodeHtmlEntities(detail?.userName || "").trim();
-  const showActions = Boolean(cta || onDelete || deleteDisabledReason);
+  const showActions = Boolean(cta || onDelete || onEdit || deleteDisabledReason);
 
   return (
     <div className="bk-expand-panel">
@@ -153,6 +158,18 @@ function ExpandPanel({
             ) : null}
           </div>
           <div className="bk-expand-actions">
+            {onEdit ? (
+              <button
+                type="button"
+                className="bk-btn bk-btn-ghost text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+              >
+                Düzenle
+              </button>
+            ) : null}
             {onDelete ? (
               <button
                 type="button"
@@ -201,6 +218,8 @@ export default function ExpandableMovementTable<T extends { id: number | string 
   onDelete,
   deleteConfirm,
   canDelete,
+  onEdit,
+  canEdit,
 }: ExpandableMovementTableProps<T>) {
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [cache, setCache] = useState<Record<string, CacheEntry>>({});
@@ -353,6 +372,11 @@ export default function ExpandableMovementTable<T extends { id: number | string 
                         detail={cache[key]}
                         fallbackNote={note}
                         cta={cta}
+                        onEdit={
+                          Boolean(onEdit) && (canEdit ? canEdit(row) : true)
+                            ? () => void onEdit?.(row)
+                            : undefined
+                        }
                         onDelete={allowDelete ? () => runDelete(row) : undefined}
                         deleteBusy={deletingId === key}
                         deleteDisabledReason={

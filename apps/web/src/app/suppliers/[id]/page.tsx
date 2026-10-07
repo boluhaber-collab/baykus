@@ -277,6 +277,36 @@ export default function SupplierDetailPage() {
     }
   }
 
+  async function editPaymentRow(m: SupplierMovement) {
+    try {
+      if (isBhImportNote(m.note)) {
+        throw new Error("BizimHesap aktarım kayıtları düzenlenemez");
+      }
+      const curAmt = Number(m.credit) > 0 ? Number(m.credit) : Number(m.debit);
+      const amtStr = window.prompt("Tutar (₺)", String(curAmt));
+      if (amtStr == null) return;
+      const amount = Number(String(amtStr).replace(",", "."));
+      if (!(amount > 0)) throw new Error("Geçerli tutar girin");
+      const dateStr = window.prompt("Tarih (YYYY-AA-GG)", String(m.movement_date || "").slice(0, 10));
+      if (dateStr == null) return;
+      const noteStr = window.prompt("Açıklama", sanitizeDisplayNote(m.note) || "");
+      if (noteStr == null) return;
+      await apiFetch(`/api/suppliers/${id}/movements/${m.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          amount,
+          movement_date: dateStr.slice(0, 10) || null,
+          note: noteStr.trim() || null,
+        }),
+      });
+      setOkMsg("Ödeme güncellendi · tedarikçi cari + kasa/banka");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ödeme güncellenemedi");
+    }
+  }
+
+
   if (!supplier && !error) {
     return <div className="text-slate-500">Yükleniyor…</div>;
   }
@@ -415,6 +445,8 @@ export default function SupplierDetailPage() {
       emptyText="Ödeme yok"
       onDelete={(m) => deletePaymentRow(m)}
       canDelete={(m) => !isBhImportNote(m.note)}
+      onEdit={(m) => editPaymentRow(m)}
+      canEdit={(m) => !isBhImportNote(m.note)}
       deleteConfirm={(m) =>
         `Ödeme ${formatMoney(Number(m.credit) || Number(m.debit))} silinsin mi?\nTedarikçi cari + kasa/banka kaldırılır.`
       }
