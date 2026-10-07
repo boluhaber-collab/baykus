@@ -16,6 +16,10 @@ from app.models.settings_model import AppSetting
 from app.models.supplier import Supplier
 from app.models.user import User
 from app.schemas.mail import (
+    MailAccountIn,
+    MailAccountOut,
+    MailAccountsListOut,
+    MailAccountTestIn,
     MailActionResult,
     MailAttachmentOut,
     MailMessageOut,
@@ -23,9 +27,22 @@ from app.schemas.mail import (
     MailSendRequest,
     MailSettingsOut,
     MailSettingsUpdate,
+    MailSyncAccountResult,
     MailSyncStatusOut,
 )
-from app.services.mail_config import MASK, MailConfig, load_mail_config, public_settings_dict, save_mail_config
+from app.services.mail_accounts import (
+    ACCOUNTS_PATH,
+    MailAccount,
+    create_account,
+    delete_account,
+    get_account,
+    get_default_account,
+    list_accounts,
+    merged_test_config,
+    public_account_dict,
+    set_default_account,
+    update_account,
+)
 from app.services.mail_sync import (
     build_eml_bytes,
     load_sync_state,
@@ -38,61 +55,36 @@ from app.services.mail_transport import send_email, test_imap, test_smtp
 router = APIRouter(prefix="/mail", tags=["mail"])
 
 
-def _cfg_from_test_payload(payload: MailSettingsUpdate | None) -> MailConfig:
-    """Merge optional test body with saved mail_config; blank passwords keep saved."""
-    cur = load_mail_config()
-    if payload is None:
-        return cur
-    data = payload.model_dump(exclude_unset=True)
-    data.pop("clear_smtp_password", None)
-    data.pop("clear_imap_password", None)
-
-    def take_str(key: str, attr: str) -> str:
-        if key not in data or data[key] is None:
-            return getattr(cur, attr)
-        return str(data[key]).strip()
-
-    def take_int(key: str, attr: str, default: int) -> int:
-        if key not in data or data[key] is None:
-            return int(getattr(cur, attr) or default)
+def _parse_dt(raw: object) -> datetime | None:
+    if isinstance(raw, str) and raw.strip():
         try:
-            return int(data[key])
-        except Exception:
-            return int(getattr(cur, attr) or default)
+            return datetime.fromisoformat(raw.replace("Z", ""))
+        except Exception:  # noqa: BLE001
+            return None
+    return None
 
-    def take_bool(key: str, attr: str) -> bool:
-        if key not in data or data[key] is None:
-            return bool(getattr(cur, attr))
-        return bool(data[key])
 
-    smtp_pw = cur.smtp_password
-    if "smtp_password" in data and data["smtp_password"] is not None:
-        pw = str(data["smtp_password"])
-        if pw and pw != MASK:
-            smtp_pw = pw
-    imap_pw = cur.imap_password
-    if "imap_password" in data and data["imap_password"] is not None:
-        pw = str(data["imap_password"])
-        if pw and pw != MASK:
-            imap_pw = pw
-
-    return MailConfig(
-        smtp_host=take_str("smtp_host", "smtp_host"),
-        smtp_port=take_int("smtp_port", "smtp_port", 587),
-        smtp_user=take_str("smtp_user", "smtp_user"),
-        smtp_password=smtp_pw,
-        smtp_use_tls=take_bool("smtp_use_tls", "smtp_use_tls"),
-        from_name=take_str("from_name", "from_name") or "Baykuş Baskı",
-        from_email=take_str("from_email", "from_email"),
-        imap_host=take_str("imap_host", "imap_host"),
-        imap_port=take_int("imap_port", "imap_port", 993),
-        imap_user=take_str("imap_user", "imap_user"),
-        imap_password=imap_pw,
-        imap_use_ssl=take_bool("imap_use_ssl", "imap_use_ssl"),
-        imap_folder=take_str("imap_folder", "imap_folder") or "INBOX",
+def _account_out(a: MailAccount) -> MailAccountOut:
+    st = load_sync_state(a.id)
+    return MailAccountOut(
+        **public_account_dict(a),
+        last_sync_at=_parse_dt(st.get("last_sync_at")),
+        last_ok=st.get("last_ok"),
+        last_message=str(st.get("last_message") or ""),
     )
 
 
+def _account_names() -> dict[int, str]:
+    return {a.id: a.display_name() for a in list_accounts()}
+
+
+def _settings_out_for(a: MailAccount | None) -> MailSettingsOut:
+    """Geriye dönük: /settings varsayılan hesabı tek hesap gibi döner."""
+    if a is None:
+        return MailSettingsOut(config_path=str(ACCOUNTS_PATH))
+    d = public_account_dict(a)
+    keep = set(MailSettingsOut.model_fields.keys())
+    return MailSettingsOut(**{k: v for k, v in d.items() if k in keep}, config_path=str(ACCOUNTS_PATH))
 
 
 def _email_from_addr(raw: str) -> str:
@@ -131,7 +123,16 @@ def _match_supplier(db: Session, from_addr: str) -> int | None:
     return row.id if row else None
 
 
-def _out(row: MailMessage, db: Session | None = None) -> MailMessageOut:
+def _out(
+    row: MailMessage,
+    db: Session | None = None,
+    account_names: dict[int, str] | None = None,
+) -> MailMessageOut:
+    names = account_names if account_names is not None else _account_names()
+    acc_id = getattr(row, "account_id", None)
+    acc_name = None
+    if acc_id is not None:
+        acc_name = names.get(int(acc_id)) or f"Silinmiş hesap #{acc_id}"
     name = None
     if row.customer_id and db is not None:
         c = db.query(Customer).filter(Customer.id == row.customer_id).first()
@@ -149,6 +150,8 @@ def _out(row: MailMessage, db: Session | None = None) -> MailMessageOut:
     ]
     return MailMessageOut(
         id=row.id,
+        account_id=acc_id,
+        account_name=acc_name,
         folder=row.folder,
         direction=row.direction,
         message_id=row.message_id,
@@ -181,75 +184,128 @@ def _safe_download_name(name: str, fallback: str) -> str:
 
 @router.get("/settings", response_model=MailSettingsOut)
 def get_settings(_: User = Depends(require_roles("admin", "satış", "muhasebe"))) -> MailSettingsOut:
-    return MailSettingsOut(**public_settings_dict())
+    """Varsayılan hesabın durumu (geriye dönük uyumluluk)."""
+    return _settings_out_for(get_default_account())
 
 
 @router.put("/settings", response_model=MailSettingsOut)
 def update_settings(
     payload: MailSettingsUpdate,
-    user: User = Depends(require_roles("admin")),
+    _: User = Depends(require_roles("admin")),
 ) -> MailSettingsOut:
-    void = user  # admin-only write
-    del void
-    cur = load_mail_config()
+    """Geriye dönük: varsayılan hesabı günceller (yoksa oluşturur)."""
     data = payload.model_dump(exclude_unset=True)
-    clear_smtp = bool(data.pop("clear_smtp_password", False))
-    clear_imap = bool(data.pop("clear_imap_password", False))
+    cur = get_default_account()
+    acc = update_account(cur.id, data) if cur else create_account({**data, "is_default": True})
+    return _settings_out_for(acc)
 
-    def take(key: str, attr: str, cast=None):
-        if key not in data or data[key] is None:
-            return getattr(cur, attr)
-        val = data[key]
-        return cast(val) if cast else val
 
-    cfg = MailConfig(
-        smtp_host=take("smtp_host", "smtp_host", lambda v: str(v).strip()),
-        smtp_port=take("smtp_port", "smtp_port", int),
-        smtp_user=take("smtp_user", "smtp_user", lambda v: str(v).strip()),
-        smtp_password=data.get("smtp_password") if "smtp_password" in data else cur.smtp_password,
-        smtp_use_tls=take("smtp_use_tls", "smtp_use_tls", bool),
-        from_name=take("from_name", "from_name", lambda v: str(v).strip()),
-        from_email=take("from_email", "from_email", lambda v: str(v).strip()),
-        imap_host=take("imap_host", "imap_host", lambda v: str(v).strip()),
-        imap_port=take("imap_port", "imap_port", int),
-        imap_user=take("imap_user", "imap_user", lambda v: str(v).strip()),
-        imap_password=data.get("imap_password") if "imap_password" in data else cur.imap_password,
-        imap_use_ssl=take("imap_use_ssl", "imap_use_ssl", bool),
-        imap_folder=take("imap_folder", "imap_folder", lambda v: str(v).strip() or "INBOX"),
+# ── Hesaplar ──────────────────────────────────────────────────────────────
+
+
+@router.get("/accounts", response_model=MailAccountsListOut)
+def list_mail_accounts(
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+) -> MailAccountsListOut:
+    accs = list_accounts()
+    d = get_default_account()
+    return MailAccountsListOut(
+        accounts=[_account_out(a) for a in accs],
+        default_account_id=d.id if d else None,
+        storage_path=str(ACCOUNTS_PATH),
     )
-    # If password is mask, treat as unset
-    if cfg.smtp_password == MASK:
-        cfg.smtp_password = cur.smtp_password
-    if cfg.imap_password == MASK:
-        cfg.imap_password = cur.imap_password
 
-    merged = save_mail_config(cfg, clear_smtp_password=clear_smtp, clear_imap_password=clear_imap)
-    return MailSettingsOut(**public_settings_dict(merged))
+
+@router.get("/settings/accounts", response_model=MailAccountsListOut)
+def list_mail_accounts_admin(
+    user: User = Depends(require_roles("admin", "satış", "muhasebe")),
+) -> MailAccountsListOut:
+    return list_mail_accounts(user)
+
+
+@router.post("/settings/accounts", response_model=MailAccountOut, status_code=status.HTTP_201_CREATED)
+def create_mail_account(
+    payload: MailAccountIn,
+    _: User = Depends(require_roles("admin")),
+) -> MailAccountOut:
+    acc = create_account(payload.model_dump(exclude_unset=True))
+    return _account_out(acc)
+
+
+@router.put("/settings/accounts/{account_id}", response_model=MailAccountOut)
+def update_mail_account(
+    account_id: int,
+    payload: MailAccountIn,
+    _: User = Depends(require_roles("admin")),
+) -> MailAccountOut:
+    acc = update_account(account_id, payload.model_dump(exclude_unset=True))
+    if acc is None:
+        raise HTTPException(status_code=404, detail="Hesap bulunamadı")
+    return _account_out(acc)
+
+
+@router.delete("/settings/accounts/{account_id}", response_model=MailActionResult)
+def delete_mail_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin")),
+) -> MailActionResult:
+    acc = get_account(account_id)
+    if acc is None:
+        raise HTTPException(status_code=404, detail="Hesap bulunamadı")
+    kept = db.query(MailMessage).filter(MailMessage.account_id == account_id).count()
+    if not delete_account(account_id):
+        raise HTTPException(status_code=404, detail="Hesap bulunamadı")
+    msg = f"{acc.display_name()} silindi"
+    if kept:
+        msg += f" — {kept} mesaj kutuda kalmaya devam ediyor (Tümü altında görünür)"
+    return MailActionResult(ok=True, message=msg)
+
+
+@router.post("/settings/accounts/{account_id}/default", response_model=MailAccountOut)
+def make_default_mail_account(
+    account_id: int,
+    _: User = Depends(require_roles("admin")),
+) -> MailAccountOut:
+    acc = set_default_account(account_id)
+    if acc is None:
+        raise HTTPException(status_code=404, detail="Hesap bulunamadı")
+    return _account_out(acc)
+
+
+def _test_cfg(payload: MailAccountTestIn | None) -> MailAccount:
+    if payload is None:
+        d = get_default_account()
+        return d or MailAccount()
+    data = payload.model_dump(exclude_unset=True)
+    acc_id = data.pop("account_id", None)
+    for k in ("label", "active", "is_default"):
+        data.pop(k, None)
+    return merged_test_config(acc_id, data)
 
 
 @router.post("/settings/test-smtp", response_model=MailActionResult)
 def api_test_smtp(
-    payload: MailSettingsUpdate = MailSettingsUpdate(),
+    payload: MailAccountTestIn = MailAccountTestIn(),
     _: User = Depends(require_roles("admin")),
 ) -> MailActionResult:
-    cfg = _cfg_from_test_payload(payload)
-    r = test_smtp(cfg)
+    r = test_smtp(_test_cfg(payload))
     return MailActionResult(ok=bool(r.get("ok")), message=str(r.get("message") or ""))
 
 
 @router.post("/settings/test-imap", response_model=MailActionResult)
 def api_test_imap(
-    payload: MailSettingsUpdate = MailSettingsUpdate(),
+    payload: MailAccountTestIn = MailAccountTestIn(),
     _: User = Depends(require_roles("admin")),
 ) -> MailActionResult:
-    cfg = _cfg_from_test_payload(payload)
-    r = test_imap(cfg)
+    r = test_imap(_test_cfg(payload))
     return MailActionResult(ok=bool(r.get("ok")), message=str(r.get("message") or ""))
 
 
 @router.get("/messages", response_model=list[MailMessageOut])
 def list_messages(
     folder: str | None = Query(None, description="inbox | sent"),
+    account_id: int | None = Query(None, description="boş = tüm hesaplar"),
     customer_id: int | None = None,
     q: str | None = None,
     limit: int = Query(80, ge=1, le=300),
@@ -259,6 +315,8 @@ def list_messages(
     qry = db.query(MailMessage)
     if folder in ("inbox", "sent"):
         qry = qry.filter(MailMessage.folder == folder)
+    if account_id is not None:
+        qry = qry.filter(MailMessage.account_id == account_id)
     if customer_id:
         qry = qry.filter(MailMessage.customer_id == customer_id)
     if q and q.strip():
@@ -274,7 +332,8 @@ def list_messages(
         .limit(limit)
         .all()
     )
-    return [_out(r, db) for r in rows]
+    names = _account_names()
+    return [_out(r, db, names) for r in rows]
 
 
 @router.get("/messages/{message_id}", response_model=MailMessageOut)
@@ -328,19 +387,30 @@ def send_mail(
         if not sup:
             raise HTTPException(status_code=400, detail="Tedarikçi bulunamadı")
 
+    account = get_account(payload.account_id) if payload.account_id else get_default_account()
+    if account is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Gönderen hesap bulunamadı — Sistem › E-Posta Ayarları'ndan hesap ekleyin",
+        )
+    if not account.active:
+        raise HTTPException(status_code=400, detail=f"{account.display_name()} pasif — önce aktif edin")
+
     result = send_email(
         to=payload.to,
         subject=payload.subject,
         body_text=payload.body,
         cc=payload.cc,
+        cfg=account,
     )
     if not result.get("ok"):
         # still store failed attempt in sent with error
         row = MailMessage(
+            account_id=account.id,
             folder="sent",
             direction="out",
             message_id=None,
-            from_addr=load_mail_config().effective_from(),
+            from_addr=account.effective_from(),
             to_addrs=payload.to,
             cc_addrs=payload.cc,
             subject=payload.subject or "(konu yok)",
@@ -358,6 +428,7 @@ def send_mail(
         raise HTTPException(status_code=400, detail=result.get("message") or "Gönderilemedi")
 
     row = MailMessage(
+        account_id=account.id,
         folder="sent",
         direction="out",
         message_id=result.get("message_id"),
@@ -381,42 +452,56 @@ def send_mail(
 
 @router.get("/sync-status", response_model=MailSyncStatusOut)
 def sync_status(
+    account_id: int | None = Query(None, description="boş = tüm hesaplar"),
     _: User = Depends(require_roles("admin", "satış", "muhasebe")),
 ) -> MailSyncStatusOut:
-    st = load_sync_state()
-    last_at = st.get("last_sync_at")
-    parsed_at: datetime | None = None
-    if isinstance(last_at, str) and last_at.strip():
-        try:
-            parsed_at = datetime.fromisoformat(last_at.replace("Z", ""))
-        except Exception:
-            parsed_at = None
-    cfg = load_mail_config()
+    accs = list_accounts()
+    st = load_sync_state(account_id)
+    if account_id is not None:
+        sel = [a for a in accs if a.id == account_id]
+        imap_ok = bool(sel and sel[0].active and sel[0].imap_configured)
+    else:
+        imap_ok = any(a.active and a.imap_configured for a in accs)
     return MailSyncStatusOut(
-        last_sync_at=parsed_at,
+        last_sync_at=_parse_dt(st.get("last_sync_at")),
         last_ok=st.get("last_ok"),
         last_message=str(st.get("last_message") or ""),
         imported=int(st.get("imported") or 0),
         linked=int(st.get("linked") or 0),
         skipped=bool(st.get("skipped")),
-        imap_configured=bool(cfg.imap_configured),
+        imap_configured=imap_ok,
         autosync_interval_minutes=30,
+        account_id=account_id,
+        accounts=[_account_out(a) for a in accs],
     )
 
 
 @router.post("/sync", response_model=MailActionResult)
 def sync_inbox(
+    account_id: int | None = Query(None, description="boş = tüm aktif hesaplar"),
     limit: int = Query(40, ge=1, le=100),
     unseen_only: bool = Query(False),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış", "muhasebe")),
 ) -> MailActionResult:
-    result = run_manual_sync(db, limit=limit, unseen_only=unseen_only)
+    result = run_manual_sync(db, account_id=account_id, limit=limit, unseen_only=unseen_only)
     return MailActionResult(
         ok=bool(result.get("ok")),
         message=str(result.get("message") or ""),
         imported=int(result.get("imported") or 0),
         linked=int(result.get("linked") or 0),
+        results=[
+            MailSyncAccountResult(
+                account_id=int(r.get("account_id") or 0),
+                account=str(r.get("account") or ""),
+                ok=bool(r.get("ok")),
+                message=str(r.get("message") or ""),
+                imported=int(r.get("imported") or 0),
+                linked=int(r.get("linked") or 0),
+                skipped=bool(r.get("skipped")),
+            )
+            for r in (result.get("results") or [])
+        ],
     )
 
 

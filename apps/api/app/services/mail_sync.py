@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.models.customer import Customer
 from app.models.mail import MailMessage
 from app.models.supplier import Supplier
-from app.services.mail_config import load_mail_config
+from app.services.mail_accounts import MailAccount, get_account, list_accounts, sync_targets
 from app.services.mail_transport import fetch_recent_imap
 
 log = logging.getLogger("baykus.mail_sync")
@@ -25,7 +25,6 @@ _API_DIR = Path(__file__).resolve().parents[2]  # apps/api
 _STATE_PATH = _API_DIR / "data" / "mail_sync_state.json"
 _ATTACH_ROOT = _API_DIR / "data" / "mail_attachments"
 
-_sync_lock = threading.Lock()
 _stop_event = threading.Event()
 _thread: threading.Thread | None = None
 
@@ -117,53 +116,98 @@ def resolve_attachment_path(message_id: int, stored_name: str) -> Path | None:
     return path
 
 
-def load_sync_state() -> dict[str, Any]:
+_EMPTY_STATE: dict[str, Any] = {
+    "last_sync_at": None,
+    "last_ok": None,
+    "last_message": "",
+    "imported": 0,
+    "linked": 0,
+    "skipped": False,
+}
+
+_state_lock = threading.Lock()
+_account_locks: dict[int, threading.Lock] = {}
+_account_locks_guard = threading.Lock()
+
+
+def _lock_for(account_id: int) -> threading.Lock:
+    """One overlap lock per account (autosync + manual share it)."""
+    with _account_locks_guard:
+        lk = _account_locks.get(int(account_id))
+        if lk is None:
+            lk = threading.Lock()
+            _account_locks[int(account_id)] = lk
+        return lk
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
+def _read_state_file() -> dict[str, Any]:
     if not _STATE_PATH.is_file():
-        return {
-            "last_sync_at": None,
-            "last_ok": None,
-            "last_message": "",
-            "imported": 0,
-            "linked": 0,
-            "skipped": False,
-        }
+        return {}
     try:
         data = json.loads(_STATE_PATH.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return data
     except Exception:  # noqa: BLE001
         pass
-    return {
-        "last_sync_at": None,
-        "last_ok": None,
-        "last_message": "",
-        "imported": 0,
-        "linked": 0,
-        "skipped": False,
-    }
+    return {}
 
 
-def save_sync_state(**kwargs: Any) -> dict[str, Any]:
-    cur = load_sync_state()
-    cur.update(kwargs)
-    if "last_sync_at" not in kwargs:
-        cur["last_sync_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
-    try:
-        _STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _STATE_PATH.write_text(json.dumps(cur, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError as exc:
-        log.warning("mail sync state write failed: %s", exc)
-    return cur
+def load_sync_state(account_id: int | None = None) -> dict[str, Any]:
+    """Global (last run across accounts) or per-account sync state."""
+    data = _read_state_file()
+    if account_id is None:
+        out = dict(_EMPTY_STATE)
+        out.update({k: data.get(k, v) for k, v in _EMPTY_STATE.items()})
+        return out
+    per = data.get("accounts") if isinstance(data.get("accounts"), dict) else {}
+    st = per.get(str(int(account_id))) if isinstance(per, dict) else None
+    out = dict(_EMPTY_STATE)
+    if isinstance(st, dict):
+        out.update(st)
+    return out
+
+
+def save_sync_state(account_id: int | None = None, **kwargs: Any) -> dict[str, Any]:
+    with _state_lock:
+        data = _read_state_file()
+        entry = dict(_EMPTY_STATE)
+        if account_id is not None:
+            per = data.get("accounts") if isinstance(data.get("accounts"), dict) else {}
+            prev = per.get(str(int(account_id))) if isinstance(per, dict) else None
+            if isinstance(prev, dict):
+                entry.update(prev)
+        else:
+            entry.update({k: data.get(k, v) for k, v in _EMPTY_STATE.items()})
+        entry.update(kwargs)
+        if "last_sync_at" not in kwargs:
+            entry["last_sync_at"] = _now_iso()
+        if account_id is not None:
+            per = data.get("accounts") if isinstance(data.get("accounts"), dict) else {}
+            per[str(int(account_id))] = entry
+            data["accounts"] = per
+        else:
+            data.update(entry)
+        try:
+            _STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _STATE_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as exc:
+            log.warning("mail sync state write failed: %s", exc)
+        return entry
 
 
 def import_inbox(
     db: Session,
+    account: MailAccount,
     *,
     limit: int = 40,
     unseen_only: bool = False,
 ) -> dict[str, Any]:
-    """Fetch IMAP and persist new inbox rows. Caller owns the Session."""
-    result = fetch_recent_imap(limit=limit, unseen_only=unseen_only)
+    """Fetch IMAP for one account and persist new inbox rows. Caller owns the Session."""
+    result = fetch_recent_imap(limit=limit, unseen_only=unseen_only, cfg=account)
     if not result.get("ok"):
         out = {
             "ok": False,
@@ -172,6 +216,7 @@ def import_inbox(
             "linked": 0,
         }
         save_sync_state(
+            account.id,
             last_ok=False,
             last_message=out["message"],
             imported=0,
@@ -187,11 +232,19 @@ def import_inbox(
         uid = m.get("imap_uid")
         exists = None
         if mid:
-            exists = db.query(MailMessage).filter(MailMessage.message_id == mid).first()
+            exists = (
+                db.query(MailMessage)
+                .filter(MailMessage.message_id == mid, MailMessage.account_id == account.id)
+                .first()
+            )
         if not exists and uid:
             exists = (
                 db.query(MailMessage)
-                .filter(MailMessage.folder == "inbox", MailMessage.imap_uid == str(uid))
+                .filter(
+                    MailMessage.folder == "inbox",
+                    MailMessage.imap_uid == str(uid),
+                    MailMessage.account_id == account.id,
+                )
                 .first()
             )
         if exists:
@@ -201,6 +254,7 @@ def import_inbox(
         if cust_id or sup_id:
             linked += 1
         row = MailMessage(
+            account_id=account.id,
             folder="inbox",
             direction="in",
             message_id=mid,
@@ -229,6 +283,7 @@ def import_inbox(
     )
     out = {"ok": True, "message": msg, "imported": imported, "linked": linked}
     save_sync_state(
+        account.id,
         last_ok=True,
         last_message=msg,
         imported=imported,
@@ -238,17 +293,94 @@ def import_inbox(
     return out
 
 
+def _sync_accounts(
+    db: Session,
+    accounts: list[MailAccount],
+    *,
+    limit: int,
+    unseen_only: bool,
+    wait_timeout: float | None,
+) -> dict[str, Any]:
+    """Sync several accounts sequentially; each guarded by its own lock."""
+    results: list[dict[str, Any]] = []
+    total_imp = 0
+    total_link = 0
+    any_ok = False
+    any_fail = False
+    for acc in accounts:
+        lk = _lock_for(acc.id)
+        acquired = lk.acquire(blocking=False) if wait_timeout is None else lk.acquire(timeout=wait_timeout)
+        if not acquired:
+            results.append(
+                {
+                    "account_id": acc.id,
+                    "account": acc.display_name(),
+                    "ok": False,
+                    "skipped": True,
+                    "message": "Senkron zaten çalışıyor",
+                    "imported": 0,
+                    "linked": 0,
+                }
+            )
+            continue
+        try:
+            try:
+                r = import_inbox(db, acc, limit=limit, unseen_only=unseen_only)
+            except Exception as exc:  # noqa: BLE001
+                log.exception("mail sync failed account=%s", acc.id)
+                db.rollback()
+                r = {"ok": False, "message": f"Senkron hatası: {exc}"[:400], "imported": 0, "linked": 0}
+                save_sync_state(acc.id, last_ok=False, last_message=r["message"], imported=0, linked=0, skipped=False)
+        finally:
+            lk.release()
+        if r.get("ok"):
+            any_ok = True
+        else:
+            any_fail = True
+        total_imp += int(r.get("imported") or 0)
+        total_link += int(r.get("linked") or 0)
+        results.append({"account_id": acc.id, "account": acc.display_name(), **r})
+
+    if not accounts:
+        msg = "Senkronize edilecek aktif IMAP hesabı yok"
+        save_sync_state(None, last_ok=None, last_message=msg, imported=0, linked=0, skipped=True)
+        return {"ok": False, "message": msg, "imported": 0, "linked": 0, "results": [], "skipped": True}
+
+    if len(results) == 1:
+        r0 = results[0]
+        msg = str(r0.get("message") or "")
+        if len(accounts) == 1 and len(list_accounts()) > 1:
+            msg = f"{r0.get('account')}: {msg}"
+    else:
+        parts = [f"{r.get('account')}: {r.get('message')}" for r in results]
+        msg = f"Toplam {total_imp} yeni mesaj · " + " | ".join(parts)
+    ok = any_ok  # kısmi başarıda hatalı hesap mesajda yazıyor
+    save_sync_state(
+        None,
+        last_ok=(not any_fail),
+        last_message=msg[:600],
+        imported=total_imp,
+        linked=total_link,
+        skipped=False,
+    )
+    return {
+        "ok": ok,
+        "message": msg[:600],
+        "imported": total_imp,
+        "linked": total_link,
+        "results": results,
+    }
+
+
 def run_autosync_once() -> dict[str, Any]:
-    """Single autosync tick; skips if another sync holds the lock or IMAP not configured."""
-    if not _sync_lock.acquire(blocking=False):
-        log.info("mail autosync skipped (already running)")
-        return {"ok": False, "message": "Senkron zaten çalışıyor", "skipped": True}
+    """Single autosync tick over all active IMAP-configured accounts."""
     try:
-        cfg = load_mail_config()
-        if not cfg.imap_configured:
+        targets = sync_targets()
+        if not targets:
             save_sync_state(
+                None,
                 last_ok=None,
-                last_message="IMAP yapılandırılmadı — otomatik senkron atlandı",
+                last_message="IMAP yapılandırılmış aktif hesap yok — otomatik senkron atlandı",
                 imported=0,
                 linked=0,
                 skipped=True,
@@ -259,12 +391,13 @@ def run_autosync_once() -> dict[str, Any]:
 
         db = SessionLocal()
         try:
-            return import_inbox(db, limit=40, unseen_only=False)
+            return _sync_accounts(db, targets, limit=40, unseen_only=False, wait_timeout=None)
         finally:
             db.close()
     except Exception as exc:  # noqa: BLE001
         log.exception("mail autosync failed")
         save_sync_state(
+            None,
             last_ok=False,
             last_message=f"Otomatik senkron hatası: {exc}"[:400],
             imported=0,
@@ -272,24 +405,25 @@ def run_autosync_once() -> dict[str, Any]:
             skipped=False,
         )
         return {"ok": False, "message": str(exc)[:400]}
-    finally:
-        _sync_lock.release()
 
 
-def run_manual_sync(db: Session, *, limit: int = 40, unseen_only: bool = False) -> dict[str, Any]:
-    """API-triggered sync; waits for lock (short) so it does not overlap autosync writes."""
-    acquired = _sync_lock.acquire(timeout=90)
-    if not acquired:
-        return {
-            "ok": False,
-            "message": "Başka bir senkron çalışıyor — lütfen biraz sonra tekrar deneyin",
-            "imported": 0,
-            "linked": 0,
-        }
-    try:
-        return import_inbox(db, limit=limit, unseen_only=unseen_only)
-    finally:
-        _sync_lock.release()
+def run_manual_sync(
+    db: Session,
+    *,
+    account_id: int | None = None,
+    limit: int = 40,
+    unseen_only: bool = False,
+) -> dict[str, Any]:
+    """API-triggered sync (selected account or all active); waits briefly per-account lock."""
+    targets = sync_targets(account_id)
+    if account_id is not None and not targets:
+        acc = get_account(account_id)
+        if acc is None:
+            return {"ok": False, "message": "Hesap bulunamadı", "imported": 0, "linked": 0}
+        if not acc.active:
+            return {"ok": False, "message": "Hesap pasif — önce aktif edin", "imported": 0, "linked": 0}
+        return {"ok": False, "message": "Bu hesabın IMAP ayarları eksik", "imported": 0, "linked": 0}
+    return _sync_accounts(db, targets, limit=limit, unseen_only=unseen_only, wait_timeout=90)
 
 
 def _autosync_loop() -> None:
@@ -315,7 +449,7 @@ def start_mail_autosync() -> None:
     _stop_event.clear()
     _thread = threading.Thread(target=_autosync_loop, name="baykus-mail-autosync", daemon=True)
     _thread.start()
-    print("[baykus] mail autosync: every 30 min when IMAP configured", flush=True)
+    print("[baykus] mail autosync: every 30 min for all active IMAP accounts", flush=True)
 
 
 def stop_mail_autosync() -> None:

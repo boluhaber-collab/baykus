@@ -12,7 +12,14 @@ from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
 from typing import Any
 
-from app.services.mail_config import MailConfig, load_mail_config
+from app.services.mail_config import MailConfig
+
+
+def _default_cfg() -> MailConfig:
+    """Varsayılan e-posta hesabı (çoklu hesap deposundan)."""
+    from app.services.mail_accounts import get_default_account
+
+    return get_default_account() or MailConfig()
 
 def _friendly_mail_error(kind: str, exc: BaseException, *, host: str = "", use_gmail_hint: bool = False) -> str:
     """Map common SMTP/IMAP failures to clear Turkish guidance (never echo passwords)."""
@@ -164,7 +171,7 @@ def _extract_body(msg: email.message.Message) -> tuple[str, str | None]:
 
 
 def test_smtp(cfg: MailConfig | None = None) -> dict[str, Any]:
-    c = cfg or load_mail_config()
+    c = cfg or _default_cfg()
     if not c.smtp_host.strip():
         return {"ok": False, "message": "SMTP sunucu adresi boş"}
     if not c.smtp_configured:
@@ -194,7 +201,7 @@ def test_smtp(cfg: MailConfig | None = None) -> dict[str, Any]:
 
 
 def test_imap(cfg: MailConfig | None = None) -> dict[str, Any]:
-    c = cfg or load_mail_config()
+    c = cfg or _default_cfg()
     user = c.imap_login_user()
     password = c.imap_login_password()
     if not c.imap_host.strip():
@@ -240,7 +247,7 @@ def send_email(
     cc: list[str] | str | None = None,
     cfg: MailConfig | None = None,
 ) -> dict[str, Any]:
-    c = cfg or load_mail_config()
+    c = cfg or _default_cfg()
     if not c.smtp_configured:
         return {"ok": False, "message": "SMTP ayarları eksik — Sistem › E-Posta Ayarları"}
 
@@ -303,7 +310,7 @@ def fetch_recent_imap(
     cfg: MailConfig | None = None,
 ) -> dict[str, Any]:
     """Fetch recent messages from IMAP. Returns parsed list (not yet persisted)."""
-    c = cfg or load_mail_config()
+    c = cfg or _default_cfg()
     user = c.imap_login_user()
     password = c.imap_login_password()
     if not c.imap_host.strip() or not user or not password:

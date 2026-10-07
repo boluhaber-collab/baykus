@@ -12,6 +12,8 @@ class MailMessage(Base):
     __tablename__ = "mail_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # data/mail_accounts.json içindeki hesap id'si (şifreler DB'de değil)
+    account_id: Mapped[int | None] = mapped_column(Integer, index=True)
     folder: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # inbox | sent
     direction: Mapped[str] = mapped_column(String(10), nullable=False, default="out")  # in | out
     message_id: Mapped[str | None] = mapped_column(String(255), index=True)

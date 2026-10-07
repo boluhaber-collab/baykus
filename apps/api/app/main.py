@@ -80,7 +80,11 @@ def _ensure_lookup_indexes() -> None:
         from app.services.mail_schema_migrate import run_startup_migrate as _mail_schema_migrate
 
         _mail = _mail_schema_migrate()
-        if _mail and not _mail.get("had_mail"):
+        if _mail and (
+            not _mail.get("had_mail")
+            or _mail.get("account_col_added")
+            or _mail.get("assigned_to_account_1")
+        ):
             print(f"[baykus] startup mail migrate: {_mail}", flush=True)
     except Exception as _exc:
         print(f"[baykus] startup mail migrate error: {_exc}", flush=True)

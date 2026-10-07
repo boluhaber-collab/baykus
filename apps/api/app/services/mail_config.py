@@ -1,5 +1,9 @@
 """SMTP/IMAP credentials — local file under apps/api/data (not DB plaintext).
 
+NOT: Çoklu hesap artık services/mail_accounts.py (data/mail_accounts.json).
+Bu modül MailConfig tipini ve eski tek-hesap dosyasını (ilk açılışta hesap #1'e
+taşınır) okumak için kalır.
+
 Priority: data/mail_config.env  >  process / root .env MAIL_* vars  >  defaults.
 Passwords never returned to API clients (masked as ••••••••).
 """

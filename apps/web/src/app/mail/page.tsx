@@ -17,6 +17,8 @@ type MailAttachment = {
 
 type MailMsg = {
   id: number;
+  account_id?: number | null;
+  account_name?: string | null;
   folder: string;
   direction: string;
   from_addr: string;
@@ -33,11 +35,36 @@ type MailMsg = {
   attachments?: MailAttachment[];
 };
 
-type MailSettings = {
+type MailAccount = {
+  id: number;
+  label: string;
+  display_name: string;
+  is_default: boolean;
+  active: boolean;
+  from_email?: string;
+  effective_from?: string;
   smtp_configured: boolean;
   imap_configured: boolean;
-  from_email?: string;
+  last_sync_at?: string | null;
+  last_ok?: boolean | null;
+  last_message?: string;
 };
+
+type AccountsResp = {
+  accounts: MailAccount[];
+  default_account_id: number | null;
+};
+
+type AccountFilter = "all" | number;
+
+const ACCOUNT_FILTER_KEY = "baykus.mail.accountFilter";
+
+/** API naive UTC datetime → yerel GG.AA.YYYY SS:DD */
+function utcLabel(iso: string | null | undefined, empty = "—"): string {
+  if (!iso) return empty;
+  const s = String(iso);
+  return formatTrDateTime(/[Zz]|[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`, empty);
+}
 
 type SyncStatus = {
   last_sync_at?: string | null;
@@ -64,11 +91,15 @@ function MailPageInner() {
   const initialCompose = sp.get("compose") === "1" || sp.get("tab") === "compose";
   const customerIdParam = sp.get("customer_id");
   const toParam = sp.get("to") || "";
+  const accountParam = sp.get("account_id");
 
   const [tab, setTab] = useState<Tab>(initialCompose ? "compose" : "inbox");
   const [messages, setMessages] = useState<MailMsg[]>([]);
   const [selected, setSelected] = useState<MailMsg | null>(null);
-  const [settings, setSettings] = useState<MailSettings | null>(null);
+  const [accounts, setAccounts] = useState<MailAccount[] | null>(null);
+  const [defaultAccountId, setDefaultAccountId] = useState<number | null>(null);
+  const [accountFilter, setAccountFilter] = useState<AccountFilter>("all");
+  const [filterRestored, setFilterRestored] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
@@ -80,25 +111,56 @@ function MailPageInner() {
     subject: "",
     body: "",
     customer_id: customerIdParam ? Number(customerIdParam) : ("" as number | ""),
+    account_id: (accountParam ? Number(accountParam) : "") as number | "",
   });
 
-  const loadSettings = useCallback(async () => {
+  const loadAccounts = useCallback(async () => {
     try {
-      const s = await apiFetch<MailSettings>("/api/mail/settings");
-      setSettings(s);
+      const r = await apiFetch<AccountsResp>("/api/mail/accounts");
+      setAccounts(r.accounts);
+      setDefaultAccountId(r.default_account_id);
+      // Seçili hesap silindiyse Tümü'ne dön
+      setAccountFilter((cur) => (cur !== "all" && !r.accounts.some((a) => a.id === cur) ? "all" : cur));
+      // Gönderen hesap: boşsa / geçersizse varsayılanı seç
+      setCompose((c) => {
+        const valid = c.account_id !== "" && r.accounts.some((a) => a.id === c.account_id && a.active);
+        return valid ? c : { ...c, account_id: r.default_account_id ?? "" };
+      });
     } catch {
-      /* ignore for non-admin */
+      /* ignore */
     }
   }, []);
 
   const loadSyncStatus = useCallback(async () => {
     try {
-      const s = await apiFetch<SyncStatus>("/api/mail/sync-status");
+      const qs = accountFilter === "all" ? "" : `?account_id=${accountFilter}`;
+      const s = await apiFetch<SyncStatus>(`/api/mail/sync-status${qs}`);
       setSyncStatus(s);
     } catch {
       /* ignore */
     }
+  }, [accountFilter]);
+
+  // Son seçilen hesap filtresini hatırla (hydration sonrası)
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(ACCOUNT_FILTER_KEY);
+      const n = raw && raw !== "all" ? Number(raw) : NaN;
+      if (Number.isFinite(n)) setAccountFilter(n);
+    } catch {
+      /* ignore */
+    }
+    setFilterRestored(true);
   }, []);
+
+  useEffect(() => {
+    if (!filterRestored) return;
+    try {
+      window.localStorage.setItem(ACCOUNT_FILTER_KEY, String(accountFilter));
+    } catch {
+      /* ignore */
+    }
+  }, [accountFilter, filterRestored]);
 
   const loadMessages = useCallback(
     async (folder: "inbox" | "sent") => {
@@ -107,26 +169,32 @@ function MailPageInner() {
         const params = new URLSearchParams({ folder, limit: "100" });
         if (q.trim()) params.set("q", q.trim());
         if (customerIdParam) params.set("customer_id", customerIdParam);
+        if (accountFilter !== "all") params.set("account_id", String(accountFilter));
         const rows = await apiFetch<MailMsg[]>(`/api/mail/messages?${params}`);
         setMessages(rows);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Liste yüklenemedi");
       }
     },
-    [q, customerIdParam],
+    [q, customerIdParam, accountFilter],
   );
 
   useEffect(() => {
-    void loadSettings();
-    void loadSyncStatus();
-  }, [loadSettings, loadSyncStatus]);
+    void loadAccounts();
+  }, [loadAccounts]);
 
   useEffect(() => {
+    if (!filterRestored) return;
+    void loadSyncStatus();
+  }, [loadSyncStatus, filterRestored]);
+
+  useEffect(() => {
+    if (!filterRestored) return;
     if (tab === "inbox" || tab === "sent") {
       void loadMessages(tab);
       setSelected(null);
     }
-  }, [tab, loadMessages]);
+  }, [tab, loadMessages, filterRestored]);
 
   // Yerel listeyi 5 dakikada bir yenile + senkron durumunu oku
   useEffect(() => {
@@ -165,8 +233,40 @@ function MailPageInner() {
 
   const sonSenkronLabel = useMemo(() => {
     if (!syncStatus?.last_sync_at) return "Henüz senkron yok";
-    return formatTrDateTime(syncStatus.last_sync_at);
+    return utcLabel(syncStatus.last_sync_at);
   }, [syncStatus]);
+
+  const activeAccounts = useMemo(() => (accounts || []).filter((a) => a.active), [accounts]);
+  const selectedAccount = useMemo(
+    () => (accountFilter === "all" ? null : (accounts || []).find((a) => a.id === accountFilter) || null),
+    [accounts, accountFilter],
+  );
+  const syncableCount = useMemo(() => {
+    const list = selectedAccount ? [selectedAccount] : accounts || [];
+    return list.filter((a) => a.active && a.imap_configured).length;
+  }, [accounts, selectedAccount]);
+  const composeAccount = useMemo(
+    () => (accounts || []).find((a) => a.id === compose.account_id) || null,
+    [accounts, compose.account_id],
+  );
+  const multiAccount = (accounts || []).length > 1;
+
+  const accountWarning = useMemo(() => {
+    if (accounts === null) return "";
+    if (accounts.length === 0) return "Henüz e-posta hesabı eklenmedi. ";
+    if (selectedAccount) {
+      if (!selectedAccount.active) return `${selectedAccount.display_name} pasif — senkron ve gönderim kapalı. `;
+      if (!selectedAccount.smtp_configured && !selectedAccount.imap_configured)
+        return `${selectedAccount.display_name}: SMTP / IMAP henüz yapılandırılmadı. `;
+      if (!selectedAccount.smtp_configured) return `${selectedAccount.display_name}: SMTP (gönderim) ayarları eksik. `;
+      if (!selectedAccount.imap_configured) return `${selectedAccount.display_name}: IMAP (alma) ayarları eksik. `;
+      return "";
+    }
+    if (activeAccounts.length === 0) return "Aktif e-posta hesabı yok. ";
+    if (!activeAccounts.some((a) => a.imap_configured)) return "Hiçbir aktif hesapta IMAP (alma) ayarı hazır değil. ";
+    if (!activeAccounts.some((a) => a.smtp_configured)) return "Hiçbir aktif hesapta SMTP (gönderim) ayarı hazır değil. ";
+    return "";
+  }, [accounts, selectedAccount, activeAccounts]);
 
   async function openMessage(m: MailMsg) {
     setError("");
@@ -184,11 +284,14 @@ function MailPageInner() {
     setError("");
     setMsg("");
     try {
-      const r = await apiFetch<{ ok: boolean; message: string }>("/api/mail/sync?limit=40", {
+      const qs = accountFilter === "all" ? "" : `&account_id=${accountFilter}`;
+      const r = await apiFetch<{ ok: boolean; message: string }>(`/api/mail/sync?limit=40${qs}`, {
         method: "POST",
       });
-      setMsg(r.message);
+      if (r.ok) setMsg(r.message);
+      else setError(r.message);
       await loadSyncStatus();
+      void loadAccounts();
       if (tab === "inbox") await loadMessages("inbox");
       else setTab("inbox");
     } catch (e) {
@@ -212,9 +315,12 @@ function MailPageInner() {
           subject: compose.subject,
           body: compose.body,
           customer_id: compose.customer_id === "" ? null : Number(compose.customer_id),
+          account_id: compose.account_id === "" ? null : Number(compose.account_id),
         }),
       });
-      setMsg("E-posta gönderildi ve Gönderilenler'e kaydedildi");
+      setMsg(
+        `E-posta gönderildi${composeAccount ? ` (${composeAccount.display_name})` : ""} ve Gönderilenler'e kaydedildi`,
+      );
       setCompose((c) => ({ ...c, subject: "", body: "" }));
       setTab("sent");
     } catch (err) {
@@ -226,12 +332,15 @@ function MailPageInner() {
 
   function replyTo() {
     if (!selected) return;
+    const msgAccount = (accounts || []).find((a) => a.id === selected.account_id && a.active);
     setCompose({
       to: selected.direction === "in" ? selected.from_addr : selected.to_addrs,
       cc: "",
       subject: selected.subject.startsWith("Re:") ? selected.subject : `Re: ${selected.subject}`,
       body: `\n\n---\n${selected.from_addr} yazmıştı:\n${selected.body_text}`,
       customer_id: selected.customer_id || "",
+      // Yanıt, mailin geldiği hesaptan gider (aktifse); değilse varsayılan
+      account_id: msgAccount ? msgAccount.id : (defaultAccountId ?? ""),
     });
     setTab("compose");
   }
@@ -281,7 +390,7 @@ function MailPageInner() {
         <div>
           <h1 className="text-lg font-bold text-baykus-text leading-tight">E-Posta</h1>
           <p className="text-[11px] text-baykus-muted">
-            SMTP ile gönder · IMAP ile gelen kutusu · otomatik senkron 30 dk
+            SMTP ile gönder · IMAP ile gelen kutusu · tüm aktif hesaplar 30 dk&apos;da bir otomatik senkron
           </p>
           <p className="text-[11px] text-slate-500 mt-0.5">
             Son senkron: <span className="font-medium text-slate-700">{sonSenkronLabel}</span>
@@ -299,22 +408,23 @@ function MailPageInner() {
           </Link>
           <button
             type="button"
-            disabled={busy || !settings?.imap_configured}
+            disabled={busy || syncableCount === 0}
             onClick={() => void syncInbox()}
+            title={
+              selectedAccount
+                ? `${selectedAccount.display_name} senkronize edilir`
+                : "Aktif ve IMAP'i hazır tüm hesaplar senkronize edilir"
+            }
             className="rounded-lg bg-sky-700 text-white px-3 py-2 text-sm disabled:opacity-50"
           >
-            Gelenleri Senkronize Et
+            {busy ? "Senkronize ediliyor…" : selectedAccount || !multiAccount ? "Gelenleri Senkronize Et" : "Tüm Hesapları Senkronize Et"}
           </button>
         </div>
       </div>
 
-      {settings && (!settings.smtp_configured || !settings.imap_configured) && (
+      {accountWarning && (
         <div className="rounded border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 text-sm">
-          {!settings.smtp_configured && !settings.imap_configured
-            ? "SMTP / IMAP henüz yapılandırılmadı. "
-            : !settings.smtp_configured
-              ? "SMTP (gönderim) ayarları eksik. "
-              : "IMAP (alma) ayarları eksik. "}
+          {accountWarning}
           <Link href="/settings/mail" className="font-semibold underline">
             Ayarları aç →
           </Link>
@@ -324,7 +434,7 @@ function MailPageInner() {
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
       {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
         {(
           [
             { id: "inbox" as const, label: `Gelen Kutusu${unread ? ` (${unread})` : ""}` },
@@ -343,6 +453,29 @@ function MailPageInner() {
             {t.label}
           </button>
         ))}
+        {tab !== "compose" && accounts && accounts.length > 0 && (
+          <label className="ml-auto flex items-center gap-2 text-sm">
+            <span className="text-xs text-slate-600">Hesap</span>
+            <select
+              className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              value={accountFilter === "all" ? "all" : String(accountFilter)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setAccountFilter(v === "all" ? "all" : Number(v));
+                setSelected(null);
+              }}
+            >
+              <option value="all">Tümü</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.display_name}
+                  {a.is_default ? " · varsayılan" : ""}
+                  {a.active ? "" : " · pasif"}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {(tab === "inbox" || tab === "sent") && (
@@ -388,10 +521,13 @@ function MailPageInner() {
                   </div>
                   <div className="text-sm text-slate-900 truncate">{m.subject || "(konu yok)"}</div>
                   <div className="text-[11px] text-slate-400 flex justify-between gap-2">
-                    <span className="truncate">{m.customer_name || ""}</span>
-                    <span className="shrink-0">
-                      {m.date_sent ? formatTrDateTime(m.date_sent) : ""}
+                    <span className="truncate">
+                      {accountFilter === "all" && multiAccount && m.account_name ? (
+                        <span className="mr-1 rounded bg-slate-100 px-1 text-slate-600">{m.account_name}</span>
+                      ) : null}
+                      {m.customer_name || ""}
                     </span>
+                    <span className="shrink-0">{m.date_sent ? utcLabel(m.date_sent, "") : ""}</span>
                   </div>
                   {m.error && <div className="text-[11px] text-red-600 truncate">{m.error}</div>}
                 </button>
@@ -421,8 +557,13 @@ function MailPageInner() {
                       )}
                       <div>
                         <span className="text-slate-400">Tarih:</span>{" "}
-                        {selected.date_sent ? formatTrDateTime(selected.date_sent) : "—"}
+                        {utcLabel(selected.date_sent)}
                       </div>
+                      {selected.account_name && (
+                        <div>
+                          <span className="text-slate-400">Hesap:</span> {selected.account_name}
+                        </div>
+                      )}
                       {selected.customer_name && (
                         <div>
                           <span className="text-slate-400">Cari:</span>{" "}
@@ -512,6 +653,29 @@ function MailPageInner() {
 
       {tab === "compose" && (
         <form onSubmit={sendMail} className="rounded border bg-white p-4 space-y-3 max-w-3xl">
+          <label className="block text-sm">
+            <span className="text-slate-600 text-xs">Gönderen hesap *</span>
+            <select
+              className={input}
+              required
+              value={compose.account_id === "" ? "" : String(compose.account_id)}
+              onChange={(e) =>
+                setCompose({ ...compose, account_id: e.target.value === "" ? "" : Number(e.target.value) })
+              }
+            >
+              {activeAccounts.length === 0 && <option value="">Aktif hesap yok — ayarlardan ekleyin</option>}
+              {activeAccounts.map((a) => (
+                <option key={a.id} value={a.id} disabled={!a.smtp_configured}>
+                  {a.display_name}
+                  {a.is_default ? " · varsayılan" : ""}
+                  {a.smtp_configured ? "" : " · SMTP eksik"}
+                </option>
+              ))}
+            </select>
+            {composeAccount?.effective_from && (
+              <span className="text-[11px] text-slate-500">Kimden: {composeAccount.effective_from}</span>
+            )}
+          </label>
           <div className="grid sm:grid-cols-2 gap-3">
             <label className="block text-sm">
               <span className="text-slate-600 text-xs">Kime *</span>
@@ -561,13 +725,13 @@ function MailPageInner() {
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={busy || settings?.smtp_configured === false}
+              disabled={busy || !composeAccount || !composeAccount.active || !composeAccount.smtp_configured}
               className="rounded-lg bg-emerald-700 text-white px-4 py-2 text-sm font-medium disabled:opacity-50"
             >
               {busy ? "Gönderiliyor…" : "Gönder"}
             </button>
             <Link href="/settings/mail" className="rounded-lg border px-4 py-2 text-sm">
-              SMTP ayarları
+              E-posta hesapları
             </Link>
           </div>
         </form>
@@ -575,7 +739,7 @@ function MailPageInner() {
 
       <StatusFooter
         onRefresh={() => {
-          void loadSettings();
+          void loadAccounts();
           void loadSyncStatus();
           if (tab === "inbox" || tab === "sent") void loadMessages(tab);
         }}
