@@ -57,27 +57,57 @@ export type AccountDetailLedgerProps = {
   onRowOk?: (message: string) => void;
 };
 
-function printMovementSlip(m: AccountLedgerRow, accountTitle: string, islem: string) {
+async function printMovementSlip(m: AccountLedgerRow, accountTitle: string, islem: string) {
   const isIn = m.direction === "in";
   const amt = formatMoney(Number(m.amount));
   const aciklama = accountAciklama(m.note) || "—";
   const kullanici = accountKullanici(m.note, m.created_by_user_name) || "—";
   const hesap = accountHesap(m.note, m.customer_name) || "—";
+  let company = "Baykuş Baskı";
+  let logoUrl = "";
+  try {
+    const { apiFetch, getApiBase } = await import("@/lib/api");
+    const settings = await apiFetch<{
+      company_name?: string;
+      form_logo_dosyasi?: string;
+      logo_dosyasi?: string;
+    }>("/api/settings");
+    company = (settings.company_name || company).trim() || company;
+    const logoFile = (settings.form_logo_dosyasi || settings.logo_dosyasi || "").trim();
+    if (logoFile) {
+      const base = getApiBase();
+      logoUrl = logoFile.startsWith("http")
+        ? logoFile
+        : `${base}/uploads/logos/${logoFile.split(/[/\\]/).pop()}`;
+    }
+  } catch {
+    /* settings optional for slip */
+  }
   const w = window.open("", "_blank", "noopener,noreferrer,width=720,height=640");
   if (!w) return;
   w.document.write(`<!doctype html><html lang="tr"><head><meta charset="utf-8"/>
 <title>Hareket #${m.id}</title>
 <style>
-  body{font-family:system-ui,sans-serif;padding:24px;color:#0f172a}
-  h1{font-size:18px;margin:0 0 4px}
+  body{font-family:system-ui,sans-serif;padding:28px;color:#0f172a;max-width:720px;margin:0 auto}
+  .letterhead{text-align:center;margin-bottom:18px;padding-bottom:14px;border-bottom:2px solid #e2e8f0;background:#f8fafc;margin:-28px -28px 18px;padding:20px 28px 14px}
+  .letterhead img{max-height:56px;max-width:220px;object-fit:contain;margin:0 auto 8px;display:block}
+  .letterhead .co{font-size:15px;font-weight:700;color:#0f172a}
+  .letterhead .sub{font-size:11px;color:#64748b;margin-top:2px}
+  h1{font-size:16px;margin:0 0 4px}
   .muted{color:#64748b;font-size:12px;margin-bottom:16px}
   table{border-collapse:collapse;width:100%;font-size:13px}
   td{padding:6px 8px;border-bottom:1px solid #e2e8f0}
   td:first-child{color:#64748b;width:140px}
   .actions{margin-top:20px}
   button{padding:8px 14px;font-size:13px;cursor:pointer}
+  @media print{.actions{display:none}}
 </style></head><body>
-<h1>${accountTitle}</h1>
+<div class="letterhead">
+  ${logoUrl ? `<img src="${logoUrl}" alt=""/>` : ""}
+  <div class="co">${company.replace(/</g, "&lt;")}</div>
+  <div class="sub">Hareket Fişi</div>
+</div>
+<h1>${accountTitle.replace(/</g, "&lt;")}</h1>
 <div class="muted">Hareket fişi · #${m.id}</div>
 <table>
 <tr><td>Tarih</td><td>${formatTrDate(m.movement_date)}</td></tr>
@@ -204,7 +234,7 @@ function RowIslemMenu({
             role="menuitem"
             onClick={() => {
               setOpen(false);
-              printMovementSlip(row, accountTitle, islem);
+              void printMovementSlip(row, accountTitle, islem);
             }}
           >
             Yazdır

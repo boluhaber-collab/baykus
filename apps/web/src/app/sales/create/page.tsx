@@ -374,7 +374,7 @@ function CreateSaleInner() {
       const amount = veresiye ? 0 : rowsSum(payRows);
       const payments = veresiye ? [] : rowsToPayload(payRows);
       if (!veresiye && amount > 0 && payments.length === 0) {
-        throw new Error("Kapora için kasa/hesap seçin veya tutarı girin.");
+        throw new Error("Ödeme/tahsilat için kasa/hesap seçin veya tutarı girin.");
       }
       if (!veresiye && payments.length > 0 && Math.abs(rowsSum(payRows) - amount) > 0.02) {
         throw new Error("Ödeme satırları toplamı tutarsız.");
@@ -770,7 +770,7 @@ function CreateSaleInner() {
 
         {saleType !== "teklif" && (
           <fieldset className="rounded border bg-white px-3 py-3 space-y-3">
-            <legend className="px-1 text-xs font-semibold">Ödeme / Kapora</legend>
+            <legend className="px-1 text-xs font-semibold">Ödeme / Tahsilat</legend>
             <label className="inline-flex items-center gap-2 text-xs font-medium">
               <input
                 type="checkbox"
@@ -792,7 +792,7 @@ function CreateSaleInner() {
               <div>
                 Toplam: <strong className="tabular-nums">{formatMoney(linesTotal)}</strong>
                 {" · "}
-                Kapora:{" "}
+                Tahsilat:{" "}
                 <strong className="tabular-nums text-emerald-700">
                   {veresiye ? "0,00 ₺" : formatMoney(payAmountNum)}
                 </strong>

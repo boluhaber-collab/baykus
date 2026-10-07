@@ -163,15 +163,17 @@ export default function DirektSatislarPage() {
     }
   }
 
-  function printSelected() {
+  async function printSelected() {
     if (!selectedId) {
       alert("Önce bir satış seçin.");
       return;
     }
-    const o = items.find((x) => x.id === selectedId);
-    // Print-friendly order detail; auto-print via ?print=1
-    window.open(`/orders/${selectedId}?print=1`, "_blank");
-    void o;
+    try {
+      const { printPdfFromApi } = await import("@/lib/printPdf");
+      await printPdfFromApi(`/api/orders/${selectedId}/work-order-pdf`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Yazdırma hatası");
+    }
   }
 
   async function pdfSelected() {
@@ -311,7 +313,7 @@ export default function DirektSatislarPage() {
           </button>
           <button
             type="button"
-            onClick={printSelected}
+            onClick={() => void printSelected()}
             className="bk-btn text-xs font-bold text-white"
             style={{ backgroundColor: "#42b4d0" }}
           >

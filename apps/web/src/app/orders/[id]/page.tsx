@@ -98,7 +98,16 @@ export default function OrderDetailPage() {
     if (typeof window === "undefined" || !order) return;
     const wantPrint = new URLSearchParams(window.location.search).get("print") === "1";
     if (!wantPrint) return;
-    const tmr = setTimeout(() => window.print(), 400);
+    const tmr = setTimeout(() => {
+      void (async () => {
+        try {
+          const { printPdfFromApi } = await import("@/lib/printPdf");
+          await printPdfFromApi(`/api/orders/${id}/work-order-pdf`);
+        } catch {
+          window.print();
+        }
+      })();
+    }, 400);
     return () => clearTimeout(tmr);
   }, [order]);
 
@@ -400,7 +409,16 @@ export default function OrderDetailPage() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => {
+              void (async () => {
+                try {
+                  const { printPdfFromApi } = await import("@/lib/printPdf");
+                  await printPdfFromApi(`/api/orders/${id}/work-order-pdf`);
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Yazdırma hatası");
+                }
+              })();
+            }}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
           >
             Yazdır

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db, require_roles
 from app.models.customer import CariMovement, Customer
 from app.models.expense import Expense
-from app.models.order import Order
+from app.models.order import INVOICE_DIRECT_CHANNELS, Order
 from app.models.supplier import Supplier, SupplierMovement
 from app.models.finance import (
     BANK_IN_TYPES,
@@ -714,7 +714,11 @@ def cash_daily_panel(
             {
                 "id": o.id,
                 "order_number": o.order_number,
-                "document_type": "Sipariş",
+                "document_type": (
+                    "Satış Faturası"
+                    if (st == "Teslim Edildi" or ch.strip() in INVOICE_DIRECT_CHANNELS)
+                    else "Sipariş"
+                ),
                 "date": o.created_at.date().isoformat() if o.created_at else None,
                 "customer_name": o.customer.name if o.customer is not None else None,
                 "customer_phone": getattr(o.customer, "phone", None) if o.customer is not None else None,

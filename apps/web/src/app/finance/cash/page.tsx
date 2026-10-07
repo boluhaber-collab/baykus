@@ -218,9 +218,9 @@ export default function CashPage() {
 
   const cards = s
     ? [
-        { label: "Sipariş", value: String(s.order_count) },
+        { label: "Satış", value: String(s.order_count) },
         { label: "Ciro", value: formatMoney(s.revenue) },
-        { label: "Tahsilat/Kapora", value: formatMoney(s.collections) },
+        { label: "Tahsilat", value: formatMoney(s.collections) },
         { label: "Kalan Alacak", value: formatMoney(s.remaining) },
         { label: "Maliyet", value: formatMoney(s.cost) },
         { label: "Brüt Kâr", value: formatMoney(s.gross_profit) },
@@ -385,14 +385,14 @@ export default function CashPage() {
             <table className="bk-table">
               <thead>
                 <tr>
-                  <th>Sipariş No</th>
+                  <th>Belge No</th>
                   <th>Belge</th>
                   <th className="bk-th-sortable"><SortableDateHeader dir={orderDateDir} onChange={setOrderDateDir} /></th>
                   <th>Müşteri</th>
                   <th>Ürün</th>
                   <th className="text-right">Adet</th>
                   <th className="text-right">Toplam</th>
-                  <th className="text-right">Kapora</th>
+                  <th className="text-right">Tahsilat</th>
                   <th className="text-right">Kalan</th>
                   <th className="text-right">Maliyet</th>
                   <th className="text-right">Kâr</th>
@@ -430,7 +430,7 @@ export default function CashPage() {
                 {sortedOrders.length === 0 && (
                   <tr>
                     <td colSpan={12} className="text-center text-baykus-muted py-6">
-                      Aralıkta sipariş yok
+                      Aralıkta satış yok
                     </td>
                   </tr>
                 )}

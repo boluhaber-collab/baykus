@@ -317,7 +317,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Kapora (₺)</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Tahsilat / Kapora (₺)</label>
           <input
             type="number"
             min={0}
