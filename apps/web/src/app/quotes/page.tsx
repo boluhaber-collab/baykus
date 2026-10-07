@@ -17,6 +17,7 @@ export default function QuotesPage() {
   const [items, setItems] = useState<QuoteListItem[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
+  const [showCancelled, setShowCancelled] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [converting, setConverting] = useState<number | null>(null);
@@ -28,6 +29,7 @@ export default function QuotesPage() {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       if (status) params.set("status", status);
+      if (showCancelled) params.set("include_cancelled", "true");
       const qs = params.toString();
       const data = await apiFetch<QuoteListItem[]>(`/api/quotes${qs ? `?${qs}` : ""}`);
       setItems(data);
@@ -36,7 +38,7 @@ export default function QuotesPage() {
     } finally {
       setLoading(false);
     }
-  }, [q, status]);
+  }, [q, status, showCancelled]);
 
   useEffect(() => {
     load();
@@ -129,6 +131,10 @@ export default function QuotesPage() {
             placeholder="No / müşteri / not ara…"
             className="bk-input max-w-xs"
           />
+          <label className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+            <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
+            İptalleri de göster
+          </label>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="bk-input w-auto">
             <option value="">Tüm durumlar</option>
             {QUOTE_STATUSES.map((s) => (

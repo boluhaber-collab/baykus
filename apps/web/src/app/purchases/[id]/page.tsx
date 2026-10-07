@@ -13,7 +13,7 @@ import {
 } from "@/lib/api";
 import { isBhImportNote } from "@/lib/bhNote";
 import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, formatTrDateTime } from "@/lib/dates";
 
 type EditLine = {
   key: string;
@@ -658,9 +658,7 @@ export default function PurchaseDetailPage() {
             </div>
             <div>
               <span className="text-slate-500">Oluşturma:</span>{" "}
-              {purchase.created_at
-                ? String(purchase.created_at).slice(0, 16).replace("T", " ")
-                : "—"}
+              {formatTrDateTime(purchase.created_at)}
             </div>
             <div>
               <span className="text-slate-500">Güncelleme:</span>{" "}

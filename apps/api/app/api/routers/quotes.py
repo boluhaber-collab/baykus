@@ -175,6 +175,7 @@ def list_quotes(
     status_filter: str | None = Query(default=None, alias="status"),
     customer_id: int | None = Query(default=None),
     q: str | None = Query(default=None),
+    include_cancelled: bool = Query(default=False),
     skip: int = 0,
     limit: int = 100,
 ) -> list[QuoteListItem]:
@@ -185,6 +186,8 @@ def list_quotes(
         if status_filter not in QUOTE_STATUSES:
             raise HTTPException(status_code=400, detail="Geçersiz durum filtresi")
         query = query.filter(Quote.status == status_filter)
+    elif not include_cancelled:
+        query = query.filter(Quote.is_cancelled.is_(False))
     if q:
         like = f"%{q}%"
         query = query.outerjoin(Customer).filter(

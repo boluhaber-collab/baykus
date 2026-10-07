@@ -11,7 +11,7 @@ import { formatTrDate } from "@/lib/dates";
 export default function PurchasesPage() {
   const [items, setItems] = useState<PurchaseListItem[]>([]);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState("active");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +21,8 @@ export default function PurchasesPage() {
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
-      if (status !== "all") params.set("status", status);
+      if (status === "active") params.set("exclude_cancelled", "true");
+      else if (status !== "all") params.set("status", status);
       const qs = params.toString();
       const data = await apiFetch<PurchaseListItem[]>(`/api/purchases${qs ? `?${qs}` : ""}`);
       setItems(data);
@@ -98,6 +99,7 @@ export default function PurchasesPage() {
             onChange={(e) => setStatus(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
           >
+            <option value="active">Aktif (iptaller gizli)</option>
             <option value="all">Tümü</option>
             <option value="draft">Taslak</option>
             <option value="confirmed">Onaylı</option>

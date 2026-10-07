@@ -57,7 +57,7 @@ export default function PriceListDetailPage() {
   /** Which row is picking a catalog product (keeps Ürün as one name line). */
   const [bindKey, setBindKey] = useState<string | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   const load = useCallback(async () => {
     setError("");

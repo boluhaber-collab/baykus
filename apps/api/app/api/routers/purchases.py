@@ -358,6 +358,7 @@ def list_purchases(
     q: str | None = Query(default=None),
     supplier_id: int | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
+    exclude_cancelled: bool = Query(default=False),
     from_date: date | None = Query(default=None),
     to_date: date | None = Query(default=None),
     skip: int = 0,
@@ -368,6 +369,8 @@ def list_purchases(
         query = query.filter(Purchase.supplier_id == supplier_id)
     if status_filter:
         query = query.filter(Purchase.status == status_filter)
+    elif exclude_cancelled:
+        query = query.filter(Purchase.status != "cancelled")
     if from_date:
         query = query.filter(Purchase.purchase_date >= from_date)
     if to_date:
