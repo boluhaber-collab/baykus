@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { AppSettings, DashboardNote, DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
 import { formatTrDateTime } from "@/lib/dates";
 import { openGlobalSearch } from "@/components/GlobalSearchOverlay";
-import MailAlertCard from "@/components/MailAlertCard";
+import MailKpiCard from "@/components/MailAlertCard";
 import { QUICK_ACTION_CATALOG, QUICK_ACTIONS } from "@/lib/nav";
 
 type UsdRates = { buy: number; sell: number } | null;
@@ -296,7 +296,6 @@ export default function DashboardPage() {
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
       {loading && !data && <p className="text-baykus-muted text-sm">Yükleniyor…</p>}
 
-      <MailAlertCard />
 
       {/* Hızlı İşlemler */}
       <div className="flex flex-wrap items-center gap-2">
@@ -315,9 +314,9 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* KPI cards — BH: Ciro · Masraflar · Stok Değeri (+ satışlar/kasa/banka) */}
+      {/* KPI cards — Ciro · Masraflar · Satışlar · Kasa · Banka · E-Posta (Stok Değeri: /reports/stock) */}
       {data && (
-        <div className="bk-kpi-strip" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
+        <div className="bk-kpi-strip bk-kpi-strip--dash" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
           <Link href="/reports/sales" className="bk-dash-kpi" style={{ backgroundColor: "#7c3aed" }}>
             <div className="amt">{formatMoney(Number(data.orders_month_revenue))}</div>
             <div className="lbl">{monthName} Cirosu</div>
@@ -325,10 +324,6 @@ export default function DashboardPage() {
           <Link href="/finance/expenses" className="bk-dash-kpi" style={{ backgroundColor: "#dc2626" }}>
             <div className="amt">{formatMoney(Number(data.month_expenses ?? 0))}</div>
             <div className="lbl">{monthExpensesLabel}</div>
-          </Link>
-          <Link href="/reports/stock" className="bk-dash-kpi" style={{ backgroundColor: "#2563eb" }}>
-            <div className="amt">{formatMoney(Number(data.stock_value ?? 0))}</div>
-            <div className="lbl">Stok Değeri</div>
           </Link>
           <Link href="/sales" className="bk-dash-kpi" style={{ backgroundColor: "#15803d" }}>
             <div className="amt">{formatMoney(Number(data.month_sales ?? data.orders_month_revenue ?? 0))}</div>
@@ -342,6 +337,7 @@ export default function DashboardPage() {
             <div className="amt">{formatMoney(Number(data.bank_balance))}</div>
             <div className="lbl">Banka Bakiyesi</div>
           </Link>
+          <MailKpiCard />
         </div>
       )}
 

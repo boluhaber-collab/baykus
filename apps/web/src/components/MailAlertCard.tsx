@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { formatTrDateTime } from "@/lib/dates";
 
 export type MailUnreadPreview = {
   id: number;
@@ -31,19 +30,21 @@ export type MailUnreadSummary = {
 const POLL_MS = 5 * 60 * 1000;
 export const MAIL_UNREAD_EVENT = "baykus-mail-unread";
 
-/** API naive UTC datetime → yerel GG.AA.YYYY SS:DD */
-function utcLabel(iso: string | null | undefined, empty = "—"): string {
-  if (!iso) return empty;
-  const s = String(iso);
-  return formatTrDateTime(/[Zz]|[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`, empty);
-}
-
 function shortFrom(addr: string): string {
   const raw = (addr || "").trim();
   if (!raw) return "Bilinmeyen";
   const m = raw.match(/^"?([^"<]+)"?\s*<([^>]+)>/);
   if (m) return (m[1] || m[2]).trim();
-  return raw.length > 36 ? `${raw.slice(0, 34)}…` : raw;
+  return raw.length > 28 ? `${raw.slice(0, 26)}…` : raw;
+}
+
+function previewLine(latest: MailUnreadPreview[] | undefined): string {
+  const m = latest?.[0];
+  if (!m) return "Yeni e-posta yok";
+  const from = shortFrom(m.from_addr);
+  const subj = (m.subject || "(konu yok)").trim();
+  const line = `${from} — ${subj}`;
+  return line.length > 42 ? `${line.slice(0, 40)}…` : line;
 }
 
 export function useMailUnreadSummary(enabled = true) {
@@ -63,7 +64,7 @@ export function useMailUnreadSummary(enabled = true) {
         setData(null);
         return;
       }
-      // ağ / geçici hata — kartı gizleme, eski veriyi tut
+      // ağ / geçici hata — eski veriyi tut
     }
   }, [enabled]);
 
@@ -95,117 +96,55 @@ export function notifyMailUnreadChanged() {
   }
 }
 
-/** Ana sayfa — dikkat çekici e-posta uyarısı */
-export default function MailAlertCard() {
+/** Ana sayfa KPI şeridi — kompakt e-posta kartı (Stok Değeri yerine, en sağ) */
+export default function MailKpiCard() {
   const { data, denied } = useMailUnreadSummary(true);
 
-  if (denied || data == null) return null;
+  if (denied) return null;
 
-  if (!data.configured) {
+  if (data == null) {
     return (
-      <div className="bk-mail-alert bk-mail-alert--idle">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="bk-mail-alert-icon" aria-hidden>
-              ✉
-            </span>
-            <div>
-              <div className="text-sm font-extrabold tracking-wide">E-POSTA</div>
-              <div className="text-xs opacity-90 mt-0.5">
-                E-posta hesabı ayarlanmamış — SMTP/IMAP ekleyin.
-              </div>
-            </div>
-          </div>
-          <Link
-            href="/settings/mail"
-            className="shrink-0 rounded-md bg-white/20 hover:bg-white/30 px-3 py-2 text-xs font-bold"
-          >
-            E-posta ayarlanmamış → Ayarlar
-          </Link>
-        </div>
+      <div className="bk-dash-kpi bk-dash-kpi--mail" style={{ backgroundColor: "#475569" }} aria-busy>
+        <div className="amt">—</div>
+        <div className="lbl">E-Posta</div>
+        <div className="sub">Yükleniyor…</div>
       </div>
     );
   }
 
-  const unread = data.total_unread;
+  if (!data.configured) {
+    return (
+      <Link
+        href="/settings/mail"
+        className="bk-dash-kpi bk-dash-kpi--mail"
+        style={{ backgroundColor: "#78716c" }}
+        title="E-posta ayarları"
+      >
+        <div className="amt">✉</div>
+        <div className="lbl">E-Posta</div>
+        <div className="sub">Ayarlanmamış</div>
+      </Link>
+    );
+  }
+
+  const unread = data.total_unread || 0;
   const hasUnread = unread > 0;
-  const multi = data.account_count > 1;
-  const withUnread = (data.accounts || []).filter((a) => a.unread > 0);
+  const href = "/mail";
+  const sub = hasUnread ? previewLine(data.latest) : "Yeni e-posta yok";
 
   return (
-    <div className={`bk-mail-alert ${hasUnread ? "bk-mail-alert--hot" : "bk-mail-alert--calm"}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0 flex-1">
-          <span className={`bk-mail-alert-icon ${hasUnread ? "bk-mail-alert-pulse" : ""}`} aria-hidden>
-            ✉
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="text-sm font-extrabold tracking-wide">
-                {hasUnread ? "YENİ E-POSTA" : "E-POSTA"}
-              </div>
-              {hasUnread && (
-                <span className="bk-mail-badge bk-mail-badge--pulse">{unread} okunmamış</span>
-              )}
-            </div>
-            {!hasUnread ? (
-              <div className="text-xs opacity-90 mt-0.5">Yeni e-posta yok</div>
-            ) : (
-              <>
-                {multi && withUnread.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {withUnread.map((a) => (
-                      <Link
-                        key={String(a.account_id ?? a.account_name)}
-                        href={
-                          a.account_id != null
-                            ? `/mail?account_id=${a.account_id}`
-                            : "/mail"
-                        }
-                        className="rounded bg-white/15 hover:bg-white/25 px-2 py-0.5 text-[11px] font-semibold"
-                        title={`${a.account_name} gelen kutusu`}
-                      >
-                        {a.account_name}: {a.unread}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-                <ul className="mt-2 space-y-1">
-                  {data.latest.map((m) => (
-                    <li key={m.id} className="text-xs leading-snug">
-                      <Link
-                        href={
-                          m.account_id != null
-                            ? `/mail?account_id=${m.account_id}&msg=${m.id}`
-                            : `/mail?msg=${m.id}`
-                        }
-                        className="hover:underline"
-                      >
-                        <span className="font-bold">{shortFrom(m.from_addr)}</span>
-                        <span className="opacity-80"> — {m.subject || "(konu yok)"}</span>
-                        <span className="opacity-70 ml-1 tabular-nums">
-                          · {utcLabel(m.date_sent)}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          {hasUnread && (
-            <div className="text-3xl font-black tabular-nums leading-none">{unread}</div>
-          )}
-          <Link
-            href="/mail"
-            className="rounded-md bg-white text-sky-800 hover:bg-sky-50 px-3.5 py-2 text-xs font-extrabold shadow-sm"
-          >
-            Gelen Kutusuna Git
-          </Link>
-        </div>
+    <Link
+      href={href}
+      className={`bk-dash-kpi bk-dash-kpi--mail ${hasUnread ? "bk-dash-kpi--mail-hot" : ""}`}
+      style={{ backgroundColor: hasUnread ? "#0284c7" : "#334155" }}
+      title={hasUnread ? `${unread} okunmamış e-posta` : "Gelen kutusu"}
+    >
+      <div className="amt">{unread}</div>
+      <div className="lbl">
+        E-Posta
+        {hasUnread ? <span className="bk-mail-kpi-dot" aria-hidden /> : null}
       </div>
-    </div>
+      <div className="sub">{sub}</div>
+    </Link>
   );
 }
