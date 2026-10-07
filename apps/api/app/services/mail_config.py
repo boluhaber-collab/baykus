@@ -60,7 +60,7 @@ class MailConfig:
         return bool(
             self.imap_host.strip()
             and (self.imap_user.strip() or self.smtp_user.strip())
-            and self.imap_password
+            and (self.imap_password or self.smtp_password)
         )
 
     def effective_from(self) -> str:
