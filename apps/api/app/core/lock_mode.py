@@ -74,7 +74,7 @@ LOCK_MODE_ALLOWED_GROUPS: dict[str, list[str]] = {
 GROUP_API_PREFIXES: dict[str, list[str]] = {
     "Ana Sayfa": ["/api/dashboard", "/api/search"],
     "Müşteri Merkezi": ["/api/customers"],
-    "Müşteri İletişim": ["/api/whatsapp", "/api/crm", "/api/directory"],
+    "Müşteri İletişim": ["/api/whatsapp", "/api/crm", "/api/directory", "/api/mail"],
     "Satış / Sipariş": ["/api/orders", "/api/quotes"],
     "Üretim / Atölye": ["/api/production"],
     "Ürün & Stok Merkezi": ["/api/products", "/api/stock"],
@@ -84,7 +84,7 @@ GROUP_API_PREFIXES: dict[str, list[str]] = {
     "Fiyat / Maliyet": ["/api/price-lists", "/api/tools"],
     "Raporlar": ["/api/reports"],
     "Evrak Dolabı": ["/api/documents"],
-    "Sistem": ["/api/settings", "/api/audit", "/api/tasks"],
+    "Sistem": ["/api/settings", "/api/audit", "/api/tasks", "/api/mail/settings"],
 }
 
 # Her zaman açık (oturum + kilit ayarını okumak için).
@@ -99,6 +99,10 @@ ALWAYS_ALLOW_GET_PATHS: frozenset[str] = frozenset(
         "/api/settings/app",
     }
 )
+
+# Mail credentials/tests: mutating /api/mail/settings* requires Sistem (admin lock modes).
+# GET /api/mail/settings stays with Müşteri İletişim so inbox UI can read config status.
+MAIL_SETTINGS_PREFIX = "/api/mail/settings"
 
 
 def normalize_mode(mode: str | None) -> str:
@@ -140,6 +144,12 @@ def path_allowed(mode: str | None, path: str, method: str = "GET") -> bool:
     # Non-API (shouldn't hit middleware) — allow
     if not raw.startswith("/api"):
         return True
+
+    # Mail settings write/test: Sistem group only (Yönetici / Tam Yetki / …)
+    if (raw == MAIL_SETTINGS_PREFIX or raw.startswith(MAIL_SETTINGS_PREFIX + "/")) and method.upper() != "GET":
+        m = normalize_mode(mode)
+        if "Sistem" not in LOCK_MODE_ALLOWED_GROUPS[m]:
+            return False
 
     allowed = allowed_prefixes_for_mode(mode)
     # Sort longer prefixes first so /api/settings/backups matches /api/settings
