@@ -20,7 +20,7 @@ import SplitPaymentRows, {
   rowsSum,
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
-import { formatTrDate, localToday } from "@/lib/dates";
+import { formatTrDate, localToday, orderSaleDate } from "@/lib/dates";
 import CustomerDevirModal from "@/components/CustomerDevirModal";
 import StatementPdfDateModal from "@/components/StatementPdfDateModal";
 import StatusFooter from "@/components/StatusFooter";
@@ -210,7 +210,7 @@ export default function CustomerDetailPage() {
       rows.push({
         id: `o-${o.id}`,
         source: "order",
-        date: o.created_at?.slice(0, 10) || "",
+        date: (orderSaleDate(o) || o.created_at || "").toString().slice(0, 10),
         no: o.order_number,
         status: o.status,
         amount: Number(o.total_amount),

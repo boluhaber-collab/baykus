@@ -439,6 +439,7 @@ def _apply_sale_side_effects(
             before = int(product.stock_qty or 0)
             after = before - qty
             product.stock_qty = after
+        stock_at = datetime.combine(mov_date, datetime.utcnow().time())
         db.add(
             StockMovement(
                 product_id=product.id,
@@ -451,6 +452,7 @@ def _apply_sale_side_effects(
                 note=f"Satış {order.order_number}",
                 warehouse=getattr(product, "warehouse", None) or "Ana Depo",
                 created_by_user_id=user.id,
+                created_at=stock_at,
             )
         )
         # sync product total if helper exists
@@ -562,13 +564,21 @@ def create_order(
     db.flush()
     _replace_lines(order, payload.lines)
 
-    # İşlem tarihi: explicit movement_date, else delivery_date, else bugün (geçmiş tarih serbest)
+    # İşlem tarihi: explicit movement_date, else delivery_date, else bugün (geçmiş/gelecek serbest)
     from datetime import date as date_cls
     mov_date = (
         getattr(payload, "movement_date", None)
         or getattr(payload, "delivery_date", None)
         or date_cls.today()
     )
+    # Sipariş listesi created_at gösterir — işlem tarihini siparişe yaz (geçmiş satış görünsün)
+    order.created_at = datetime.combine(mov_date, datetime.utcnow().time())
+    # Explicit işlem tarihi varsa fatura/teslim kaydı da ona bağlansın
+    if getattr(payload, "movement_date", None):
+        if not order.due_date:
+            order.due_date = mov_date
+        if order.status == "Teslim Edildi" or (payload.status or "") == "Teslim Edildi":
+            order.delivery_date = mov_date
 
     _apply_sale_side_effects(db, order, user, mov_date=mov_date)
 
@@ -619,6 +629,7 @@ def create_order(
             else:
                 default_method = "nakit"
             method = line.get("method") or default_method
+            paid_at = datetime.combine(mov_date, datetime.utcnow().time())
             db.add(
                 Payment(
                     order_id=order.id,
@@ -626,6 +637,7 @@ def create_order(
                     method=str(method)[:50],
                     status="tamamlandi",
                     notes=line_note,
+                    paid_at=paid_at,
                 )
             )
             cari_id = None

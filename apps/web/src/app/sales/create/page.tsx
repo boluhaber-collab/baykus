@@ -425,7 +425,7 @@ function CreateSaleInner() {
           channel: orderChannel,
           design_status: delivered ? "Onaylandı" : "Bekliyor",
           due_date: dueDate || null,
-          delivery_date: delivered ? dueDate || saleDate || localToday() : null,
+          delivery_date: delivered ? saleDate || dueDate || localToday() : null,
           movement_date: saleDate || localToday(),
           deposit_amount: amount > 0 ? amount : 0,
           discount_amount: 0,

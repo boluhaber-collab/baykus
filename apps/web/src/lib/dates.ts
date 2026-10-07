@@ -108,3 +108,14 @@ export function formatTrPeriod(
   if (b) return `… → ${b}`;
   return allLabel;
 }
+
+/** Effective sale/order date for lists: delivery → due → created_at (ISO YYYY-MM-DD or full). */
+export function orderSaleDate(o: {
+  delivery_date?: string | null;
+  due_date?: string | null;
+  created_at?: string | null;
+}): string {
+  const d = (o.delivery_date || o.due_date || o.created_at || "").toString().trim();
+  return d;
+}
+

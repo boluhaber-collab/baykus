@@ -15,6 +15,7 @@ import {
   formatMoney,
 } from "@/lib/api";
 import LiveSearchSelect, { useCustomerSearch, useProductSearch } from "@/components/LiveSearchSelect";
+import { localToday } from "@/lib/dates";
 
 export type OrderFormPayload = {
   customer_id: number | null;
@@ -23,6 +24,7 @@ export type OrderFormPayload = {
   notes: string | null;
   due_date: string | null;
   delivery_date: string | null;
+  movement_date?: string | null;
   channel: string;
   design_status: string;
   design_notes: string | null;
@@ -113,6 +115,13 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
   const [notes, setNotes] = useState(initial?.notes || "");
   const [dueDate, setDueDate] = useState(initial?.due_date ? initial.due_date.slice(0, 10) : "");
   const [deliveryDate, setDeliveryDate] = useState(initial?.delivery_date ? initial.delivery_date.slice(0, 10) : "");
+  const [saleDate, setSaleDate] = useState(() =>
+    initial?.delivery_date
+      ? initial.delivery_date.slice(0, 10)
+      : initial?.due_date
+        ? initial.due_date.slice(0, 10)
+        : localToday(),
+  );
   const [channel, setChannel] = useState(initial?.channel || "mağaza");
   const [designStatus, setDesignStatus] = useState(initial?.design_status || "Bekliyor");
   const [designNotes, setDesignNotes] = useState(initial?.design_notes || "");
@@ -198,7 +207,8 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
         status,
         notes: notes.trim() || null,
         due_date: dueDate || null,
-        delivery_date: deliveryDate || null,
+        delivery_date: deliveryDate || saleDate || null,
+        movement_date: saleDate || deliveryDate || dueDate || localToday(),
         channel,
         design_status: designStatus,
         design_notes: designNotes.trim() || null,
@@ -289,7 +299,16 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Teslim Tarihi</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1">İşlem Tarihi</label>
+          <input
+            type="date"
+            className={inputCls}
+            value={saleDate}
+            onChange={(e) => setSaleDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">Vade</label>
           <input
             type="date"
             className={inputCls}

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { OrderListItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { useDateSort } from "@/hooks/useDateSort";
-import { formatTrDateTime } from "@/lib/dates";
+import { formatTrDateTime, orderSaleDate } from "@/lib/dates";
 import SortableDateHeader from "@/components/SortableDateHeader";
 
 const DIRECT_CHANNELS = "perakende,mağaza,yeni müşteri,kayıtlı müşteri";
@@ -83,7 +83,7 @@ export default function DirektSatislarPage() {
     return items.filter((o) => {
       const cancelled = isCancelled(o.status);
       if (cancelled && !showCancel) return false;
-      if (start && new Date(o.created_at) < start) return false;
+      if (start && new Date(orderSaleDate(o) || o.created_at) < start) return false;
       if (belge !== "Tüm Belge Tipleri") {
         if (belge === "Perakende Satış") {
           if ((o.channel || "").toLowerCase() !== "perakende") return false;
@@ -112,7 +112,7 @@ export default function DirektSatislarPage() {
   }, [items, belge, donem, q, araTip, showCancel]);
   const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
     filtered,
-    (o) => o.created_at,
+    (o) => orderSaleDate(o) || o.created_at,
     (o) => o.id,
   );
 
@@ -369,7 +369,7 @@ export default function DirektSatislarPage() {
                     }`}
                   >
                     <td className="whitespace-nowrap text-xs">
-                      {formatTrDateTime(o.created_at)}
+                      {formatTrDateTime(orderSaleDate(o) || o.created_at)}
                     </td>
                     <td>{o.customer_name || "Perakende Satışlar"}</td>
                     <td className="font-mono text-xs">{o.order_number}</td>

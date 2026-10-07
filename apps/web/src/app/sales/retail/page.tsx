@@ -6,7 +6,7 @@ import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
 import { OrderListItem, apiFetch, formatMoney, statusBadgeClass } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, orderSaleDate } from "@/lib/dates";
 
 /** Perakende Satışlar liste yaprağı — kanal=perakende */
 export default function RetailSalesPage() {
@@ -37,7 +37,7 @@ export default function RetailSalesPage() {
   });
   const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
     filteredRaw,
-    (o) => o.created_at,
+    (o) => orderSaleDate(o) || o.created_at,
     (o) => o.id,
   );
 
@@ -101,7 +101,7 @@ export default function RetailSalesPage() {
             {sortedRows.map((o) => (
               <tr key={o.id}>
                 <td className="text-xs whitespace-nowrap">
-                  {formatTrDate(o.created_at)}
+                  {formatTrDate(orderSaleDate(o) || o.created_at)}
                 </td>
                 <td>
                   <Link href={`/orders/${o.id}`} className="text-baykus-primary hover:underline font-medium">

@@ -591,7 +591,12 @@ def build_work_order_pdf(order: Any, settings: dict[str, str]) -> bytes:
     delivery = order.delivery_date or order.due_date
     bilgiler = [
         ("Sipariş No", str(order.order_number)),
-        ("Sipariş Tarihi", order.created_at.strftime("%d.%m.%Y") if order.created_at else "—"),
+        (
+            "Sipariş Tarihi",
+            _date_tr(order.delivery_date or order.due_date)
+            if (order.delivery_date or order.due_date)
+            else (order.created_at.strftime("%d.%m.%Y") if order.created_at else "—"),
+        ),
         ("Müşteri", str(cust)),
         ("Telefon", str(phone or "—")),
         ("Teslim Tarihi", _date_tr(delivery)),
