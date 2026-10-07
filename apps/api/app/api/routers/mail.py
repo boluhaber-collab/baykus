@@ -7,6 +7,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
@@ -29,6 +30,9 @@ from app.schemas.mail import (
     MailSettingsUpdate,
     MailSyncAccountResult,
     MailSyncStatusOut,
+    MailUnreadAccountCount,
+    MailUnreadPreview,
+    MailUnreadSummaryOut,
 )
 from app.services.mail_accounts import (
     ACCOUNTS_PATH,
@@ -300,6 +304,81 @@ def api_test_imap(
 ) -> MailActionResult:
     r = test_imap(_test_cfg(payload))
     return MailActionResult(ok=bool(r.get("ok")), message=str(r.get("message") or ""))
+
+
+
+@router.get("/unread-summary", response_model=MailUnreadSummaryOut)
+def unread_summary(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+) -> MailUnreadSummaryOut:
+    """Hafif okunmamış özeti — ana sayfa / kenar çubuğu rozeti."""
+    accounts = list_accounts()
+    if not accounts:
+        return MailUnreadSummaryOut(configured=False)
+
+    names = {a.id: a.display_name() for a in accounts}
+    active_ids = {a.id for a in accounts if a.active}
+
+    count_rows = (
+        db.query(MailMessage.account_id, func.count(MailMessage.id))
+        .filter(MailMessage.folder == "inbox", MailMessage.is_read.is_(False))
+        .group_by(MailMessage.account_id)
+        .all()
+    )
+    by_acc: dict[int | None, int] = {aid: int(n) for aid, n in count_rows}
+
+    breakdown: list[MailUnreadAccountCount] = []
+    for a in accounts:
+        if not a.active:
+            continue
+        n = by_acc.get(a.id, 0)
+        breakdown.append(
+            MailUnreadAccountCount(account_id=a.id, account_name=a.display_name(), unread=n)
+        )
+    # Orphan / silinmiş hesap mesajları
+    for aid, n in by_acc.items():
+        if aid is None or aid not in names:
+            breakdown.append(
+                MailUnreadAccountCount(
+                    account_id=aid,
+                    account_name=f"Silinmiş hesap #{aid}" if aid is not None else "Hesapsız",
+                    unread=n,
+                )
+            )
+    total = sum(x.unread for x in breakdown)
+
+    latest_rows = (
+        db.query(MailMessage)
+        .filter(MailMessage.folder == "inbox", MailMessage.is_read.is_(False))
+        .order_by(MailMessage.date_sent.desc(), MailMessage.id.desc())
+        .limit(3)
+        .all()
+    )
+    latest = [
+        MailUnreadPreview(
+            id=r.id,
+            account_id=r.account_id,
+            account_name=(
+                names.get(int(r.account_id))
+                if r.account_id is not None
+                else None
+            )
+            or (f"Silinmiş hesap #{r.account_id}" if r.account_id is not None else None),
+            from_addr=r.from_addr or "",
+            subject=r.subject or "(konu yok)",
+            date_sent=r.date_sent,
+        )
+        for r in latest_rows
+    ]
+
+    return MailUnreadSummaryOut(
+        configured=True,
+        total_unread=total,
+        account_count=len(active_ids),
+        accounts=breakdown,
+        latest=latest,
+    )
 
 
 @router.get("/messages", response_model=list[MailMessageOut])

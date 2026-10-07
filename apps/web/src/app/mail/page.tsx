@@ -7,6 +7,7 @@ import { Customer, apiFetch, downloadAuthFile, downloadPdf } from "@/lib/api";
 import { formatTrDateTime } from "@/lib/dates";
 import { printPdfFromApi } from "@/lib/printPdf";
 import StatusFooter from "@/components/StatusFooter";
+import { notifyMailUnreadChanged } from "@/components/MailAlertCard";
 
 type MailAttachment = {
   filename: string;
@@ -141,17 +142,21 @@ function MailPageInner() {
     }
   }, [accountFilter]);
 
-  // Son seçilen hesap filtresini hatırla (hydration sonrası)
+  // URL account_id varsa onu kullan; yoksa son seçilen hesabı hatırla
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(ACCOUNT_FILTER_KEY);
-      const n = raw && raw !== "all" ? Number(raw) : NaN;
-      if (Number.isFinite(n)) setAccountFilter(n);
+      if (accountParam && Number.isFinite(Number(accountParam))) {
+        setAccountFilter(Number(accountParam));
+      } else {
+        const raw = window.localStorage.getItem(ACCOUNT_FILTER_KEY);
+        const n = raw && raw !== "all" ? Number(raw) : NaN;
+        if (Number.isFinite(n)) setAccountFilter(n);
+      }
     } catch {
       /* ignore */
     }
     setFilterRestored(true);
-  }, []);
+  }, [accountParam]);
 
   useEffect(() => {
     if (!filterRestored) return;
@@ -268,12 +273,28 @@ function MailPageInner() {
     return "";
   }, [accounts, selectedAccount, activeAccounts]);
 
+
+  // Dashboard / derin link: ?msg=id ile mesajı aç
+  useEffect(() => {
+    const msgId = sp.get("msg");
+    if (!msgId || !messages.length) return;
+    const id = Number(msgId);
+    if (!Number.isFinite(id)) return;
+    const row = messages.find((m) => m.id === id);
+    if (row && (!selected || selected.id !== id)) {
+      void openMessage(row);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, sp]);
+
   async function openMessage(m: MailMsg) {
     setError("");
     try {
+      const wasUnread = !m.is_read;
       const full = await apiFetch<MailMsg>(`/api/mail/messages/${m.id}`);
       setSelected(full);
       setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, is_read: true } : x)));
+      if (wasUnread) notifyMailUnreadChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Mesaj açılamadı");
     }
@@ -294,6 +315,7 @@ function MailPageInner() {
       void loadAccounts();
       if (tab === "inbox") await loadMessages("inbox");
       else setTab("inbox");
+      notifyMailUnreadChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Senkron hatası");
     } finally {

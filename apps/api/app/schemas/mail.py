@@ -165,3 +165,27 @@ class MailMessageOut(BaseModel):
 class MailMessageUpdate(BaseModel):
     is_read: bool | None = None
     customer_id: int | None = None
+
+
+class MailUnreadPreview(BaseModel):
+    id: int
+    account_id: int | None = None
+    account_name: str | None = None
+    from_addr: str = ""
+    subject: str = ""
+    date_sent: datetime | None = None
+
+
+class MailUnreadAccountCount(BaseModel):
+    account_id: int | None = None
+    account_name: str = ""
+    unread: int = 0
+
+
+class MailUnreadSummaryOut(BaseModel):
+    configured: bool = False
+    total_unread: int = 0
+    account_count: int = 0
+    accounts: list[MailUnreadAccountCount] = Field(default_factory=list)
+    latest: list[MailUnreadPreview] = Field(default_factory=list)
+

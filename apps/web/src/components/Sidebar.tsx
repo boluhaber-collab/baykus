@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { NAV_GROUPS, NavGroup, filterNavByLockMode, orderNavGroups } from "@/lib/nav";
 import { AppSettings, apiFetch, clearToken } from "@/lib/api";
+import { useMailUnreadSummary } from "@/components/MailAlertCard";
 
 function pathMatches(pathname: string, href: string): boolean {
   const clean = href.split("?")[0];
@@ -36,6 +37,14 @@ export default function Sidebar() {
   const router = useRouter();
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [groups, setGroups] = useState<NavGroup[]>(NAV_GROUPS);
+  const mailNavVisible = groups.some(
+    (g) => g.items.some((i) => i.href.split("?")[0] === "/mail") || (g.href || "").split("?")[0] === "/mail",
+  );
+  const { data: mailUnread } = useMailUnreadSummary(mailNavVisible);
+  const mailBadge =
+    mailNavVisible && mailUnread?.configured && (mailUnread.total_unread || 0) > 0
+      ? mailUnread.total_unread
+      : 0;
 
   useEffect(() => {
     function applyFromSettings(s: AppSettings | null) {
@@ -140,6 +149,11 @@ export default function Sidebar() {
                 >
                   <span className="w-5 text-center text-[15px] opacity-95">{group.icon}</span>
                   <span className="truncate font-medium">{group.label}</span>
+                  {group.items.some((i) => i.href.split("?")[0] === "/mail") && mailBadge > 0 && (
+                    <span className="bk-sidebar-mail-badge" title={`${mailBadge} okunmamış`}>
+                      {mailBadge > 99 ? "99+" : mailBadge}
+                    </span>
+                  )}
                 </Link>
                 {showExpand && (
                   <button
@@ -160,13 +174,18 @@ export default function Sidebar() {
                       <Link
                         key={item.href + item.label}
                         href={item.href}
-                        className={`block rounded-md px-2.5 py-1.5 text-[12px] transition truncate ${
+                        className={`flex items-center rounded-md px-2.5 py-1.5 text-[12px] transition truncate ${
                           leafActive
                             ? "bg-[#2a3548] text-white font-medium"
                             : "text-slate-400 hover:bg-[#1e2736] hover:text-white"
                         }`}
                       >
-                        {item.label}
+                        <span className="truncate">{item.label}</span>
+                        {item.href.split("?")[0] === "/mail" && mailBadge > 0 && (
+                          <span className="bk-sidebar-mail-badge" title={`${mailBadge} okunmamış`}>
+                            {mailBadge > 99 ? "99+" : mailBadge}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}

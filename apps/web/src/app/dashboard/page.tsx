@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AppSettings, DashboardNote, DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
 import { formatTrDateTime } from "@/lib/dates";
 import { openGlobalSearch } from "@/components/GlobalSearchOverlay";
+import MailAlertCard from "@/components/MailAlertCard";
 import { QUICK_ACTION_CATALOG, QUICK_ACTIONS } from "@/lib/nav";
 
 type UsdRates = { buy: number; sell: number } | null;
@@ -294,6 +295,8 @@ export default function DashboardPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
       {loading && !data && <p className="text-baykus-muted text-sm">Yükleniyor…</p>}
+
+      <MailAlertCard />
 
       {/* Hızlı İşlemler */}
       <div className="flex flex-wrap items-center gap-2">

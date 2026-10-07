@@ -1073,3 +1073,71 @@ body {
   .bk-split-pay-minus { background: #ef4444; }
   .bk-split-pay-minus:hover { filter: brightness(1.08); }
 
+
+  /* Ana sayfa e-posta uyarısı */
+  .bk-mail-alert {
+    border-radius: 0.375rem;
+    padding: 0.85rem 1rem;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  .bk-mail-alert--hot {
+    background: linear-gradient(135deg, #0369a1 0%, #0ea5e9 55%, #0284c7 100%);
+    border: 1px solid rgba(255,255,255,0.18);
+  }
+  .bk-mail-alert--calm {
+    background: linear-gradient(135deg, #334155 0%, #475569 100%);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .bk-mail-alert--idle {
+    background: linear-gradient(135deg, #57534e 0%, #78716c 100%);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .bk-mail-alert-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    background: rgba(255,255,255,0.18);
+    font-size: 1.15rem;
+    flex-shrink: 0;
+  }
+  .bk-mail-alert-pulse {
+    animation: bk-mail-pulse 1.6s ease-in-out infinite;
+  }
+  .bk-mail-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background: #fbbf24;
+    color: #78350f;
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 0.15rem 0.5rem;
+    letter-spacing: 0.02em;
+  }
+  .bk-mail-badge--pulse {
+    animation: bk-mail-pulse 1.6s ease-in-out infinite;
+  }
+  .bk-sidebar-mail-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.3rem;
+    border-radius: 9999px;
+    background: #f59e0b;
+    color: #1c1917;
+    font-size: 0.65rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-left: 0.35rem;
+    animation: bk-mail-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes bk-mail-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.85; }
+  }
