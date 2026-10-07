@@ -14,7 +14,7 @@ import StatusFooter from "@/components/StatusFooter";
 import { ReportResponse, apiFetch, downloadReportCsv } from "@/lib/api";
 import { displaySku } from "@/lib/productLabel";
 import { useDateSort } from "@/hooks/useDateSort";
-import { formatTrDateTime } from "@/lib/dates";
+import { formatTrDateTime, localToday } from "@/lib/dates";
 
 type Row = {
   id: number;
@@ -34,7 +34,7 @@ function monthStart() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 export default function StockMovementsReportPage() {

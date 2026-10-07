@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 type Task = {
   id: number;
@@ -22,7 +22,7 @@ type Task = {
 };
 
 const EMPTY = {
-  due_date: new Date().toISOString().slice(0, 10),
+  due_date: localToday(),
   due_time: "",
   task_type: "Müşteri aranacak",
   title: "",

@@ -22,7 +22,7 @@ import {
 
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { useDateSort } from "@/hooks/useDateSort";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 type Row = {
   source: string;
@@ -42,7 +42,7 @@ function monthStart(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 export default function FinanceReportPage() {

@@ -13,7 +13,7 @@ import {
 } from "@/components/reports/ReportChrome";
 import StatusFooter from "@/components/StatusFooter";
 import { ReportResponse, apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 type Row = {
   id: number;
@@ -30,7 +30,7 @@ function monthStart() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 export default function QuotesReportPage() {

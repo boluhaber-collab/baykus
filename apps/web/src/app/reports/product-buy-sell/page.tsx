@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { localToday } from "@/lib/dates";
 import {
   Assumptions,
   Field,
@@ -28,7 +29,7 @@ function monthStart() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 export default function ProductBuySellPage() {

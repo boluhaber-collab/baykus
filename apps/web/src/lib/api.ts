@@ -1,3 +1,4 @@
+import { localToday } from "./dates";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export function getApiBase(): string {
@@ -1208,7 +1209,7 @@ export function orderRowTag(o: {
   if (o.status === "Hazır") return "hazir";
   if (o.due_date) {
     const d = String(o.due_date).slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     if (d < today && o.status !== "Teslim Edildi" && o.status !== "Sipariş İptali") {
       return "geciken";
     }

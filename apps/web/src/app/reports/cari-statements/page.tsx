@@ -8,7 +8,7 @@ import LiveSearchSelect, { customerToOption } from "@/components/LiveSearchSelec
 import StatusFooter from "@/components/StatusFooter";
 import { ReportHeader } from "@/components/reports/ReportChrome";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 type CustomerOpt = { id: number; name: string; company: string | null; balance: number };
 type Move = { id: number; date: string | null; type: string; debit: number; credit: number; balance: number; note: string | null };
@@ -25,7 +25,7 @@ export default function CariStatementsPage() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
   });
-  const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = useState(() => localToday());
 
 
   useEffect(() => {

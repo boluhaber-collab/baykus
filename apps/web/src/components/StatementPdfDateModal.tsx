@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { localToday } from "@/lib/dates";
 import { downloadPdf } from "@/lib/api";
 
 export type StatementPdfDateModalProps = {
@@ -16,7 +17,7 @@ export type StatementPdfDateModalProps = {
 };
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 function monthStartIso(): string {

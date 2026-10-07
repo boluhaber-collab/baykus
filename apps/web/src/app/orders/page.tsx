@@ -18,7 +18,7 @@ import {
 } from "@/lib/api";
 import { HubTabs } from "@/components/hub/HubChrome";
 import StatusFooter from "@/components/StatusFooter";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 type NotebookTab =
   | "teklifler"
@@ -88,11 +88,11 @@ function OrdersNotebookInner() {
         const qs = params.toString();
         let data = await apiFetch<OrderListItem[]>(`/api/orders${qs ? `?${qs}` : ""}`);
         if (sp.get("due") === "today") {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = localToday();
           data = data.filter((o) => o.due_date && String(o.due_date).slice(0, 10) === today);
         }
         if (sp.get("overdue") === "1") {
-          const today = new Date().toISOString().slice(0, 10);
+          const today = localToday();
           data = data.filter(
             (o) =>
               o.due_date &&

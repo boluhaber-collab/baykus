@@ -24,7 +24,7 @@ export default function MutabakatPage() {
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [statement, setStatement] = useState<CustomerStatement | null>(null);
   const [from, setFrom] = useState("");
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [to, setTo] = useState(() => localToday());
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 

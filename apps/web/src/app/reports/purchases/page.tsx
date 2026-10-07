@@ -6,14 +6,13 @@ import { apiFetch, downloadReportCsv, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 type Row = { id: number; number: string; date: string | null; supplier: string | null; status: string; amount: number };
 
 export default function PurchaseReportPage() {
-  const now = new Date();
   const [from, setFrom] = useState(`${now.getFullYear()}-01-01`);
-  const [to, setTo] = useState(now.toISOString().slice(0, 10));
+  const [to, setTo] = useState(localToday());
   const [rows, setRows] = useState<Row[]>([]);
   const [summary, setSummary] = useState<{ count: number; total: number } | null>(null);
   const [error, setError] = useState("");

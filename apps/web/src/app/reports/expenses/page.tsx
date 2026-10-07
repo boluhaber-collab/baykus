@@ -7,7 +7,7 @@ import StatusFooter from "@/components/StatusFooter";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
-import { formatTrDate } from "@/lib/dates";
+import { formatTrDate, localToday } from "@/lib/dates";
 
 type Row = {
   id: number;
@@ -20,9 +20,8 @@ type Row = {
 };
 
 export default function ExpenseReportsPage() {
-  const now = new Date();
-  const [from, setFrom] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`);
-  const [to, setTo] = useState(now.toISOString().slice(0, 10));
+  const [from, setFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; });
+  const [to, setTo] = useState(localToday());
   const [rows, setRows] = useState<Row[]>([]);
   const [summary, setSummary] = useState<{ count: number; total: number } | null>(null);
   const [error, setError] = useState("");

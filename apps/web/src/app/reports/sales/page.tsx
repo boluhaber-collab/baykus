@@ -19,7 +19,7 @@ import {
   statusBadgeClass,
 } from "@/lib/api";
 import { useDateSort } from "@/hooks/useDateSort";
-import { formatTrDate, formatTrDatesInText } from "@/lib/dates";
+import { formatTrDate, formatTrDatesInText, localToday } from "@/lib/dates";
 
 type SalesRow = {
   id: number;
@@ -41,8 +41,7 @@ function monthStart(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 function todayStr(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  return localToday();
 }
 
 export default function SalesReportPage() {
