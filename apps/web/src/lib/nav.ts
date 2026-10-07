@@ -173,6 +173,7 @@ export const NAV_GROUPS: NavGroup[] = [
     href: "/communication",
     items: [
       { href: "/communication", label: "İletişim Merkezi", color: "#0f766e" },
+      { href: "/mail", label: "E-Posta", color: "#0369a1" },
       { href: "/whatsapp/track", label: "WhatsApp Takip", color: "#15803d" },
       { href: "/crm/special-days", label: "Özel Gün / Kampanya", color: "#f59e0b" },
       { href: "/whatsapp", label: "WhatsApp Taslakları", color: "#16a34a" },
@@ -197,6 +198,7 @@ export const NAV_GROUPS: NavGroup[] = [
     href: "/settings",
     items: [
       { href: "/settings", label: "Ayarlar", color: "#6f42c1" },
+      { href: "/settings/mail", label: "E-Posta Ayarları", color: "#0369a1" },
       { href: "/settings/lock-mode", label: "Yetki / Kilit Modu", color: "#111827" },
       { href: "/settings", label: "Kullanıcı Yönetimi", color: "#0f766e" },
       { href: "/settings/audit", label: "İşlem Geçmişi", color: "#334155" },
@@ -292,6 +294,8 @@ const PATH_LABELS: Record<string, string> = {
   "/reports/cari-statements": "Cari Dökümler",
   "/reports/archive": "Belge Arşiv Merkezi",
   "/communication": "İletişim Merkezi",
+  "/mail": "E-Posta",
+  "/settings/mail": "E-Posta Ayarları",
   "/whatsapp": "WhatsApp Taslakları",
   "/whatsapp/track": "WhatsApp Takip",
   "/crm/special-days": "Özel Gün / Kampanya",
@@ -400,6 +404,7 @@ export const QUICK_ACTION_CATALOG: {
   { id: "is_emirleri", label: "İş Emirleri", href: "/production/work-orders", hex: "#2563eb", description: "İş emirlerine hızlı erişim sağlayın." },
   { id: "musteri_merkezi", label: "Müşteri Merkezi", href: "/customers", hex: "#198754", description: "Müşteri ve cari işlemlerini yönetin." },
   { id: "musteri_iletisim", label: "Müşteri İletişim", href: "/communication", hex: "#0f766e", description: "Kampanya, WhatsApp ve fihrist araçlarını açın." },
+  { id: "eposta", label: "E-Posta", href: "/mail", hex: "#0369a1", description: "SMTP gönder / IMAP gelen kutusu." },
   { id: "alis_hareketleri", label: "Alış Hareketleri", href: "/purchases", hex: "#198754", description: "Alış hareketlerini yönetin.", fixed: true },
   { id: "tedarik_merkezi", label: "Tedarik Merkezi", href: "/suppliers", hex: "#0f766e", description: "Tedarikçi ve satın alma işlemlerine ulaşın." },
   { id: "satis_belgeleri", label: "Satışlar", href: "/sales", hex: "#0f766e", description: "Direkt satış belgelerini görüntüleyin." },

@@ -661,6 +661,26 @@ export default function CustomerDetailPage() {
                 },
           },
           {
+            key: "eposta",
+            label: "E-posta",
+            icon: "📧",
+            variant: "cyan",
+            href: customer.email
+              ? `/mail?compose=1&customer_id=${id}&to=${encodeURIComponent(customer.email)}`
+              : `/mail?compose=1&customer_id=${id}`,
+            menu: [
+              {
+                label: "E-posta gönder",
+                href: customer.email
+                  ? `/mail?compose=1&customer_id=${id}&to=${encodeURIComponent(customer.email)}`
+                  : `/mail?compose=1&customer_id=${id}`,
+              },
+              { label: "Bu carinin mailleri", href: `/mail?customer_id=${id}` },
+              { label: "E-Posta kutusu", href: "/mail" },
+              { label: "E-Posta ayarları", href: "/settings/mail" },
+            ],
+          },
+          {
             key: "docs",
             label: "Dökümanlar",
             icon: "📁",

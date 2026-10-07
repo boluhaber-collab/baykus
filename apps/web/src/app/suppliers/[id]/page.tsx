@@ -589,6 +589,24 @@ export default function SupplierDetailPage() {
               : () => setError("Telefon yok — SMS/WhatsApp açılamaz"),
           },
           {
+            key: "eposta",
+            label: "E-posta",
+            icon: "📧",
+            variant: "orange",
+            href: supplier.email
+              ? `/mail?compose=1&to=${encodeURIComponent(supplier.email)}`
+              : "/mail?compose=1",
+            menu: [
+              {
+                label: "E-posta gönder",
+                href: supplier.email
+                  ? `/mail?compose=1&to=${encodeURIComponent(supplier.email)}`
+                  : "/mail?compose=1",
+              },
+              { label: "E-Posta kutusu", href: "/mail" },
+            ],
+          },
+          {
             key: "docs",
             label: "Dökümanlar",
             icon: "📁",

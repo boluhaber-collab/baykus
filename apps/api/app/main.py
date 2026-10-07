@@ -28,6 +28,7 @@ from app.api.routers import (
     settings as settings_router,
     suppliers,
     whatsapp,
+    mail,
     sublimation,
     tasks,
 )
@@ -74,6 +75,16 @@ def _ensure_lookup_indexes() -> None:
     except Exception as _exc:
         print(f"[baykus] startup entity repair error: {_exc}", flush=True)
 
+    # E-posta: mail_messages tablosu
+    try:
+        from app.services.mail_schema_migrate import run_startup_migrate as _mail_schema_migrate
+
+        _mail = _mail_schema_migrate()
+        if _mail and not _mail.get("had_mail"):
+            print(f"[baykus] startup mail migrate: {_mail}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup mail migrate error: {_exc}", flush=True)
+
 
 # Lock mode gate runs inside CORS (added last = outermost in Starlette)
 app.add_middleware(LockModeMiddleware)
@@ -110,6 +121,7 @@ for router in (
     search.router,
     settings_router.router,
     whatsapp.router,
+    mail.router,
     audit.router,
     backups.router,
     integrations.router,

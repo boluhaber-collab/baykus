@@ -1032,6 +1032,17 @@ function SettingsPageInner() {
 
       {tab === "entegrasyonlar" && (
         <div className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
+          <div className="rounded border bg-sky-50 border-sky-200 px-3 py-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="font-semibold text-sm text-sky-950">E-Posta (SMTP / IMAP)</div>
+              <p className="text-xs text-sky-800">Gönder ve al — şifreler yerel dosyada. Müşteri/cari kartından da açılır.</p>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/settings/mail" className="rounded-lg bg-sky-700 text-white px-3 py-1.5 text-sm">Ayarlar</Link>
+              <Link href="/mail" className="rounded-lg border border-sky-700 text-sky-800 px-3 py-1.5 text-sm">Kutu</Link>
+            </div>
+          </div>
+
           <h2 className="font-semibold">BizimHesap / Entegrasyonlar</h2>
           <p className="text-sm text-slate-500">
             API anahtarları bu sekmede tutulmaz; ayrı güvenli sayfada yönetilir. Gerçek anahtarlar

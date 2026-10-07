@@ -21,6 +21,7 @@ from app.models.user import Role, User, user_roles
 from app.models.warehouse import Warehouse, WarehouseStock
 from app.models.variant_option import VariantOption
 from app.models.whatsapp import WhatsAppSendLog, WhatsAppTemplate
+from app.models.mail import MailMessage
 
 __all__ = [
     "User", "Role", "user_roles",
@@ -31,6 +32,7 @@ __all__ = [
     "Supplier", "SupplierMovement", "Purchase", "PurchaseLine",
     "Quote", "QuoteLine",
     "WhatsAppTemplate", "WhatsAppSendLog",
+    "MailMessage",
     "AppSetting", "ExpenseCategory", "Expense",
     "PriceList", "PriceListItem",
     "Loan", "LoanInstallment",

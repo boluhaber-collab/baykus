@@ -7,6 +7,12 @@ import StatusFooter from "@/components/StatusFooter";
 
 const CARDS = [
   {
+    title: "E-Posta",
+    href: "/mail",
+    color: "#0369a1",
+    desc: "SMTP ile gönder, IMAP ile gelen kutusu; müşteri carisine bağlanır.",
+  },
+  {
     title: "WhatsApp Takip",
     href: "/whatsapp/track",
     color: "#15803d",
@@ -90,6 +96,9 @@ export default function CommunicationHubPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/mail" className="bk-btn text-xs text-white" style={{ background: "#0369a1" }}>
+            E-Posta
+          </Link>
           <Link href="/whatsapp/track" className="bk-btn text-xs text-white" style={{ background: "#15803d" }}>
             WhatsApp Takip
           </Link>
@@ -134,6 +143,7 @@ export default function CommunicationHubPage() {
         <div className="text-xs font-semibold text-baykus-muted mb-2">İşlemler (masaüstü düğme etiketleri)</div>
         <div className="flex flex-wrap gap-2">
           {[
+            { href: "/mail", label: "E-Posta", color: "#0369a1" },
             { href: "/whatsapp/track", label: "WhatsApp Takip", color: "#15803d" },
             { href: "/crm/special-days", label: "Özel Gün / Kampanya", color: "#f59e0b" },
             { href: "/whatsapp", label: "WhatsApp Taslakları", color: "#16a34a" },
