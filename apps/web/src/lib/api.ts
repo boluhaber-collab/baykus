@@ -1003,6 +1003,7 @@ export type Expense = {
   bank_account_id?: number | null;
   bank_account_name?: string | null;
   is_posted: boolean;
+  is_cancelled?: boolean;
   status_label?: string | null;
   created_by_user_id?: number | null;
   created_at: string;

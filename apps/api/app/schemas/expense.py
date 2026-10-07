@@ -67,7 +67,8 @@ class ExpenseOut(BaseModel):
     bank_account_id: int | None
     bank_account_name: str | None = None
     is_posted: bool
-    status_label: str | None = None  # Ödenmiş | Ödenecek | Gecikmiş
+    is_cancelled: bool = False
+    status_label: str | None = None  # Ödenmiş | Ödenecek | Gecikmiş | İptal
     created_by_user_id: int | None
     created_at: datetime
 

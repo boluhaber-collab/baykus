@@ -270,7 +270,11 @@ def _month_net_profit(db: Session, month_start: datetime) -> float:
     )
     expenses = (
         db.query(func.coalesce(func.sum(Expense.amount), 0))
-        .filter(Expense.expense_date >= month_start.date(), Expense.expense_date <= month_end)
+        .filter(
+            Expense.expense_date >= month_start.date(),
+            Expense.expense_date <= month_end,
+            Expense.is_cancelled.is_(False),
+        )
         .scalar()
     )
     return _f(_dec(revenue) - _dec(purchase_cost) - _dec(expenses))
@@ -288,7 +292,11 @@ def _month_expenses(db: Session, month_start: datetime) -> float:
     month_end = date_cls(today.year, today.month, last)
     expenses = (
         db.query(func.coalesce(func.sum(Expense.amount), 0))
-        .filter(Expense.expense_date >= month_start.date(), Expense.expense_date <= month_end)
+        .filter(
+            Expense.expense_date >= month_start.date(),
+            Expense.expense_date <= month_end,
+            Expense.is_cancelled.is_(False),
+        )
         .scalar()
     )
     return _f(expenses)
@@ -918,7 +926,12 @@ def weekly_plan(
 
     for e in (
         db.query(Expense)
-        .filter(Expense.due_date.isnot(None), Expense.due_date >= bas, Expense.due_date <= gun_son)
+        .filter(
+            Expense.due_date.isnot(None),
+            Expense.due_date >= bas,
+            Expense.due_date <= gun_son,
+            Expense.is_cancelled.is_(False),
+        )
         .all()
     ):
         cat_name = ""

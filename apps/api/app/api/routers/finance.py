@@ -162,6 +162,23 @@ def _apply_movement_fields(
         m.category = category
 
 
+def _mark_linked_expense_cancelled(db: Session, *, cash_movement_id: int | None = None, bank_movement_id: int | None = None) -> None:
+    """When a kasa/banka leg is deleted, soft-cancel the linked masraf so it leaves the list."""
+    q = db.query(Expense).filter(Expense.is_cancelled.is_(False))
+    if cash_movement_id is not None:
+        rows = q.filter(Expense.cash_movement_id == cash_movement_id).all()
+    elif bank_movement_id is not None:
+        rows = q.filter(Expense.bank_movement_id == bank_movement_id).all()
+    else:
+        return
+    for exp in rows:
+        if cash_movement_id is not None:
+            exp.cash_movement_id = None
+        if bank_movement_id is not None:
+            exp.bank_movement_id = None
+        exp.is_posted = False
+        exp.is_cancelled = True
+
 
 def _dec(v) -> Decimal:
     return Decimal(str(v or 0))
@@ -723,7 +740,11 @@ def cash_daily_panel(
     # Expenses in range
     expense_total = _dec(
         db.query(func.coalesce(func.sum(Expense.amount), 0))
-        .filter(Expense.expense_date >= d0, Expense.expense_date <= d1)
+        .filter(
+            Expense.expense_date >= d0,
+            Expense.expense_date <= d1,
+            Expense.is_cancelled.is_(False),
+        )
         .scalar()
     )
 
@@ -1001,10 +1022,13 @@ def delete_cash_movement(
         for peer in peers_cash + peers_bank:
             _refuse_bh_import_delete(peer.note)
         for peer in peers_cash:
+            _mark_linked_expense_cancelled(db, cash_movement_id=peer.id)
             db.delete(peer)
         for peer in peers_bank:
+            _mark_linked_expense_cancelled(db, bank_movement_id=peer.id)
             db.delete(peer)
     else:
+        _mark_linked_expense_cancelled(db, cash_movement_id=m.id)
         db.delete(m)
     db.commit()
 
@@ -1327,10 +1351,13 @@ def delete_bank_movement(
         for peer in peers_cash + peers_bank:
             _refuse_bh_import_delete(peer.note)
         for peer in peers_cash:
+            _mark_linked_expense_cancelled(db, cash_movement_id=peer.id)
             db.delete(peer)
         for peer in peers_bank:
+            _mark_linked_expense_cancelled(db, bank_movement_id=peer.id)
             db.delete(peer)
     else:
+        _mark_linked_expense_cancelled(db, bank_movement_id=m.id)
         db.delete(m)
     db.commit()
 

@@ -73,6 +73,7 @@ export default function ExpensesPage() {
   const [msg, setMsg] = useState("");
   const [period, setPeriod] = useState("92");
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_CHIPS)[number]>("Tümü");
+  const [showCancel, setShowCancel] = useState(false);
   const [q, setQ] = useState("");
   const [showCat, setShowCat] = useState(false);
   const [catName, setCatName] = useState("");
@@ -100,6 +101,7 @@ export default function ExpensesPage() {
       if (from) params.set("date_from", from);
       if (statusFilter !== "Tümü") params.set("status_filter", statusFilter);
       if (q.trim()) params.set("q", q.trim());
+      if (showCancel) params.set("include_cancelled", "true");
       params.set("limit", "2000");
       const [e, c, regs, bankList] = await Promise.all([
         apiFetch<Expense[]>(`/api/finance/expenses?${params}`),
@@ -124,13 +126,16 @@ export default function ExpensesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Yükleme hatası");
     }
-  }, [period, statusFilter, q]);
+  }, [period, statusFilter, q, showCancel]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const total = useMemo(() => items.reduce((s, i) => s + Number(i.amount), 0), [items]);
+  const total = useMemo(
+    () => items.filter((i) => !i.is_cancelled).reduce((s, i) => s + Number(i.amount), 0),
+    [items],
+  );
   const { dir: dateDir, setDir: setDateDir, sorted: sortedRows } = useDateSort(
     items,
     (e) => e.expense_date,
@@ -253,6 +258,24 @@ export default function ExpensesPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Silme hatası");
+    }
+  }
+
+  async function cancelExpense(id: number) {
+    if (
+      !confirm(
+        "Bu masraf iptal edilsin mi?\nBağlı kasa/banka hareketleri kaldırılacak; masraf listeden düşecek.",
+      )
+    )
+      return;
+    setError("");
+    setMsg("");
+    try {
+      await apiFetch(`/api/finance/expenses/${id}/cancel`, { method: "POST" });
+      setMsg("Masraf iptal edildi");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "İptal hatası");
     }
   }
 
@@ -549,6 +572,14 @@ export default function ExpensesPage() {
             </button>
           ))}
         </div>
+        <label className="inline-flex items-center gap-1.5 text-[11px] font-bold ml-2">
+          <input
+            type="checkbox"
+            checked={showCancel}
+            onChange={(e) => setShowCancel(e.target.checked)}
+          />
+          İptalleri de göster
+        </label>
         <input
           className="bk-input max-w-[200px] ml-auto"
           placeholder="Ara…"
@@ -592,11 +623,22 @@ export default function ExpensesPage() {
           </thead>
           <tbody>
             {sortedRows.map((e) => {
-              const st = e.status_label || (e.is_posted ? "Ödenmiş" : "Ödenecek");
+              const cancelled = !!e.is_cancelled || e.status_label === "İptal";
+              const st =
+                e.status_label ||
+                (cancelled ? "İptal" : e.is_posted ? "Ödenmiş" : "Ödenecek");
               return (
                 <tr
                   key={e.id}
-                  className={st === "Gecikmiş" ? "bg-red-50" : st === "Ödenecek" ? "bg-amber-50" : undefined}
+                  className={
+                    cancelled
+                      ? "bg-slate-100 opacity-70"
+                      : st === "Gecikmiş"
+                        ? "bg-red-50"
+                        : st === "Ödenecek"
+                          ? "bg-amber-50"
+                          : undefined
+                  }
                 >
                   <td className="text-xs whitespace-nowrap">{formatTrDate(e.expense_date)}</td>
                   <td className="text-xs">{e.document_no || "—"}</td>
@@ -617,11 +659,13 @@ export default function ExpensesPage() {
                   <td>
                     <span
                       className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                        st === "Ödenmiş"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : st === "Gecikmiş"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-amber-100 text-amber-900"
+                        st === "İptal"
+                          ? "bg-slate-200 text-slate-700"
+                          : st === "Ödenmiş"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : st === "Gecikmiş"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-amber-100 text-amber-900"
                       }`}
                     >
                       {st}
@@ -629,7 +673,7 @@ export default function ExpensesPage() {
                   </td>
                   <td className="text-xs text-baykus-muted max-w-[160px] truncate">{sanitizeDisplayNote(e.note) || "—"}</td>
                   <td className="text-right text-xs whitespace-nowrap space-x-2">
-                    {!e.is_posted && (
+                    {!cancelled && !e.is_posted && (
                       <>
                         <button
                           type="button"
@@ -642,6 +686,15 @@ export default function ExpensesPage() {
                           Sil
                         </button>
                       </>
+                    )}
+                    {!cancelled && (
+                      <button
+                        type="button"
+                        className="text-red-600 hover:underline"
+                        onClick={() => void cancelExpense(e.id)}
+                      >
+                        İptal
+                      </button>
                     )}
                   </td>
                 </tr>

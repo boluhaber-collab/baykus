@@ -50,6 +50,7 @@ class Expense(Base):
         ForeignKey("bank_movements.id", ondelete="SET NULL")
     )
     is_posted: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )

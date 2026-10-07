@@ -20,6 +20,8 @@ from app.schemas.expense import (
     ExpenseOut,
 )
 
+BH_IMPORT_MARKER = "BH_IMPORT:"
+
 router = APIRouter(prefix="/finance/expenses", tags=["expenses"])
 
 READ = ("admin", "muhasebe")
@@ -27,12 +29,60 @@ WRITE = ("admin", "muhasebe")
 
 
 def _status_label(e: Expense) -> str:
+    if getattr(e, "is_cancelled", False):
+        return "İptal"
     if e.is_posted:
         return "Ödenmiş"
     from datetime import date as _date
     if e.due_date and e.due_date < _date.today():
         return "Gecikmiş"
     return "Ödenecek"
+
+
+def _is_bh_expense(e: Expense) -> bool:
+    note = e.note or ""
+    return BH_IMPORT_MARKER in note
+
+
+def _refuse_bh_expense(e: Expense) -> None:
+    if _is_bh_expense(e):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="BizimHesap aktarım masrafları iptal edilemez",
+        )
+
+
+def _purge_expense_ledger(db: Session, expense: Expense) -> None:
+    """Remove linked kasa/banka movements (and their party legs if any)."""
+    from app.models.customer import CariMovement
+    from app.models.supplier import SupplierMovement
+
+    if expense.cash_movement_id:
+        mov = db.get(CashMovement, expense.cash_movement_id)
+        if mov:
+            if mov.cari_movement_id:
+                cm = db.get(CariMovement, mov.cari_movement_id)
+                if cm:
+                    db.delete(cm)
+            if mov.supplier_movement_id:
+                sm = db.get(SupplierMovement, mov.supplier_movement_id)
+                if sm:
+                    db.delete(sm)
+            db.delete(mov)
+        expense.cash_movement_id = None
+    if expense.bank_movement_id:
+        mov = db.get(BankMovement, expense.bank_movement_id)
+        if mov:
+            if mov.cari_movement_id:
+                cm = db.get(CariMovement, mov.cari_movement_id)
+                if cm:
+                    db.delete(cm)
+            if mov.supplier_movement_id:
+                sm = db.get(SupplierMovement, mov.supplier_movement_id)
+                if sm:
+                    db.delete(sm)
+            db.delete(mov)
+        expense.bank_movement_id = None
 
 
 def _account_names(db: Session, e: Expense) -> tuple[str | None, str | None]:
@@ -68,6 +118,7 @@ def _out(e: Expense, db: Session | None = None) -> ExpenseOut:
         bank_account_id=e.bank_account_id,
         bank_account_name=bank_name,
         is_posted=e.is_posted,
+        is_cancelled=bool(getattr(e, "is_cancelled", False)),
         status_label=_status_label(e),
         created_by_user_id=e.created_by_user_id,
         created_at=e.created_at,
@@ -210,10 +261,13 @@ def list_expenses(
     date_to: date | None = None,
     status_filter: str | None = None,
     q: str | None = None,
+    include_cancelled: bool = False,
     skip: int = 0,
     limit: int = 2000,
 ) -> list[ExpenseOut]:
     query = db.query(Expense).options(joinedload(Expense.category))
+    if not include_cancelled:
+        query = query.filter(Expense.is_cancelled.is_(False))
     if category_id:
         query = query.filter(Expense.category_id == category_id)
     if date_from:
@@ -311,9 +365,43 @@ def post_expense_endpoint(
     )
     if not expense:
         raise HTTPException(status_code=404, detail="Gider bulunamadı")
+    if getattr(expense, "is_cancelled", False):
+        raise HTTPException(status_code=400, detail="İptal edilmiş masraf işlenemez")
     if expense.is_posted:
         return _out(expense, db)
     post_to_ledger(db, expense, user)
+    db.commit()
+    expense = (
+        db.query(Expense)
+        .options(joinedload(Expense.category))
+        .filter(Expense.id == expense_id)
+        .first()
+    )
+    return _out(expense, db)
+
+
+@router.post("/{expense_id}/cancel", response_model=ExpenseOut)
+def cancel_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*WRITE)),
+) -> ExpenseOut:
+    """İptal: kasa/banka (+bağlı cari) tersine, masraf soft-delete (is_cancelled)."""
+    expense = (
+        db.query(Expense)
+        .options(joinedload(Expense.category))
+        .filter(Expense.id == expense_id)
+        .first()
+    )
+    if not expense:
+        raise HTTPException(status_code=404, detail="Gider bulunamadı")
+    if getattr(expense, "is_cancelled", False):
+        raise HTTPException(status_code=400, detail="Zaten iptal edilmiş")
+    _refuse_bh_expense(expense)
+    if expense.is_posted:
+        _purge_expense_ledger(db, expense)
+        expense.is_posted = False
+    expense.is_cancelled = True
     db.commit()
     expense = (
         db.query(Expense)
@@ -330,10 +418,20 @@ def delete_expense(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(*WRITE)),
 ) -> None:
+    """Hard delete only for unposted, non-cancelled drafts. Posted → use /cancel."""
     expense = db.get(Expense, expense_id)
     if not expense:
         raise HTTPException(status_code=404, detail="Gider bulunamadı")
+    if getattr(expense, "is_cancelled", False):
+        # Already soft-cancelled — allow hard remove of the stub row
+        db.delete(expense)
+        db.commit()
+        return
     if expense.is_posted:
-        raise HTTPException(status_code=400, detail="İşlenmiş gider silinemez")
+        raise HTTPException(
+            status_code=400,
+            detail="İşlenmiş gider silinemez — İptal kullanın",
+        )
+    _refuse_bh_expense(expense)
     db.delete(expense)
     db.commit()

@@ -54,6 +54,13 @@ def _ensure_lookup_indexes() -> None:
         run_startup_migrate()
     except Exception:
         pass
+    # Masraf iptal: expenses.is_cancelled (SQLite ALTER for existing DBs)
+    try:
+        from app.services.expense_schema_migrate import run_startup_migrate as _expense_schema_migrate
+
+        _expense_schema_migrate()
+    except Exception:
+        pass
 
 
 # Lock mode gate runs inside CORS (added last = outermost in Starlette)

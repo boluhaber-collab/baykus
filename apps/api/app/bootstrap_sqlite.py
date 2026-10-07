@@ -103,6 +103,14 @@ def bootstrap() -> None:
             if "document_no" not in ecols:
                 conn.execute(text("ALTER TABLE expenses ADD COLUMN document_no VARCHAR(50)"))
                 print("  + expenses.document_no")
+            if "is_cancelled" not in ecols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE expenses ADD COLUMN is_cancelled BOOLEAN "
+                        "DEFAULT 0 NOT NULL"
+                    )
+                )
+                print("  + expenses.is_cancelled")
         if "assets" in insp.get_table_names():
             acols = {c["name"] for c in insp.get_columns("assets")}
             if "serial_no" not in acols:

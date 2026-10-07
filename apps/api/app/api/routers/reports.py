@@ -1295,7 +1295,9 @@ def expenses_report(
     """Masraf / gider raporu."""
     from app.models.expense import Expense, ExpenseCategory
 
-    q = db.query(Expense).options(joinedload(Expense.category))
+    q = db.query(Expense).options(joinedload(Expense.category)).filter(
+        Expense.is_cancelled.is_(False)
+    )
     if date_from:
         q = q.filter(Expense.expense_date >= date_from)
     if date_to:
