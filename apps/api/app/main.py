@@ -58,9 +58,21 @@ def _ensure_lookup_indexes() -> None:
     try:
         from app.services.expense_schema_migrate import run_startup_migrate as _expense_schema_migrate
 
-        _expense_schema_migrate()
-    except Exception:
-        pass
+        _res = _expense_schema_migrate()
+        if _res is not None:
+            print(f"[baykus] startup expense migrate: {_res}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup expense migrate error: {_exc}", flush=True)
+
+    # HTML entity mojibake repair (&#246; → ö) for leftover BH notes
+    try:
+        from app.services.html_entity_repair_migrate import run_startup_repair
+
+        _rep = run_startup_repair()
+        if _rep.get("fixed"):
+            print(f"[baykus] startup entity repair: {_rep}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup entity repair error: {_exc}", flush=True)
 
 
 # Lock mode gate runs inside CORS (added last = outermost in Starlette)
@@ -314,6 +326,51 @@ def health() -> dict:
                                 "Önem": "Yüksek",
                                 "Kayıt": "Kasa",
                                 "Detay": "Aktif kasa tanımı yok.",
+                                "Hedef": "Hesaplarım",
+                            }
+                        )
+                except Exception:
+                    pass
+
+                # expenses.is_cancelled column present?
+                try:
+                    from sqlalchemy import inspect as sa_inspect
+
+                    insp = sa_inspect(engine)
+                    if "expenses" in insp.get_table_names():
+                        ecols = {c["name"] for c in insp.get_columns("expenses")}
+                        if "is_cancelled" not in ecols:
+                            issues.append(
+                                {
+                                    "Kategori": "Masraf",
+                                    "Önem": "Yüksek",
+                                    "Kayıt": "expenses.is_cancelled",
+                                    "Detay": "Kolon yok — API’yi yeniden başlatın (otomatik migrate).",
+                                    "Hedef": "Masraflar",
+                                }
+                            )
+                except Exception:
+                    pass
+
+                # Legacy Kapora notes on fully paid sales (display rewrite covers UI; DB optional)
+                try:
+                    from app.models.finance import CashMovement, BankMovement
+
+                    n_kapora = (
+                        db.query(CashMovement)
+                        .filter(CashMovement.note.ilike("Kapora %"))
+                        .count()
+                        + db.query(BankMovement)
+                        .filter(BankMovement.note.ilike("Kapora %"))
+                        .count()
+                    )
+                    if n_kapora:
+                        issues.append(
+                            {
+                                "Kategori": "Finans",
+                                "Önem": "Düşük",
+                                "Kayıt": f"{n_kapora} Kapora notu",
+                                "Detay": "Peşin satışlarda listede Tahsilat görünür; DB notu eski kalabilir.",
                                 "Hedef": "Hesaplarım",
                             }
                         )

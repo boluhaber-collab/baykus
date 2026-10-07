@@ -718,6 +718,144 @@ def get_order(
     return _to_out(_load_order(db, order_id))
 
 
+def _snapshot_order_payments(db: Session, order: Order) -> list[dict]:
+    """Capture Payment rows + linked kasa/banka account ids before purge."""
+    from app.models.customer import CariMovement
+    from app.models.finance import BankMovement, CashMovement
+
+    snaps: list[dict] = []
+    for p in list(order.payments or []):
+        cash_id = None
+        bank_id = None
+        amt = _dec(p.amount)
+        # Prefer finance row linked via matching cari payment on this order
+        if order.customer_id and amt > 0:
+            cari_pays = (
+                db.query(CariMovement)
+                .filter(
+                    CariMovement.order_id == order.id,
+                    CariMovement.movement_type.in_(("payment", "deposit")),
+                )
+                .all()
+            )
+            for cm in cari_pays:
+                if abs(_dec(cm.credit) - amt) > Decimal("0.02"):
+                    continue
+                cash = (
+                    db.query(CashMovement)
+                    .filter(CashMovement.cari_movement_id == cm.id)
+                    .first()
+                )
+                bank = (
+                    db.query(BankMovement)
+                    .filter(BankMovement.cari_movement_id == cm.id)
+                    .first()
+                )
+                if cash:
+                    cash_id = cash.cash_register_id
+                if bank:
+                    bank_id = bank.bank_account_id
+                if cash_id or bank_id:
+                    break
+        snaps.append(
+            {
+                "amount": amt,
+                "method": (p.method or "nakit")[:50],
+                "notes": p.notes,
+                "paid_at": p.paid_at,
+                "cash_register_id": cash_id,
+                "bank_account_id": bank_id,
+            }
+        )
+    return snaps
+
+
+def _repost_order_payments(
+    db: Session,
+    order: Order,
+    user: User,
+    snaps: list[dict],
+    *,
+    mov_date: date,
+) -> None:
+    """Re-create Payment + cari credit + kasa/banka after cascade purge."""
+    from app.models.customer import CariMovement
+    from app.services.split_payments import normalize_payment_lines, post_finance_lines
+    from app.utils.sale_payment_note import order_payment_finance_note
+
+    if not snaps:
+        order.deposit_amount = Decimal("0")
+        return
+
+    total_paid = sum((s["amount"] for s in snaps), Decimal("0"))
+    order.deposit_amount = total_paid
+    base_note = order_payment_finance_note(
+        order.order_number,
+        total=_dec(order.total_amount),
+        paid=total_paid,
+    )
+    for idx, snap in enumerate(snaps, start=1):
+        amt = snap["amount"]
+        if amt <= 0:
+            continue
+        line_note = (
+            snap.get("notes")
+            or (base_note if len(snaps) == 1 else f"{base_note} ({idx}/{len(snaps)})")
+        )
+        # Refresh Kapora↔Tahsilat label after total may have changed
+        if isinstance(line_note, str) and (
+            line_note.startswith("Kapora ") or line_note.startswith("Satış tahsilatı ")
+        ):
+            line_note = (
+                base_note if len(snaps) == 1 else f"{base_note} ({idx}/{len(snaps)})"
+            )
+        method = snap.get("method") or "nakit"
+        paid_at = snap.get("paid_at") or datetime.combine(mov_date, datetime.utcnow().time())
+        db.add(
+            Payment(
+                order_id=order.id,
+                amount=amt,
+                method=str(method)[:50],
+                status="tamamlandi",
+                notes=line_note,
+                paid_at=paid_at,
+            )
+        )
+        cari_id = None
+        if order.customer_id:
+            cari = CariMovement(
+                customer_id=order.customer_id,
+                movement_type="payment",
+                debit=Decimal("0"),
+                credit=amt,
+                movement_date=mov_date,
+                order_id=order.id,
+                note=line_note,
+            )
+            db.add(cari)
+            db.flush()
+            cari_id = cari.id
+        fin = normalize_payment_lines(
+            amount=amt,
+            finance_method="bank" if snap.get("bank_account_id") else "cash",
+            cash_register_id=snap.get("cash_register_id"),
+            bank_account_id=snap.get("bank_account_id"),
+            method=method,
+        )
+        if fin:
+            post_finance_lines(
+                db,
+                fin,
+                direction="in",
+                mov_date=mov_date,
+                note=line_note,
+                customer_id=order.customer_id,
+                cari_movement_id=cari_id,
+                created_by_user_id=user.id,
+                require_account=False,
+            )
+
+
 @router.put("/{order_id}", response_model=OrderOut)
 def update_order(
     order_id: int,
@@ -725,10 +863,18 @@ def update_order(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("admin", "satış")),
 ) -> OrderOut:
+    """Update order; when lines/discount/customer/deposit change on an active sale,
+    purge stock+cari+kasa and re-apply so balances stay correct."""
     order = _load_order(db, order_id)
     data = payload.model_dump(exclude_unset=True)
     lines = data.pop("lines", None)
     new_status = data.pop("status", None)
+
+    if order.status == "Sipariş İptali" and (lines is not None or "discount_amount" in data):
+        raise HTTPException(
+            status_code=400,
+            detail="İptal edilmiş siparişte satır/iskonto düzenlenemez",
+        )
 
     if "customer_id" in data and data["customer_id"] is not None:
         if not db.get(Customer, data["customer_id"]):
@@ -743,18 +889,45 @@ def update_order(
         if clash:
             raise HTTPException(status_code=400, detail="Sipariş numarası zaten kullanılıyor")
 
+    needs_cascade = order.status != "Sipariş İptali" and (
+        lines is not None
+        or "discount_amount" in data
+        or "customer_id" in data
+        or "deposit_amount" in data
+    )
+
+    payment_snaps: list[dict] = []
+    if needs_cascade:
+        payment_snaps = _snapshot_order_payments(db, order)
+        # If deposit_amount explicitly set and no payment rows, keep deposit intent
+        if not payment_snaps and "deposit_amount" in data and _dec(data.get("deposit_amount")) > 0:
+            payment_snaps = [
+                {
+                    "amount": _dec(data["deposit_amount"]),
+                    "method": "nakit",
+                    "notes": None,
+                    "paid_at": None,
+                    "cash_register_id": None,
+                    "bank_account_id": None,
+                }
+            ]
+        _purge_order_ledger(db, order, user, restore_stock=True)
+        db.flush()
+
     for key, value in data.items():
         setattr(order, key, value)
 
     if lines is not None:
         if len(lines) == 0:
             raise HTTPException(status_code=400, detail="En az bir satır gerekli")
-        # lines came from model_dump — wrap as simple objects for _replace_lines
+
         class _Line:
             def __init__(self, d: dict):
                 self._d = d
+
             def model_dump(self):
                 return self._d
+
         _replace_lines(order, [_Line(l) for l in lines])
     elif "discount_amount" in data:
         _recompute_total(order)
@@ -764,6 +937,25 @@ def update_order(
         order.status = new_status
         _record_status(db, order, old, new_status, user, note="Sipariş güncelleme")
 
+    if needs_cascade and order.status != "Sipariş İptali":
+        mov_date = (
+            order.delivery_date
+            or order.due_date
+            or (order.created_at.date() if order.created_at else date.today())
+        )
+        _apply_sale_side_effects(db, order, user, mov_date=mov_date)
+        _repost_order_payments(db, order, user, payment_snaps, mov_date=mov_date)
+        # Invoice-direct / paid → keep Teslim Edildi
+        ch = (order.channel or "").strip()
+        paid = _dec(order.deposit_amount) > 0 or bool(order.payments)
+        if paid or ch in INVOICE_DIRECT_CHANNELS:
+            if order.status != "Teslim Edildi":
+                old = order.status
+                order.status = "Teslim Edildi"
+                _record_status(db, order, old, "Teslim Edildi", user, note="Satış güncelleme")
+            if not order.delivery_date:
+                order.delivery_date = mov_date
+
     order.updated_at = datetime.utcnow()
     db.commit()
     write_audit(
@@ -771,7 +963,10 @@ def update_order(
         action="update",
         entity_type="order",
         entity_id=order.id,
-        detail={"order_number": order.order_number},
+        detail={
+            "order_number": order.order_number,
+            "cascade": needs_cascade,
+        },
     )
     return _to_out(_load_order(db, order.id))
 

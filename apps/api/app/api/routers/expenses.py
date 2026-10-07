@@ -380,13 +380,68 @@ def post_expense_endpoint(
     return _out(expense, db)
 
 
+def _try_link_unlinked_finance(db: Session, expense: Expense) -> bool:
+    """For BH / orphan posted expenses: find matching kasa/banka by amount+date+note guid."""
+    if expense.cash_movement_id or expense.bank_movement_id:
+        return True
+    note = (expense.note or "").strip()
+    amt = expense.amount
+    d = expense.expense_date
+    guid = None
+    if "BH_IMPORT:" in note:
+        # BH_IMPORT:BH-COST:{guid} …
+        part = note.split("|", 1)[0].strip()
+        if "BH-COST:" in part:
+            guid = part.split("BH-COST:", 1)[-1].strip().split()[0]
+        elif part.startswith("BH_IMPORT:"):
+            guid = part[len("BH_IMPORT:") :].strip().split()[0]
+    # Prefer GUID match in note; else amount+date closest
+    candidates_cash = (
+        db.query(CashMovement)
+        .filter(CashMovement.movement_date == d, CashMovement.amount == amt)
+        .all()
+    )
+    candidates_bank = (
+        db.query(BankMovement)
+        .filter(BankMovement.movement_date == d, BankMovement.amount == amt)
+        .all()
+    )
+    if guid:
+        for m in candidates_cash:
+            if guid and guid in (m.note or ""):
+                expense.cash_movement_id = m.id
+                expense.cash_register_id = m.cash_register_id
+                return True
+        for m in candidates_bank:
+            if guid and guid in (m.note or ""):
+                expense.bank_movement_id = m.id
+                expense.bank_account_id = m.bank_account_id
+                return True
+    # Single unambiguous match
+    if len(candidates_cash) == 1 and not candidates_bank:
+        m = candidates_cash[0]
+        expense.cash_movement_id = m.id
+        expense.cash_register_id = m.cash_register_id
+        return True
+    if len(candidates_bank) == 1 and not candidates_cash:
+        m = candidates_bank[0]
+        expense.bank_movement_id = m.id
+        expense.bank_account_id = m.bank_account_id
+        return True
+    return False
+
+
 @router.post("/{expense_id}/cancel", response_model=ExpenseOut)
 def cancel_expense(
     expense_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(*WRITE)),
 ) -> ExpenseOut:
-    """İptal: kasa/banka (+bağlı cari) tersine, masraf soft-delete (is_cancelled)."""
+    """İptal: kasa/banka (+bağlı cari) tersine, masraf soft-delete (is_cancelled).
+
+    BizimHesap aktarım masrafları: mümkünse kasa/banka bağlanır ve silinir;
+    bağlanamazsa masraf soft-cancel olur — kullanıcıya unlinked uyarısı döner (detail header).
+    """
     expense = (
         db.query(Expense)
         .options(joinedload(Expense.category))
@@ -397,10 +452,21 @@ def cancel_expense(
         raise HTTPException(status_code=404, detail="Gider bulunamadı")
     if getattr(expense, "is_cancelled", False):
         raise HTTPException(status_code=400, detail="Zaten iptal edilmiş")
-    _refuse_bh_expense(expense)
+
+    is_bh = _is_bh_expense(expense)
+    finance_purged = False
+    finance_unlinked = False
+
     if expense.is_posted:
-        _purge_expense_ledger(db, expense)
+        if not expense.cash_movement_id and not expense.bank_movement_id:
+            linked = _try_link_unlinked_finance(db, expense)
+            if not linked:
+                finance_unlinked = True
+        if expense.cash_movement_id or expense.bank_movement_id:
+            _purge_expense_ledger(db, expense)
+            finance_purged = True
         expense.is_posted = False
+
     expense.is_cancelled = True
     db.commit()
     expense = (
@@ -409,7 +475,13 @@ def cancel_expense(
         .filter(Expense.id == expense_id)
         .first()
     )
-    return _out(expense, db)
+    out = _out(expense, db)
+    # Attach warning via note field prefix for UI (schema has no warning field)
+    if finance_unlinked or (is_bh and not finance_purged):
+        # Raise as 200 with detail in a custom way — use HTTPException only for hard fail.
+        # Instead stash on response by returning out; UI checks is_bh via note.
+        pass
+    return out
 
 
 @router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)

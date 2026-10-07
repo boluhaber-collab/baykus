@@ -97,7 +97,16 @@ def run_startup_migrate() -> dict | None:
             healed = heal_orphan_posted_expenses()
         except Exception as exc:  # noqa: BLE001
             log.warning("expense orphan heal skipped: %s", exc)
-        return {"is_cancelled_added": added, "orphans_healed": healed}
+        result = {"is_cancelled_added": added, "orphans_healed": healed}
+        # Visible on panel / console so Engin sees migrate ran after restart
+        print(
+            f"[baykus] expenses.is_cancelled migrate: "
+            f"column_added={added} orphans_healed={healed}",
+            flush=True,
+        )
+        log.info("expense schema migrate done: %s", result)
+        return result
     except Exception as exc:  # noqa: BLE001
+        print(f"[baykus] expenses.is_cancelled migrate FAILED: {exc}", flush=True)
         log.warning("expense schema migrate skipped: %s", exc)
         return None

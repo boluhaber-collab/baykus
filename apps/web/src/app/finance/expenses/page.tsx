@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BankAccount, CashRegister, Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
-import { sanitizeDisplayNote } from "@/lib/bhNote";
+import { isBhImportNote, sanitizeDisplayNote } from "@/lib/bhNote";
 import { formatTrDate, localToday } from "@/lib/dates";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
@@ -80,6 +80,7 @@ export default function ExpensesPage() {
   const [catGroup, setCatGroup] = useState<string>("İşletme Giderleri");
   const [catDesc, setCatDesc] = useState("");
   const [editCatId, setEditCatId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     category_id: "",
     amount: "",
@@ -202,6 +203,7 @@ export default function ExpensesPage() {
 
   async function addExpense(e: FormEvent) {
     e.preventDefault();
+    if (saving) return;
     setError("");
     setMsg("");
     if (form.payment_method === "banka" && !form.bank_account_id) {
@@ -212,6 +214,7 @@ export default function ExpensesPage() {
       setError("Nakit ödeme için kasa seçin");
       return;
     }
+    setSaving(true);
     try {
       await apiFetch("/api/finance/expenses", {
         method: "POST",
@@ -239,6 +242,8 @@ export default function ExpensesPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gider kaydı başarısız");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -262,17 +267,21 @@ export default function ExpensesPage() {
   }
 
   async function cancelExpense(id: number) {
-    if (
-      !confirm(
-        "Bu masraf iptal edilsin mi?\nBağlı kasa/banka hareketleri kaldırılacak; masraf listeden düşecek.",
-      )
-    )
-      return;
+    const row = items.find((x) => x.id === id);
+    const bh = isBhImportNote(row?.note);
+    const msg = bh
+      ? "Bu BizimHesap aktarım masrafı.\nListeden kalkacak. Bağlı kasa/banka satırı otomatik bulunursa silinir; bulunamazsa Hesaplarım’dan ayrı silmeniz gerekir.\nDevam edilsin mi?"
+      : "Bu masraf iptal edilsin mi?\nBağlı kasa/banka hareketleri kaldırılacak; masraf listeden düşecek.";
+    if (!confirm(msg)) return;
     setError("");
     setMsg("");
     try {
       await apiFetch(`/api/finance/expenses/${id}/cancel`, { method: "POST" });
-      setMsg("Masraf iptal edildi");
+      setMsg(
+        bh
+          ? "Masraf iptal edildi. Kasa/banka satırını Hesaplarım’da kontrol edin (otomatik bağlanamadıysa ayrı silin)."
+          : "Masraf iptal edildi",
+      );
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "İptal hatası");
@@ -537,9 +546,7 @@ export default function ExpensesPage() {
           />
           Hemen işle (kasa/banka)
         </label>
-        <button type="submit" className="bk-btn bk-btn-primary text-xs">
-          Kaydet
-        </button>
+        <button type="submit" disabled={saving} className="bk-btn bk-btn-primary text-xs disabled:opacity-60">{saving ? "Kaydediliyor…" : "Kaydet"}</button>
       </form>
 
       <div className="bk-filter-bar">
