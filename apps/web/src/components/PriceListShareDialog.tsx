@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PriceList } from "@/lib/api";
+import PriceListOutputOptions from "@/components/PriceListOutputOptions";
 import {
   canShareFiles,
   loadPriceList,
@@ -9,21 +10,36 @@ import {
   savePriceListPdf,
   shareNativePdf,
 } from "@/lib/priceListActions";
+import {
+  PriceListShowCols,
+  SHARE_DEFAULT_SHOW_COLS,
+  ensureOnePriceCol,
+  loadShowCols,
+  saveShowCols,
+} from "@/lib/priceListOutput";
 
 type Props = {
   listId: number;
   listName: string;
+  /** Detay sayfasından gelen seçim; alış/tedarikçi paylaşımda yine gizlenir. */
+  initialShowCols?: PriceListShowCols;
   onClose: () => void;
 };
 
-/** Fiyat listesi Paylaş penceresi — müşteri nüshası (alış fiyatı ve tedarikçi gizli). */
-export default function PriceListShareDialog({ listId, listName, onClose }: Props) {
+/** Fiyat listesi Paylaş penceresi — alış/tedarikçi varsayılan gizli; fiyat kolonları seçilebilir. */
+export default function PriceListShareDialog({ listId, listName, initialShowCols, onClose }: Props) {
   const [pl, setPl] = useState<PriceList | null>(null);
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [nativeOk, setNativeOk] = useState(false);
+  const [showCols, setShowCols] = useState<PriceListShowCols>(() => {
+    const base = initialShowCols
+      ? { ...initialShowCols, alis: false, tedarikci: false }
+      : { ...SHARE_DEFAULT_SHOW_COLS };
+    return ensureOnePriceCol(base);
+  });
 
   useEffect(() => {
     setNativeOk(canShareFiles());
@@ -40,7 +56,22 @@ export default function PriceListShareDialog({ listId, listName, onClose }: Prop
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const text = pl ? priceListShareText(pl) : "";
+  useEffect(() => {
+    const prev = loadShowCols();
+    saveShowCols({
+      ...prev,
+      baskisiz: showCols.baskisiz,
+      baskili: showCols.baskili,
+      nakisli: showCols.nakisli,
+    });
+  }, [showCols]);
+
+  const shareCols = useMemo(
+    () => ({ ...showCols, alis: false, tedarikci: false }),
+    [showCols],
+  );
+
+  const text = pl ? priceListShareText(pl, 60, shareCols) : "";
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -72,11 +103,18 @@ export default function PriceListShareDialog({ listId, listName, onClose }: Prop
       >
         <div className="bg-[#be123c] text-white px-4 py-3">
           <div className="font-bold">Paylaş — {listName}</div>
-          <div className="text-xs text-rose-100">Müşteri nüshası: alış fiyatı ve tedarikçi gönderilmez.</div>
+          <div className="text-xs text-rose-100">Alış fiyatı ve tedarikçi gönderilmez; fiyat kolonlarını seçebilirsiniz.</div>
         </div>
         <div className="p-4 space-y-3 text-sm">
           {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-xs">{error}</div>}
           {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-xs">{msg}</div>}
+
+          <PriceListOutputOptions
+            value={shareCols}
+            onChange={(next) => setShowCols({ ...next, alis: false, tedarikci: false })}
+            shareMode
+            compact
+          />
 
           {nativeOk && (
             <button
@@ -86,7 +124,7 @@ export default function PriceListShareDialog({ listId, listName, onClose }: Prop
               style={{ background: "#0f766e" }}
               onClick={() =>
                 run(async () => {
-                  const ok = await shareNativePdf(listId, listName);
+                  const ok = await shareNativePdf(listId, listName, shareCols);
                   if (ok) setMsg("✓ PDF paylaşıldı");
                 })
               }
@@ -127,7 +165,7 @@ export default function PriceListShareDialog({ listId, listName, onClose }: Prop
                 className="bk-btn bk-btn-ghost text-xs"
                 onClick={() =>
                   run(async () => {
-                    await savePriceListPdf(listId, listName, true);
+                    await savePriceListPdf(listId, listName, shareCols);
                     window.open(waLink(`Fiyat Listesi — ${listName} (PDF ektedir)`), "_blank", "noopener");
                     setMsg("PDF indirildi — WhatsApp'ta ataç simgesiyle ekleyip gönderin.");
                   })
@@ -158,7 +196,7 @@ export default function PriceListShareDialog({ listId, listName, onClose }: Prop
               className="bk-btn bk-btn-ghost text-xs"
               onClick={() =>
                 run(async () => {
-                  await savePriceListPdf(listId, listName, true);
+                  await savePriceListPdf(listId, listName, shareCols);
                   const subject = encodeURIComponent(`Fiyat Listesi — ${listName}`);
                   const body = encodeURIComponent(text.replace(/\*/g, "") + "\n\n(PDF ektedir)");
                   window.location.href = `mailto:?subject=${subject}&body=${body}`;
@@ -174,7 +212,7 @@ export default function PriceListShareDialog({ listId, listName, onClose }: Prop
               className="bk-btn bk-btn-ghost text-xs"
               onClick={() =>
                 run(async () => {
-                  await savePriceListPdf(listId, listName, true);
+                  await savePriceListPdf(listId, listName, shareCols);
                   setMsg("✓ Müşteri PDF'i indirildi");
                 })
               }

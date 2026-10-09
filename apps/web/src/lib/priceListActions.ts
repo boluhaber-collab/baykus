@@ -3,6 +3,12 @@
  * API uçları Bearer token istediği için window.open yerine yetkili fetch kullanılır.
  */
 import { PriceList, apiFetch, clearToken, formatMoney, getApiBase, getToken } from "@/lib/api";
+import {
+  PriceListShowCols,
+  SHARE_DEFAULT_SHOW_COLS,
+  hideQuery,
+  loadShowCols,
+} from "@/lib/priceListOutput";
 
 async function authFetch(path: string): Promise<Response> {
   const token = getToken();
@@ -42,8 +48,19 @@ export function priceListFileName(name: string, ext = "pdf"): string {
   return `fiyat-listesi-${base || "liste"}.${ext}`;
 }
 
-export async function fetchPriceListPdf(id: number, customer: boolean): Promise<Blob> {
-  const res = await authFetch(`/api/price-lists/${id}/export?fmt=pdf${customer ? "&customer=true" : ""}`);
+function resolveShow(cols?: PriceListShowCols | boolean): PriceListShowCols {
+  if (typeof cols === "boolean") {
+    // Eski API: customer boolean
+    const base = loadShowCols();
+    return cols ? { ...base, alis: false, tedarikci: false } : base;
+  }
+  if (cols) return cols;
+  return loadShowCols();
+}
+
+export async function fetchPriceListPdf(id: number, cols?: PriceListShowCols | boolean): Promise<Blob> {
+  const show = resolveShow(cols);
+  const res = await authFetch(`/api/price-lists/${id}/export?fmt=pdf${hideQuery(show)}`);
   const blob = await res.blob();
   if (!blob || blob.size === 0) throw new Error("PDF boş döndü");
   return blob;
@@ -61,8 +78,12 @@ function triggerDownload(blob: Blob, filename: string) {
 }
 
 /** PDF olarak kaydet. */
-export async function savePriceListPdf(id: number, name: string, customer = false): Promise<void> {
-  const blob = await fetchPriceListPdf(id, customer);
+export async function savePriceListPdf(
+  id: number,
+  name: string,
+  cols?: PriceListShowCols | boolean,
+): Promise<void> {
+  const blob = await fetchPriceListPdf(id, cols);
   triggerDownload(blob, priceListFileName(name));
 }
 
@@ -70,8 +91,8 @@ export async function savePriceListPdf(id: number, name: string, customer = fals
  * Yazdır — PDF olarak kaydet ile aynı çıktıyı (antet/logo) kullanır.
  * Blob gizli iframe'e yüklenir ve print() çağrılır; iframe basamazsa yeni sekmede açılır.
  */
-export async function printPriceList(id: number, customer = false): Promise<void> {
-  const blob = await fetchPriceListPdf(id, customer);
+export async function printPriceList(id: number, cols?: PriceListShowCols | boolean): Promise<void> {
+  const blob = await fetchPriceListPdf(id, cols);
   const url = URL.createObjectURL(blob);
   const prev = document.getElementById("bk-price-print-frame");
   if (prev) prev.remove();
@@ -142,16 +163,20 @@ export async function printPriceList(id: number, customer = false): Promise<void
   });
 }
 
-/** Müşteriye gönderilecek düz metin (alış fiyatı / tedarikçi yok). */
-export function priceListShareText(pl: PriceList, maxLines = 60): string {
+/** Paylaşım / müşteri metni — seçilen kolonlara göre; alış/tedarikçi varsayılan gizli. */
+export function priceListShareText(
+  pl: PriceList,
+  maxLines = 60,
+  cols: PriceListShowCols = SHARE_DEFAULT_SHOW_COLS,
+): string {
   const items = pl.items || [];
   const fmt = (v: unknown) => formatMoney(Number(v) || 0);
   const lines = items.slice(0, maxLines).map((it) => {
     const parts: string[] = [];
     const blank = Number(it.blank_price ?? it.unit_price ?? 0);
-    if (blank > 0) parts.push(`Baskısız ${fmt(blank)}`);
-    if (Number(it.printed_price) > 0) parts.push(`Baskılı ${fmt(it.printed_price)}`);
-    if (Number(it.embroidered_price) > 0) parts.push(`Nakışlı ${fmt(it.embroidered_price)}`);
+    if (cols.baskisiz && blank > 0) parts.push(`Baskısız ${fmt(blank)}`);
+    if (cols.baskili && Number(it.printed_price) > 0) parts.push(`Baskılı ${fmt(it.printed_price)}`);
+    if (cols.nakisli && Number(it.embroidered_price) > 0) parts.push(`Nakışlı ${fmt(it.embroidered_price)}`);
     return `• ${it.description}${parts.length ? " — " + parts.join(" · ") : ""}`;
   });
   const more = items.length > maxLines ? `\n… ve ${items.length - maxLines} kalem daha (PDF ekte)` : "";
@@ -175,8 +200,12 @@ export function canShareFiles(): boolean {
 }
 
 /** Web Share API ile PDF paylaş (Windows paylaş menüsü / mobilde WhatsApp vb.). false → iptal. */
-export async function shareNativePdf(id: number, name: string): Promise<boolean> {
-  const blob = await fetchPriceListPdf(id, true);
+export async function shareNativePdf(
+  id: number,
+  name: string,
+  cols: PriceListShowCols = SHARE_DEFAULT_SHOW_COLS,
+): Promise<boolean> {
+  const blob = await fetchPriceListPdf(id, cols);
   const file = new File([blob], priceListFileName(name), { type: "application/pdf" });
   try {
     await navigator.share({ files: [file], title: `Fiyat Listesi — ${name}`, text: `Fiyat Listesi — ${name}` });
@@ -185,4 +214,10 @@ export async function shareNativePdf(id: number, name: string): Promise<boolean>
     if (e instanceof DOMException && e.name === "AbortError") return false;
     throw e;
   }
+}
+
+/** CSV indirme URL sorgusu. */
+export function priceListExportQuery(fmt: "csv" | "pdf", cols?: PriceListShowCols): string {
+  const show = cols ?? loadShowCols();
+  return `fmt=${fmt}${hideQuery(show)}`;
 }

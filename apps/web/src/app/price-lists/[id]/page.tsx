@@ -6,7 +6,14 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PriceList, Product, apiFetch, downloadAuthFile, formatMoney, getToken } from "@/lib/api";
 import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 import PriceListShareDialog from "@/components/PriceListShareDialog";
+import PriceListOutputOptions from "@/components/PriceListOutputOptions";
 import { printPriceList, priceListFileName, savePriceListPdf } from "@/lib/priceListActions";
+import {
+  PriceListShowCols,
+  hideQuery,
+  loadShowCols,
+  saveShowCols,
+} from "@/lib/priceListOutput";
 
 type EditItem = {
   key: string;
@@ -43,7 +50,7 @@ export default function PriceListDetailPage() {
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [name, setName] = useState("");
-  const [customerCopy, setCustomerCopy] = useState(false);
+  const [showCols, setShowCols] = useState<PriceListShowCols>(() => loadShowCols());
   const [shareOpen, setShareOpen] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [items, setItems] = useState<EditItem[]>([]);
@@ -90,6 +97,10 @@ export default function PriceListDetailPage() {
     if (Number.isFinite(id)) void load();
     void apiFetch<Product[]>("/api/products?active_only=true&limit=1000").then(setProducts).catch(() => undefined);
   }, [id, load]);
+
+  useEffect(() => {
+    saveShowCols(showCols);
+  }, [showCols]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -164,7 +175,7 @@ export default function PriceListDetailPage() {
 
   async function download(fmt: "csv") {
     try {
-      const res = await fetch(`${apiBase}/api/price-lists/${id}/export?fmt=${fmt}${customerCopy ? "&customer=true" : ""}`, {
+      const res = await fetch(`${apiBase}/api/price-lists/${id}/export?fmt=${fmt}${hideQuery(showCols)}`, {
         headers: authHeaders(),
         credentials: "include",
       });
@@ -273,7 +284,7 @@ export default function PriceListDetailPage() {
   async function openPrint() {
     setError("");
     try {
-      await printPriceList(id, customerCopy);
+      await printPriceList(id, showCols);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yazdırma hatası");
     }
@@ -282,7 +293,7 @@ export default function PriceListDetailPage() {
   async function savePdf() {
     setError("");
     try {
-      await savePriceListPdf(id, list?.name || String(id), customerCopy);
+      await savePriceListPdf(id, list?.name || String(id), showCols);
     } catch (e) {
       setError(e instanceof Error ? e.message : "PDF hatası");
     }
@@ -308,13 +319,6 @@ export default function PriceListDetailPage() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h2 className="text-base font-bold">{list.name}</h2>
         <div className="flex flex-wrap gap-2 items-center">
-          <label
-            className="inline-flex items-center gap-1 text-[11px] text-baykus-muted mr-1"
-            title="Yazdır / PDF / CSV çıktısında alış fiyatı ve tedarikçi gizlenir"
-          >
-            <input type="checkbox" checked={customerCopy} onChange={(e) => setCustomerCopy(e.target.checked)} />
-            Müşteri nüshası
-          </label>
           <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={() => void openPrint()}>
             Yazdır
           </button>
@@ -354,6 +358,7 @@ export default function PriceListDetailPage() {
           </label>
         </div>
       </div>
+      <PriceListOutputOptions value={showCols} onChange={setShowCols} />
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
       {msg && <div className="rounded bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">{msg}</div>}
 
@@ -657,7 +662,7 @@ export default function PriceListDetailPage() {
       </form>
 
       {shareOpen && (
-        <PriceListShareDialog listId={id} listName={list.name} onClose={() => setShareOpen(false)} />
+        <PriceListShareDialog listId={id} listName={list.name} initialShowCols={showCols} onClose={() => setShareOpen(false)} />
       )}
 
       {editing && (

@@ -590,6 +590,23 @@ def _item_rows(pl: PriceList) -> list[dict]:
     return rows
 
 
+
+_HIDE_ALLOWED = frozenset({"alis", "baskisiz", "baskili", "nakisli", "tedarikci"})
+
+
+def _parse_hide(hide: str | None, customer: bool) -> set[str]:
+    """hide=alis,baskisiz,... + customer=true → alış+tedarikçi gizle."""
+    out: set[str] = set()
+    if hide:
+        for part in hide.split(","):
+            p = part.strip().lower()
+            if p in _HIDE_ALLOWED:
+                out.add(p)
+    if customer:
+        out |= {"alis", "tedarikci"}
+    return out
+
+
 def _safe_filename(name: str, list_id: int) -> str:
     import re
     import unicodedata
@@ -604,35 +621,57 @@ def export_price_list(
     list_id: int,
     fmt: str = Query(default="csv", pattern="^(csv|html|pdf)$"),
     customer: bool = Query(default=False, description="Müşteri nüshası: alış + tedarikçi gizli"),
+    hide: str | None = Query(
+        default=None,
+        description="Gizlenecek kolonlar (virgülle): alis,baskisiz,baskili,nakisli,tedarikci",
+    ),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin", "satış", "muhasebe")),
 ):
-    """CSV / yazdırılabilir HTML / PDF. customer=true → alış fiyatı ve tedarikçi gizlenir."""
+    """CSV / yazdırılabilir HTML / PDF. hide= / customer=true ile kolon gizleme."""
     pl = _load(db, list_id)
     rows = _item_rows(pl)
     fname = _safe_filename(pl.name, list_id)
+    hidden = _parse_hide(hide, customer)
+    show_tedarikci = "tedarikci" not in hidden
+    show_alis = "alis" not in hidden
+    show_baskisiz = "baskisiz" not in hidden
+    show_baskili = "baskili" not in hidden
+    show_nakisli = "nakisli" not in hidden
+    # En az bir satış fiyatı kolonu kalsın
+    if not (show_baskisiz or show_baskili or show_nakisli):
+        show_baskisiz = True
+
     if fmt == "csv":
         buf = io.StringIO()
         w = csv.writer(buf)
-        if customer:
-            w.writerow(["Ürün", "Baskısız", "Baskılı", "Nakışlı", "Not"])
-        else:
-            w.writerow(["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı", "Not"])
+        headers = ["Ürün"]
+        if show_tedarikci:
+            headers.append("Tedarikçi")
+        if show_alis:
+            headers.append("Alış")
+        if show_baskisiz:
+            headers.append("Baskısız")
+        if show_baskili:
+            headers.append("Baskılı")
+        if show_nakisli:
+            headers.append("Nakışlı")
+        headers.append("Not")
+        w.writerow(headers)
         for r in rows:
-            if customer:
-                w.writerow([r["description"], r["blank_price"], r["printed_price"], r["embroidered_price"], r["notes"]])
-            else:
-                w.writerow(
-                    [
-                        r["description"],
-                        r["supplier_name"],
-                        r["purchase_price"],
-                        r["blank_price"],
-                        r["printed_price"],
-                        r["embroidered_price"],
-                        r["notes"],
-                    ]
-                )
+            row = [r["description"]]
+            if show_tedarikci:
+                row.append(r["supplier_name"])
+            if show_alis:
+                row.append(r["purchase_price"])
+            if show_baskisiz:
+                row.append(r["blank_price"])
+            if show_baskili:
+                row.append(r["printed_price"])
+            if show_nakisli:
+                row.append(r["embroidered_price"])
+            row.append(r["notes"])
+            w.writerow(row)
         data = "\ufeff" + buf.getvalue()
         return StreamingResponse(
             iter([data]),
@@ -644,18 +683,31 @@ def export_price_list(
 
         def _tr(r: dict) -> str:
             cells = [f"<td>{esc(r['description'])}</td>"]
-            if not customer:
+            if show_tedarikci:
                 cells.append(f"<td>{esc(r['supplier_name'])}</td>")
+            if show_alis:
                 cells.append(f"<td style='text-align:right'>{r['purchase_price']:.2f}</td>")
-            cells += [
-                f"<td style='text-align:right'>{r['blank_price']:.2f}</td>",
-                f"<td style='text-align:right'>{r['printed_price']:.2f}</td>",
-                f"<td style='text-align:right'>{r['embroidered_price']:.2f}</td>",
-                f"<td>{esc(r['notes'])}</td>",
-            ]
+            if show_baskisiz:
+                cells.append(f"<td style='text-align:right'>{r['blank_price']:.2f}</td>")
+            if show_baskili:
+                cells.append(f"<td style='text-align:right'>{r['printed_price']:.2f}</td>")
+            if show_nakisli:
+                cells.append(f"<td style='text-align:right'>{r['embroidered_price']:.2f}</td>")
+            cells.append(f"<td>{esc(r['notes'])}</td>")
             return "<tr>" + "".join(cells) + "</tr>"
 
-        heads = ["Ürün"] + ([] if customer else ["Tedarikçi", "Alış"]) + ["Baskısız", "Baskılı", "Nakışlı", "Not"]
+        heads = ["Ürün"]
+        if show_tedarikci:
+            heads.append("Tedarikçi")
+        if show_alis:
+            heads.append("Alış")
+        if show_baskisiz:
+            heads.append("Baskısız")
+        if show_baskili:
+            heads.append("Baskılı")
+        if show_nakisli:
+            heads.append("Nakışlı")
+        heads.append("Not")
         trs = "".join(_tr(r) for r in rows)
         title = esc(pl.name)
         html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -679,7 +731,7 @@ th,td{{border:1px solid #cbd5e1;padding:6px 8px}} th{{background:#0f766e;color:#
     from app.services.pdf import build_price_list_pdf
 
     settings_map = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
-    pdf = build_price_list_pdf(pl.name, rows, settings_map, customer=customer)
+    pdf = build_price_list_pdf(pl.name, rows, settings_map, hide=hidden)
     return Response(
         content=pdf,
         media_type="application/pdf",

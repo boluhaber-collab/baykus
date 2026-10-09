@@ -800,8 +800,13 @@ def build_price_list_pdf(
     rows: list[dict[str, Any]],
     settings: dict[str, str] | None = None,
     customer: bool = False,
+    hide: set[str] | list[str] | None = None,
 ) -> bytes:
-    """Fiyat listesi PDF. customer=True → müşteri nüshası (alış fiyatı + tedarikçi gizli)."""
+    """Fiyat listesi PDF.
+
+    hide: {'alis','baskisiz','baskili','nakisli','tedarikci'} — gizlenecek kolonlar.
+    customer=True (eski): alış + tedarikçi gizle.
+    """
     buf, c, width, height = _new_doc()
     settings = settings or {}
     alt = _alt_baslik_from_settings(settings, "Baykuş Baskı")
@@ -811,32 +816,50 @@ def build_price_list_pdf(
     pdf_modern_kutu(c, 10.5 * cm, y, 8.2 * cm, 0.9 * cm, "Kalem", str(len(rows)))
     y -= 1.35 * cm
 
+    hidden = set(hide or ())
     if customer:
-        kolonlar = ["Ürün", "Baskısız", "Baskılı", "Nakışlı"]
-        oranlar = [3.4, 1.2, 1.2, 1.2]
-        tablo = [
-            [
-                _s(r.get("description"))[:48],
-                _money(r.get("blank_price")),
-                _money(r.get("printed_price")),
-                _money(r.get("embroidered_price")),
-            ]
-            for r in rows
-        ]
-    else:
-        kolonlar = ["Ürün", "Tedarikçi", "Alış", "Baskısız", "Baskılı", "Nakışlı"]
-        oranlar = [2.6, 1.6, 1.2, 1.2, 1.2, 1.2]
-        tablo = [
-            [
-                _s(r.get("description"))[:34],
-                _s(r.get("supplier_name"))[:18],
-                _money(r.get("purchase_price")),
-                _money(r.get("blank_price")),
-                _money(r.get("printed_price")),
-                _money(r.get("embroidered_price")),
-            ]
-            for r in rows
-        ]
+        hidden |= {"alis", "tedarikci"}
+    show_tedarikci = "tedarikci" not in hidden
+    show_alis = "alis" not in hidden
+    show_baskisiz = "baskisiz" not in hidden
+    show_baskili = "baskili" not in hidden
+    show_nakisli = "nakisli" not in hidden
+    if not (show_baskisiz or show_baskili or show_nakisli):
+        show_baskisiz = True
+
+    # Dinamik kolonlar — boşluk bırakmadan oranları yeniden dağıt
+    specs: list[tuple[str, float]] = [("Ürün", 3.4 if not show_tedarikci else 2.6)]
+    if show_tedarikci:
+        specs.append(("Tedarikçi", 1.6))
+    if show_alis:
+        specs.append(("Alış", 1.15))
+    if show_baskisiz:
+        specs.append(("Baskısız", 1.2))
+    if show_baskili:
+        specs.append(("Baskılı", 1.2))
+    if show_nakisli:
+        specs.append(("Nakışlı", 1.2))
+
+    kolonlar = [s[0] for s in specs]
+    oranlar = [s[1] for s in specs]
+    # Ürün adı uzunluğu görünür kolon sayısına göre
+    desc_len = 48 if len(kolonlar) <= 4 else (40 if len(kolonlar) <= 5 else 34)
+
+    tablo = []
+    for r in rows:
+        row: list[str] = [_s(r.get("description"))[:desc_len]]
+        if show_tedarikci:
+            row.append(_s(r.get("supplier_name"))[:18])
+        if show_alis:
+            row.append(_money(r.get("purchase_price")))
+        if show_baskisiz:
+            row.append(_money(r.get("blank_price")))
+        if show_baskili:
+            row.append(_money(r.get("printed_price")))
+        if show_nakisli:
+            row.append(_money(r.get("embroidered_price")))
+        tablo.append(row)
+
     y, sayfa_no = pdf_excel_tablo(
         c,
         width,

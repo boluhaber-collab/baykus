@@ -5,7 +5,9 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PriceList, apiFetch, downloadAuthFile } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import PriceListShareDialog from "@/components/PriceListShareDialog";
+import PriceListOutputOptions from "@/components/PriceListOutputOptions";
 import { printPriceList, savePriceListPdf } from "@/lib/priceListActions";
+import { PriceListShowCols, loadShowCols, saveShowCols } from "@/lib/priceListOutput";
 
 export default function PriceListsPage() {
   const [items, setItems] = useState<PriceList[]>([]);
@@ -13,6 +15,7 @@ export default function PriceListsPage() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [shareFor, setShareFor] = useState<PriceList | null>(null);
+  const [showCols, setShowCols] = useState<PriceListShowCols>(() => loadShowCols());
   const [q, setQ] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
 
@@ -28,6 +31,10 @@ export default function PriceListsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    saveShowCols(showCols);
+  }, [showCols]);
 
   const filtered = useMemo(() => {
     let rows = items;
@@ -140,6 +147,8 @@ export default function PriceListsPage() {
         </form>
       </fieldset>
 
+      <PriceListOutputOptions value={showCols} onChange={setShowCols} compact />
+
       <div className="bk-filter-bar">
         <input className="bk-input max-w-[220px]" placeholder="Ara…" value={q} onChange={(e) => setQ(e.target.value)} />
         <label className="flex items-center gap-1 text-xs">
@@ -189,14 +198,14 @@ export default function PriceListsPage() {
                   <button
                     type="button"
                     className="text-teal-700 hover:underline"
-                    onClick={() => void runAction(() => printPriceList(pl.id), "Yazdırma hatası")}
+                    onClick={() => void runAction(() => printPriceList(pl.id, showCols), "Yazdırma hatası")}
                   >
                     Yazdır
                   </button>
                   <button
                     type="button"
                     className="text-violet-700 hover:underline"
-                    onClick={() => void runAction(() => savePriceListPdf(pl.id, pl.name), "PDF hatası")}
+                    onClick={() => void runAction(() => savePriceListPdf(pl.id, pl.name, showCols), "PDF hatası")}
                   >
                     PDF olarak kaydet
                   </button>
@@ -217,7 +226,7 @@ export default function PriceListsPage() {
         </table>
       </div>
       {shareFor && (
-        <PriceListShareDialog listId={shareFor.id} listName={shareFor.name} onClose={() => setShareFor(null)} />
+        <PriceListShareDialog listId={shareFor.id} listName={shareFor.name} initialShowCols={showCols} onClose={() => setShareFor(null)} />
       )}
       <StatusFooter onRefresh={load} />
     </div>
