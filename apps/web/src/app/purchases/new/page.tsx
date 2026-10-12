@@ -136,6 +136,10 @@ function NewPurchaseForm() {
     setTalepRows((rows) => rows.map((r) => (r.key === key ? { ...r, selected: !r.selected } : r)));
   }
 
+  function setRowSelected(key: string, selected: boolean) {
+    setTalepRows((rows) => rows.map((r) => (r.key === key ? { ...r, selected } : r)));
+  }
+
   function toggleAll() {
     const allOn = talepRows.length > 0 && talepRows.every((r) => r.selected);
     setTalepRows((rows) => rows.map((r) => ({ ...r, selected: !allOn })));
@@ -369,6 +373,7 @@ function NewPurchaseForm() {
             </button>
             <div className="ml-auto text-xs font-semibold text-teal-800">
               Seçilen ürün: {selectedTalep.length} | Talep edilen toplam: {talepToplamAdet} adet
+              <span className="ml-2 font-normal text-slate-500">(Ekle veya satıra çift tık)</span>
             </div>
           </div>
           <div className="text-xs text-baykus-muted">Satın alma önerisi: {talepRows.length} ürün</div>
@@ -387,15 +392,28 @@ function NewPurchaseForm() {
                   <th className="text-right">Stok</th>
                   <th className="text-right">Talep Adedi</th>
                   <th className="text-right">Alış Fiyatı</th>
+                  <th className="text-center">İşlem</th>
                 </tr>
               </thead>
               <tbody>
-                {talepRows.map((r) => (
+                {talepRows.map((r) => {
+                  const stockWarn =
+                    r.stock_qty < 0 ? "bg-red-50" : r.stock_qty < (Number(kritik) || 5) ? "bg-amber-50" : "";
+                  const selectedCls = r.selected
+                    ? "bg-teal-50 ring-1 ring-inset ring-teal-300"
+                    : stockWarn;
+                  return (
                   <tr
                     key={r.key}
-                    className={r.stock_qty < 0 ? "bg-red-50" : r.stock_qty < (Number(kritik) || 5) ? "bg-amber-50" : undefined}
+                    className={`${selectedCls} cursor-pointer`}
+                    title="Çift tıklayınca ekle / çıkar"
+                    onDoubleClick={(e) => {
+                      const t = e.target as HTMLElement;
+                      if (t.closest("input, button, a, select, textarea, label")) return;
+                      toggleRow(r.key);
+                    }}
                   >
-                    <td>
+                    <td onDoubleClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={r.selected} onChange={() => toggleRow(r.key)} />
                     </td>
                     <td>{r.supplier_name || "—"}</td>
@@ -408,7 +426,7 @@ function NewPurchaseForm() {
                     <td>{r.color || "—"}</td>
                     <td>{r.print_type || "—"}</td>
                     <td className="text-right tabular-nums font-semibold text-red-700">{r.stock_qty}</td>
-                    <td className="text-right">
+                    <td className="text-right" onDoubleClick={(e) => e.stopPropagation()}>
                       <input
                         type="number"
                         min={1}
@@ -422,7 +440,7 @@ function NewPurchaseForm() {
                         }}
                       />
                     </td>
-                    <td className="text-right">
+                    <td className="text-right" onDoubleClick={(e) => e.stopPropagation()}>
                       <input
                         type="number"
                         min={0}
@@ -441,11 +459,33 @@ function NewPurchaseForm() {
                         aria-label="Alış fiyatı"
                       />
                     </td>
+                    <td className="text-center whitespace-nowrap" onDoubleClick={(e) => e.stopPropagation()}>
+                      {r.selected ? (
+                        <button
+                          type="button"
+                          className="bk-btn text-[11px] px-2 py-1 bg-teal-600 text-white hover:bg-teal-700"
+                          onClick={() => setRowSelected(r.key, false)}
+                          title="Seçimden çıkar"
+                        >
+                          Eklendi · Çıkar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="bk-btn bk-btn-primary text-[11px] px-2 py-1"
+                          onClick={() => setRowSelected(r.key, true)}
+                          title="Satın alma talebine ekle"
+                        >
+                          Ekle
+                        </button>
+                      )}
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {talepRows.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="text-center text-baykus-muted py-8">
+                    <td colSpan={11} className="text-center text-baykus-muted py-8">
                       Kritik seviye altında ürün yok
                     </td>
                   </tr>
