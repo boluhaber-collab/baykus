@@ -100,6 +100,75 @@ def create_backup(
     )
 
 
+@router.get("/full/download")
+def download_full_backup(
+    _: User = Depends(require_roles("admin")),
+):
+    """Tam yedek: tutarlı SQLite kopyası (backup API) + uploads + data + .env → zip indir."""
+    import json
+    import shutil
+    import sqlite3
+    import tempfile
+
+    from starlette.background import BackgroundTask
+
+    db_path = _db_file_path()
+    if not db_path:
+        raise HTTPException(status_code=400, detail="SQLite veritabanı bulunamadı")
+    tmpdir = Path(tempfile.mkdtemp(prefix="baykus_full_"))
+    stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"Baykus_VeriYedek_{stamp}.zip"
+    try:
+        db_copy = tmpdir / "baykus.db"
+        src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=30)
+        dst = sqlite3.connect(str(db_copy))
+        try:
+            src.backup(dst)
+            integrity = dst.execute("PRAGMA integrity_check").fetchone()[0]
+        finally:
+            dst.close()
+            src.close()
+        if integrity != "ok":
+            raise HTTPException(status_code=500, detail=f"DB kopyası bütünlük hatası: {integrity}")
+        zpath = tmpdir / filename
+        with zipfile.ZipFile(zpath, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            zf.write(db_copy, "apps/api/baykus.db")
+            for folder in (UPLOADS_DIR, API_ROOT / "data"):
+                if folder.is_dir():
+                    for p in folder.rglob("*"):
+                        if p.is_file():
+                            zf.write(p, f"apps/api/{folder.name}/{p.relative_to(folder).as_posix()}")
+            for env_file in (API_ROOT / ".env", API_ROOT.parent / "web" / ".env.local"):
+                if env_file.is_file():
+                    zf.write(env_file, f"apps/{env_file.parent.name}/{env_file.name}")
+            zf.writestr(
+                "manifest.json",
+                json.dumps(
+                    {
+                        "app": "Baykus",
+                        "type": "veri_yedek",
+                        "created_at": datetime.now().isoformat(timespec="seconds"),
+                        "db_size_bytes": db_copy.stat().st_size,
+                        "integrity": integrity,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+            )
+    except HTTPException:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise
+    except Exception as e:  # noqa: BLE001
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Tam yedek hatası: {e}") from e
+    return FileResponse(
+        zpath,
+        filename=filename,
+        media_type="application/zip",
+        background=BackgroundTask(shutil.rmtree, tmpdir, True),
+    )
+
+
 @router.get("/restore-checklist")
 def restore_checklist(
     _: User = Depends(require_roles("admin")),

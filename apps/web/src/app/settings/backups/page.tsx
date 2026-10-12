@@ -75,6 +75,23 @@ function BackupsPageInner() {
     }
   }
 
+  async function downloadFull() {
+    setBusy(true);
+    setError("");
+    setMsg("");
+    try {
+      const d = new Date();
+      const p = (n: number) => String(n).padStart(2, "0");
+      const name = `Baykus_VeriYedek_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.zip`;
+      await downloadAuthFile("/api/settings/backups/full/download", name);
+      setMsg("✓ Tam yedek indirildi (veritabanı + yüklemeler + ayarlar). USB ve Drive'a kopyalayın.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Tam yedek hatası");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function verify(filename: string) {
     setBusy(true);
     setError("");
@@ -130,6 +147,15 @@ function BackupsPageInner() {
             style={{ backgroundColor: "#198754" }}
           >
             {busy ? "Oluşturuluyor…" : "Yedek Al"}
+          </button>
+          <button
+            onClick={downloadFull}
+            disabled={busy}
+            className="rounded-lg text-white px-4 py-2 text-sm disabled:opacity-50"
+            style={{ backgroundColor: "#0d6efd" }}
+            title="Tutarlı veritabanı kopyası + uploads + e-posta hesapları + .env"
+          >
+            {busy ? "Hazırlanıyor…" : "Tam Yedek İndir"}
           </button>
           <a
             href="#restore-checklist"

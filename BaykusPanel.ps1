@@ -834,10 +834,106 @@ function Invoke-BaykusKurulum {
   Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$bat`"" -WorkingDirectory $Root
 }
 
+# ---------- Format öncesi tam yedek / geri yükleme ----------
+function Invoke-TamYedekTool([string[]]$ToolArgs) {
+  $py = Get-BaykusPython
+  if (-not $py) { return @{ ok = $false; message = 'Python bulunamadı' } }
+  $tool = Join-Path $Root 'scripts\tam_yedek.py'
+  $out = Join-Path $env:TEMP ("baykus_tool_" + [guid]::NewGuid().ToString('N') + '.txt')
+  $err = "$out.err"
+  $quoted = @("`"$tool`"") + ($ToolArgs | ForEach-Object { "`"$_`"" })
+  $env:PYTHONIOENCODING = 'utf-8'
+  $p = Start-Process -FilePath $py -ArgumentList $quoted -NoNewWindow -Wait -PassThru `
+    -RedirectStandardOutput $out -RedirectStandardError $err
+  $line = ''
+  if (Test-Path $out) { $line = (Get-Content $out -Encoding UTF8 | Where-Object { $_ -match '^\{' } | Select-Object -Last 1) }
+  $errText = if (Test-Path $err) { (Get-Content $err -Raw -ErrorAction SilentlyContinue) } else { '' }
+  Remove-Item $out, $err -Force -ErrorAction SilentlyContinue
+  if (-not $line) { return @{ ok = $false; message = "Araç çıktı vermedi. $errText" } }
+  return ($line | ConvertFrom-Json)
+}
+
+function Invoke-BaykusTamYedek {
+  $desk = Get-BaykusDesktopPath
+  $ans = [System.Windows.Forms.MessageBox]::Show(
+    "Tam yedek Masaüstüne kaydedilsin mi?`n`nEvet = Masaüstü`nHayır = Klasör seç",
+    'Format Öncesi Tam Yedek', 'YesNoCancel', 'Question')
+  if ($ans -eq 'Cancel') { return }
+  $dir = $desk
+  if ($ans -eq 'No') {
+    $fb = New-Object System.Windows.Forms.FolderBrowserDialog
+    $fb.Description = 'Yedeğin kaydedileceği klasörü seçin (USB bellek önerilir)'
+    if ($fb.ShowDialog() -ne 'OK') { return }
+    $dir = $fb.SelectedPath
+  }
+  $stamp = Get-Date -Format 'yyyyMMdd_HHmm'
+  $zip = Join-Path $dir "Baykus_TamYedek_$stamp.zip"
+  $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+  $lblHint.Text = 'Tam yedek alınıyor, lütfen bekleyin...'
+  [System.Windows.Forms.Application]::DoEvents()
+  # SQLite online backup API ile tutarlı kopya alınır; program açık kalabilir.
+  $r = Invoke-TamYedekTool @('backup', '--root', $Root, '--out', $zip)
+  $form.Cursor = [System.Windows.Forms.Cursors]::Default
+  $lblHint.Text = 'CMD penceresi açılmaz. Durum her 2 sn yenilenir.'
+  if ($r.ok) {
+    $mb = [math]::Round($r.zip_size_bytes / 1MB, 1)
+    $dbmb = [math]::Round($r.db_size_bytes / 1MB, 1)
+    $counts = ($r.row_counts.PSObject.Properties | ForEach-Object { "  $($_.Name): $($_.Value)" }) -join "`n"
+    [System.Windows.Forms.MessageBox]::Show(
+      "Tam yedek hazır ve doğrulandı.`n`n$zip`nBoyut: $mb MB (veritabanı $dbmb MB)`nVeritabanı kontrolü: $($r.integrity)`n`n$counts`n`nBu dosyayı USB'ye ve Drive'a kopyalayın.",
+      'Tam Yedek', 'OK', 'Information') | Out-Null
+    Start-Process explorer.exe "/select,`"$zip`""
+  } else {
+    [System.Windows.Forms.MessageBox]::Show("Tam yedek alınamadı:`n$($r.message)", 'Tam Yedek', 'OK', 'Error') | Out-Null
+  }
+}
+
+function Invoke-BaykusTamGeriYukle {
+  $od = New-Object System.Windows.Forms.OpenFileDialog
+  $od.Filter = 'Baykuş tam yedek (*.zip)|*.zip'
+  $od.Title = 'Geri yüklenecek tam yedek zip dosyasını seçin'
+  $od.InitialDirectory = Get-BaykusDesktopPath
+  if ($od.ShowDialog() -ne 'OK') { return }
+  $zip = $od.FileName
+  $v = Invoke-TamYedekTool @('verify', '--zip', $zip)
+  if (-not $v.ok) {
+    [System.Windows.Forms.MessageBox]::Show("Bu zip geçerli bir tam yedek değil:`n$($v.message)", 'Geri Yükle', 'OK', 'Error') | Out-Null
+    return
+  }
+  $ans = [System.Windows.Forms.MessageBox]::Show(
+    "DİKKAT: Bu bilgisayardaki mevcut veriler (veritabanı, yüklemeler, ayarlar) yedektekilerle DEĞİŞTİRİLECEK.`n`nMevcut veritabanı önce baykus.db.before_restore_<tarih> olarak saklanacak.`n`nYedek: $zip`nDevam edilsin mi?",
+    'Yedekten Geri Yükle', 'YesNo', 'Warning')
+  if ($ans -ne 'Yes') { return }
+  $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+  $lblHint.Text = 'Program durduruluyor ve yedek geri yükleniyor...'
+  [System.Windows.Forms.Application]::DoEvents()
+  Stop-BaykusServices
+  Start-Sleep -Seconds 1
+  $r = Invoke-TamYedekTool @('restore', '--zip', $zip, '--root', $Root)
+  $form.Cursor = [System.Windows.Forms.Cursors]::Default
+  $lblHint.Text = 'CMD penceresi açılmaz. Durum her 2 sn yenilenir.'
+  if (-not $r.ok) {
+    [System.Windows.Forms.MessageBox]::Show("Geri yükleme başarısız:`n$($r.message)", 'Geri Yükle', 'OK', 'Error') | Out-Null
+    return
+  }
+  $venvPy = Join-Path $Root 'apps\api\.venv\Scripts\python.exe'
+  if (-not (Test-Path $venvPy) -or -not (Test-Path (Join-Path $Root 'apps\web\node_modules\next'))) {
+    [System.Windows.Forms.MessageBox]::Show("Veriler geri yüklendi. Eksik bileşenler (Python/Node paketleri) şimdi KUR.bat ile kurulacak.", 'Geri Yükle', 'OK', 'Information') | Out-Null
+    Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$(Join-Path $Root 'KUR.bat')`"" -WorkingDirectory $Root
+    return
+  }
+  & $venvPy -m pip install -q -r (Join-Path $Root 'apps\api\requirements.txt') | Out-Null
+  Start-BaykusServices
+  Start-Sleep -Seconds 6
+  Open-BaykusBrowser
+  Update-StatusLabels
+  [System.Windows.Forms.MessageBox]::Show("Geri yükleme tamamlandı ve program başlatıldı.`nÖnceki veritabanı: $($r.before_restore)", 'Geri Yükle', 'OK', 'Information') | Out-Null
+}
+
 # ---------- UI ----------
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Baykuş Kontrol Paneli'
-$form.Size = New-Object System.Drawing.Size(440, 448)
+$form.Size = New-Object System.Drawing.Size(440, 540)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
@@ -891,7 +987,11 @@ $hasKurulum = Test-Path (Join-Path $Root 'kurulum.bat')
 $btnKurulum.Enabled = $hasKurulum
 if (-not $hasKurulum) { $btnKurulum.Text = 'Kurulum (yok)' }
 
-$btnTray = New-Btn 'Tepsiye Küçült' 16 324 394
+$btnTamYedek = New-Btn 'Format Öncesi Tam Yedek Al' 16 324 394
+$btnTamYedek.BackColor = [System.Drawing.Color]::FromArgb(25, 135, 84)
+$btnTamYedek.ForeColor = [System.Drawing.Color]::White
+$btnGeriYukle = New-Btn 'Yedekten Geri Yükle / Kur' 16 370 394
+$btnTray = New-Btn 'Tepsiye Küçült' 16 416 394
 
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray.Text = 'Baykuş'
@@ -962,6 +1062,14 @@ $btnRelease.Add_Click({
   }
 })
 $btnKurulum.Add_Click({ Invoke-BaykusKurulum })
+$btnTamYedek.Add_Click({
+  $btnTamYedek.Enabled = $false
+  try { Invoke-BaykusTamYedek } finally { $btnTamYedek.Enabled = $true }
+})
+$btnGeriYukle.Add_Click({
+  $btnGeriYukle.Enabled = $false
+  try { Invoke-BaykusTamGeriYukle } finally { $btnGeriYukle.Enabled = $true; Update-StatusLabels }
+})
 
 function Show-FromTray {
   $form.Show()
@@ -993,6 +1101,16 @@ $form.Add_FormClosing({
   $tray.Visible = $false
   $tray.Dispose()
 })
+
+if ($env:BAYKUS_AUTOSTART -eq '1') {
+  $env:BAYKUS_AUTOSTART = ''
+  $form.Add_Shown({
+    Start-BaykusServices
+    Update-StatusLabels
+    Start-Sleep -Seconds 8
+    Open-BaykusBrowser
+  })
+}
 
 [void][System.Windows.Forms.Application]::Run($form)
 
