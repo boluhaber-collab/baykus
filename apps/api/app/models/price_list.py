@@ -53,5 +53,6 @@ class PriceListItem(Base):
     valid_from: Mapped[date | None] = mapped_column(Date)
     valid_to: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
 
     price_list: Mapped[PriceList] = relationship(back_populates="items")
