@@ -1107,6 +1107,7 @@ export type PriceListItem = {
   valid_from?: string | null;
   valid_to?: string | null;
   notes?: string | null;
+  sort_order?: number | null;
 };
 
 export type PriceList = {

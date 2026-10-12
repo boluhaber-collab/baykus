@@ -17,6 +17,7 @@ class PriceListItemBase(BaseModel):
     valid_from: date | None = None
     valid_to: date | None = None
     notes: str | None = None
+    sort_order: int | None = None
 
 
 class PriceListItemCreate(PriceListItemBase):

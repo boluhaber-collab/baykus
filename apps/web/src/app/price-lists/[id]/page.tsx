@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PriceList, Product, apiFetch, downloadAuthFile, formatMoney, getToken } from "@/lib/api";
 import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 import PriceListShareDialog from "@/components/PriceListShareDialog";
@@ -63,6 +63,9 @@ export default function PriceListDetailPage() {
   const [importBusy, setImportBusy] = useState(false);
   /** Which row is picking a catalog product (keeps Ürün as one name line). */
   const [bindKey, setBindKey] = useState<string | null>(null);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const orderSaving = useRef(false);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -110,6 +113,88 @@ export default function PriceListDetailPage() {
     );
   }, [items, q]);
 
+  const canReorder = !q.trim();
+
+  async function persistOrder(next: EditItem[]) {
+    const ids = next.filter((i) => i.id != null).map((i) => i.id as number);
+    if (ids.length === 0 || orderSaving.current) return;
+    // Yeni (kaydedilmemiş) kalem varsa sıra Kaydet ile gider
+    if (next.some((i) => i.id == null)) {
+      setMsg("Sıra güncellendi — kalıcı olması için Kaydet / Güncelle'ye basın.");
+      return;
+    }
+    orderSaving.current = true;
+    try {
+      const updated = await apiFetch<PriceList>(`/api/price-lists/${id}/reorder`, {
+        method: "PUT",
+        body: JSON.stringify({ item_ids: ids }),
+      });
+      setList(updated);
+      setMsg("✓ Kalem sırası kaydedildi");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sıra kaydı hatası");
+    } finally {
+      orderSaving.current = false;
+    }
+  }
+
+  function applyReorder(fromKey: string, toKey: string) {
+    if (fromKey === toKey) return;
+    setItems((prev) => {
+      const from = prev.findIndex((x) => x.key === fromKey);
+      const to = prev.findIndex((x) => x.key === toKey);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      queueMicrotask(() => void persistOrder(next));
+      return next;
+    });
+  }
+
+  function moveItem(key: string, dir: -1 | 1) {
+    setItems((prev) => {
+      const idx = prev.findIndex((x) => x.key === key);
+      if (idx < 0) return prev;
+      const j = idx + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[j]] = [next[j], next[idx]];
+      queueMicrotask(() => void persistOrder(next));
+      return next;
+    });
+  }
+
+  function onRowDragStart(e: DragEvent, key: string) {
+    if (!canReorder) {
+      e.preventDefault();
+      return;
+    }
+    setDragKey(key);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", key);
+  }
+
+  function onRowDragOver(e: DragEvent, key: string) {
+    if (!canReorder || !dragKey) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverKey !== key) setDragOverKey(key);
+  }
+
+  function onRowDrop(e: DragEvent, key: string) {
+    e.preventDefault();
+    const from = dragKey || e.dataTransfer.getData("text/plain");
+    setDragKey(null);
+    setDragOverKey(null);
+    if (from) applyReorder(from, key);
+  }
+
+  function onRowDragEnd() {
+    setDragKey(null);
+    setDragOverKey(null);
+  }
+
   function toggleSel(key: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -142,7 +227,7 @@ export default function PriceListDetailPage() {
           is_active: isActive,
           items: items
             .filter((i) => i.description.trim())
-            .map((i) => ({
+            .map((i, idx) => ({
               product_id: i.product_id ? Number(i.product_id) : null,
               description: i.description.trim(),
               unit_price: Number(i.blank_price) || 0,
@@ -152,6 +237,7 @@ export default function PriceListDetailPage() {
               printed_price: Number(i.printed_price) || 0,
               embroidered_price: Number(i.embroidered_price) || 0,
               notes: i.notes || null,
+              sort_order: idx,
             })),
         }),
       });
@@ -421,7 +507,7 @@ export default function PriceListDetailPage() {
 
         <div className="rounded border bg-white p-3 space-y-2">
           <div className="flex flex-wrap justify-between gap-2 items-center">
-            <h3 className="font-semibold text-sm">Kalemler ({items.length})</h3>
+            <h3 className="font-semibold text-sm">Kalemler ({items.length}){canReorder ? <span className="font-normal text-baykus-muted ml-2">· sürükleyerek sıralayın</span> : <span className="font-normal text-amber-700 ml-2">· sıralamak için aramayı temizleyin</span>}</h3>
             <div className="flex gap-2">
               <input className="bk-input max-w-[200px]" placeholder="Ürün / tedarikçi ara…" value={q} onChange={(e) => setQ(e.target.value)} />
               <button
@@ -453,6 +539,7 @@ export default function PriceListDetailPage() {
             <table className="bk-table text-xs">
               <thead>
                 <tr>
+                  <th className="w-8" title="Sürükle">⋮⋮</th>
                   <th className="w-8">
                     <input
                       type="checkbox"
@@ -461,6 +548,7 @@ export default function PriceListDetailPage() {
                       aria-label="Tümünü seç"
                     />
                   </th>
+                  <th className="w-14">Sıra</th>
                   <th>Ürün</th>
                   <th>Tedarikçi</th>
                   <th className="text-right">Alış</th>
@@ -472,10 +560,55 @@ export default function PriceListDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((it) => (
-                  <tr key={it.key} className={`align-top ${selected.has(it.key) ? "bg-rose-50/60" : ""}`}>
+                {filtered.map((it) => {
+                  const fullIdx = items.findIndex((x) => x.key === it.key);
+                  return (
+                  <tr
+                    key={it.key}
+                    onDragOver={(e) => onRowDragOver(e, it.key)}
+                    onDrop={(e) => onRowDrop(e, it.key)}
+                    className={`align-top ${selected.has(it.key) ? "bg-rose-50/60" : ""} ${
+                      dragKey === it.key ? "opacity-50" : ""
+                    } ${dragOverKey === it.key && dragKey !== it.key ? "outline outline-2 outline-[#0f766e] outline-offset-[-2px]" : ""}`}
+                  >
+                    <td className="text-center text-slate-400 select-none" title={canReorder ? "Sürükleyerek taşı" : "Arama açıkken sürükleme kapalı"}>
+                      <span
+                        draggable={canReorder}
+                        onDragStart={(e) => onRowDragStart(e, it.key)}
+                        onDragEnd={onRowDragEnd}
+                        className={`inline-block px-1 ${canReorder ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-40"}`}
+                        aria-label="Sürükle"
+                        role="button"
+                      >
+                        ⋮⋮
+                      </span>
+                    </td>
                     <td>
                       <input type="checkbox" checked={selected.has(it.key)} onChange={() => toggleSel(it.key)} />
+                    </td>
+                    <td className="whitespace-nowrap">
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          type="button"
+                          className="bk-btn bk-btn-ghost text-[10px] px-1 py-0 leading-tight disabled:opacity-30"
+                          disabled={fullIdx <= 0}
+                          onClick={() => moveItem(it.key, -1)}
+                          title="Yukarı"
+                          aria-label="Yukarı taşı"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="bk-btn bk-btn-ghost text-[10px] px-1 py-0 leading-tight disabled:opacity-30"
+                          disabled={fullIdx < 0 || fullIdx >= items.length - 1}
+                          onClick={() => moveItem(it.key, 1)}
+                          title="Aşağı"
+                          aria-label="Aşağı taşı"
+                        >
+                          ↓
+                        </button>
+                      </div>
                     </td>
                     <td className="min-w-[160px]">
                       {/* One visible product name — LiveSearchSelect used to also show the
@@ -638,10 +771,11 @@ export default function PriceListDetailPage() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="text-center text-baykus-muted py-6">
+                    <td colSpan={11} className="text-center text-baykus-muted py-6">
                       Kalem yok
                     </td>
                   </tr>

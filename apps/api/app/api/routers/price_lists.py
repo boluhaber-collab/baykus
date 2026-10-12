@@ -46,8 +46,18 @@ def _to_list(pl: PriceList) -> PriceListListItem:
     )
 
 
+def _sorted_items(pl: PriceList) -> list[PriceListItem]:
+    return sorted(
+        pl.items or [],
+        key=lambda it: (
+            int(it.sort_order) if getattr(it, "sort_order", None) is not None else 0,
+            int(it.id or 0),
+        ),
+    )
+
+
 def _to_out(pl: PriceList) -> PriceListOut:
-    return PriceListOut(**_to_list(pl).model_dump(), items=pl.items or [])
+    return PriceListOut(**_to_list(pl).model_dump(), items=_sorted_items(pl))
 
 
 def _load(db: Session, list_id: int) -> PriceList:
@@ -64,7 +74,7 @@ def _load(db: Session, list_id: int) -> PriceList:
 
 def _replace_items(pl: PriceList, items: list) -> None:
     pl.items.clear()
-    for item in items:
+    for idx, item in enumerate(items):
         data = item.model_dump() if hasattr(item, "model_dump") else dict(item)
         blank = data.get("blank_price")
         unit = data.get("unit_price")
@@ -73,6 +83,11 @@ def _replace_items(pl: PriceList, items: list) -> None:
             blank = unit
         if unit is None or (blank is not None and _d(unit) == 0 and _d(blank) > 0):
             unit = blank if blank is not None else 0
+        so = data.get("sort_order")
+        try:
+            sort_order = int(so) if so is not None else idx
+        except (TypeError, ValueError):
+            sort_order = idx
         pl.items.append(
             PriceListItem(
                 product_id=data.get("product_id"),
@@ -87,6 +102,7 @@ def _replace_items(pl: PriceList, items: list) -> None:
                 valid_from=data.get("valid_from"),
                 valid_to=data.get("valid_to"),
                 notes=data.get("notes"),
+                sort_order=sort_order,
             )
         )
 
@@ -456,6 +472,7 @@ async def import_price_list_rows(
                 embroidered_price=emb,
                 unit_price=unit,
                 notes=notes,
+                sort_order=len(pl.items or []),
             )
             pl.items.append(it)
             if product_id is not None:
@@ -519,6 +536,42 @@ def get_price_list(
     return _to_out(_load(db, list_id))
 
 
+
+class ReorderRequest(BaseModel):
+    """Kalem sırasını kaydet (sürükle-bırak / ↑↓)."""
+
+    item_ids: list[int] = Field(default_factory=list)
+
+
+@router.put("/{list_id}/reorder", response_model=PriceListOut)
+def reorder_price_list_items(
+    list_id: int,
+    payload: ReorderRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin", "satış")),
+) -> PriceListOut:
+    pl = _load(db, list_id)
+    by_id = {int(it.id): it for it in (pl.items or []) if it.id is not None}
+    ids = [int(i) for i in (payload.item_ids or []) if int(i) in by_id]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Sıralanacak kalem yok")
+    # Unlisted items keep relative order after the listed ones
+    listed = set(ids)
+    rest = [it.id for it in _sorted_items(pl) if it.id not in listed]
+    for idx, iid in enumerate(ids + rest):
+        by_id[int(iid)].sort_order = idx
+    pl.updated_at = datetime.utcnow()
+    db.commit()
+    write_audit(
+        user_id=user.id,
+        action="reorder",
+        entity_type="price_list",
+        entity_id=pl.id,
+        detail={"count": len(ids)},
+    )
+    return _to_out(_load(db, pl.id))
+
+
 @router.put("/{list_id}", response_model=PriceListOut)
 def update_price_list(
     list_id: int,
@@ -573,7 +626,7 @@ def delete_price_list(
 
 def _item_rows(pl: PriceList) -> list[dict]:
     rows = []
-    for it in pl.items or []:
+    for it in _sorted_items(pl):
         blank = it.blank_price if it.blank_price is not None else it.unit_price
         rows.append(
             {

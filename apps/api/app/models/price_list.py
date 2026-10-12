@@ -25,7 +25,9 @@ class PriceList(Base):
     )
 
     items: Mapped[list["PriceListItem"]] = relationship(
-        back_populates="price_list", cascade="all, delete-orphan", order_by="PriceListItem.id"
+        back_populates="price_list",
+        cascade="all, delete-orphan",
+        order_by="PriceListItem.sort_order, PriceListItem.id",
     )
 
 

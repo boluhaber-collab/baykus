@@ -136,6 +136,7 @@ def bootstrap() -> None:
                 ("product_id", "ALTER TABLE price_list_items ADD COLUMN product_id INTEGER"),
                 ("variant_id", "ALTER TABLE price_list_items ADD COLUMN variant_id INTEGER"),
                 ("notes", "ALTER TABLE price_list_items ADD COLUMN notes TEXT"),
+                ("sort_order", "ALTER TABLE price_list_items ADD COLUMN sort_order INTEGER DEFAULT 0"),
             ):
                 if col not in pcols:
                     conn.execute(text(sql))
