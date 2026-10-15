@@ -62,8 +62,8 @@ export type BhNoteParts = {
 export const BANK_HAREKET_LABELS: Record<string, string> = {
   deposit: "Para Girişi",
   withdrawal: "Ödeme",
-  transfer_in: "Para Girişi",
-  transfer_out: "Para Çıkışı",
+  transfer_in: "Virman Girişi",
+  transfer_out: "Virman Çıkışı",
   fee: "Masraf",
 };
 
@@ -72,8 +72,8 @@ export const CASH_HAREKET_LABELS: Record<string, string> = {
   tahsilat: "Tahsilat",
   odeme: "Ödeme",
   gider: "Ödeme",
-  transfer_in: "Para Girişi",
-  transfer_out: "Para Çıkışı",
+  transfer_in: "Virman Girişi",
+  transfer_out: "Virman Çıkışı",
 };
 
 /** Parse amounts from Kalem= entries (English decimal from import) or TR money. */

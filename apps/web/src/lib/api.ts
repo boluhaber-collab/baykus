@@ -598,6 +598,7 @@ export type CashDailyPanel = {
     cash_register_id?: number | null;
     bank_account_id?: number | null;
     transfer_group_id?: string | null;
+  transfer_counterpart_name?: string | null;
   }[];
 };
 
@@ -631,6 +632,7 @@ export type CashMovement = {
   bank_account_id?: number | null;
   bank_account_name?: string | null;
   transfer_group_id?: string | null;
+  transfer_counterpart_name?: string | null;
   running_balance?: number | null;
   direction: "in" | "out" | string;
   created_by_user_id?: number | null;
@@ -652,6 +654,7 @@ export type BankMovement = {
   cash_register_id?: number | null;
   counterpart_bank_account_id?: number | null;
   transfer_group_id?: string | null;
+  transfer_counterpart_name?: string | null;
   running_balance?: number | null;
   direction: "in" | "out" | string;
   created_by_user_id?: number | null;
@@ -690,15 +693,15 @@ export const CASH_TYPE_LABELS: Record<string, string> = {
   tahsilat: "Tahsilat",
   odeme: "Ödeme",
   gider: "Gider",
-  transfer_in: "Transfer giriş",
-  transfer_out: "Transfer çıkış",
+  transfer_in: "Virman girişi",
+  transfer_out: "Virman çıkışı",
 };
 
 export const BANK_TYPE_LABELS: Record<string, string> = {
   deposit: "Yatırma / Havale giriş",
   withdrawal: "Çekim",
-  transfer_in: "Transfer giriş",
-  transfer_out: "Transfer çıkış",
+  transfer_in: "Virman girişi",
+  transfer_out: "Virman çıkışı",
   fee: "Masraf",
 };
 

@@ -95,6 +95,15 @@ def _ensure_lookup_indexes() -> None:
     except Exception as _exc:
         print(f"[baykus] startup price_list sort_order migrate error: {_exc}", flush=True)
 
+    # Virman: transfer bacakları tahsilat/ödeme olarak etiketlenmişse düzelt
+    try:
+        from app.services.transfer_labels import run_startup_migrate as _tr_migrate
+
+        _trm = _tr_migrate()
+        print(f"[baykus] startup transfer label migrate: {_trm}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup transfer label migrate error: {_exc}", flush=True)
+
     # E-posta: mail_messages tablosu
     try:
         from app.services.mail_schema_migrate import run_startup_migrate as _mail_schema_migrate

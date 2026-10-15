@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.services.transfer_labels import leg_note as transfer_leg_note
 from app.core.deps import get_db, require_roles
 from app.models.customer import CariMovement, Customer
 from app.models.expense import Expense
@@ -140,6 +141,39 @@ def _transfer_peers(db: Session, group_id: str) -> tuple[list[CashMovement], lis
         db.query(BankMovement).filter(BankMovement.transfer_group_id == group_id).all()
     )
     return peers_cash, peers_bank
+
+
+def _leg_account_name(db: Session, leg: CashMovement | BankMovement) -> str:
+    if isinstance(leg, CashMovement):
+        reg = db.get(CashRegister, leg.cash_register_id) if leg.cash_register_id else None
+        return reg.name if reg else "Kasa"
+    acc = db.get(BankAccount, leg.bank_account_id) if leg.bank_account_id else None
+    return acc.name if acc else "Banka"
+
+
+def _leg_direction(leg: CashMovement | BankMovement) -> str:
+    if isinstance(leg, CashMovement):
+        return _cash_direction(leg.movement_type)
+    return _bank_direction(leg.movement_type)
+
+
+def _transfer_counterpart_name(db: Session | None, leg: CashMovement | BankMovement) -> str | None:
+    if db is None or not leg.transfer_group_id:
+        return None
+    pc, pb = _transfer_peers(db, leg.transfer_group_id)
+    for peer in pc + pb:
+        if type(peer) is type(leg) and peer.id == leg.id:
+            continue
+        return _leg_account_name(db, peer)
+    return None
+
+
+def _relabel_transfer_peers(db: Session, peers: list, user_note: str | None) -> None:
+    """Edit: each leg gets its own directional Virman note (never the same text on both)."""
+    for peer in peers:
+        other = next((x for x in peers if x is not peer), None)
+        cp = _leg_account_name(db, other) if other is not None else None
+        peer.note = transfer_leg_note(_leg_direction(peer), cp, user_note)
 
 
 def _apply_movement_fields(
@@ -307,6 +341,7 @@ def _cash_movement_out(
         bank_account_id=m.bank_account_id,
         bank_account_name=bank_name,
         transfer_group_id=m.transfer_group_id,
+        transfer_counterpart_name=_transfer_counterpart_name(db, m),
         cari_movement_id=m.cari_movement_id,
         created_by_user_id=m.created_by_user_id,
         created_by_user_name=user_name,
@@ -338,6 +373,7 @@ def _bank_movement_out(
         cash_register_id=m.cash_register_id,
         counterpart_bank_account_id=m.counterpart_bank_account_id,
         transfer_group_id=m.transfer_group_id,
+        transfer_counterpart_name=_transfer_counterpart_name(db, m),
         cari_movement_id=m.cari_movement_id,
         created_by_user_id=m.created_by_user_id,
         created_by_user_name=user_name,
@@ -521,10 +557,10 @@ def finance_summary(
     total_cash = sum((c.balance for c in cash_outs), Decimal("0"))
     total_bank = sum((b.balance for b in bank_outs), Decimal("0"))
 
-    today_cash_in = _day_sum(db, CashMovement, CashMovement.movement_type, CashMovement.amount, CASH_IN_TYPES, today)
-    today_cash_out = _day_sum(db, CashMovement, CashMovement.movement_type, CashMovement.amount, CASH_OUT_TYPES, today)
-    today_bank_in = _day_sum(db, BankMovement, BankMovement.movement_type, BankMovement.amount, BANK_IN_TYPES, today)
-    today_bank_out = _day_sum(db, BankMovement, BankMovement.movement_type, BankMovement.amount, BANK_OUT_TYPES, today)
+    today_cash_in = _day_sum(db, CashMovement, CashMovement.movement_type, CashMovement.amount, ("tahsilat",), today)
+    today_cash_out = _day_sum(db, CashMovement, CashMovement.movement_type, CashMovement.amount, ("odeme", "gider"), today)
+    today_bank_in = _day_sum(db, BankMovement, BankMovement.movement_type, BankMovement.amount, ("deposit",), today)
+    today_bank_out = _day_sum(db, BankMovement, BankMovement.movement_type, BankMovement.amount, ("withdrawal", "fee"), today)
 
     cash_today_n = db.query(CashMovement).filter(CashMovement.movement_date == today).count()
     bank_today_n = db.query(BankMovement).filter(BankMovement.movement_date == today).count()
@@ -1076,8 +1112,8 @@ def update_cash_movement(
                 peer,
                 amount=amount,
                 movement_date=movement_date,
-                note=note,
-                note_set=note_set,
+                note=None,
+                note_set=False,
                 category=category,
                 category_set=category_set,
             )
@@ -1087,9 +1123,11 @@ def update_cash_movement(
                 supplier_movement_id=getattr(peer, "supplier_movement_id", None),
                 amount=amount,
                 movement_date=movement_date,
-                note=note,
-                note_set=note_set,
+                note=None,
+                note_set=False,
             )
+        if note_set:
+            _relabel_transfer_peers(db, peers_cash + peers_bank, note)
     else:
         if new_register_id is not None and new_register_id != m.cash_register_id:
             reg = db.get(CashRegister, new_register_id)
@@ -1405,8 +1443,8 @@ def update_bank_movement(
                 peer,
                 amount=amount,
                 movement_date=movement_date,
-                note=note,
-                note_set=note_set,
+                note=None,
+                note_set=False,
                 category=category,
                 category_set=category_set,
             )
@@ -1416,9 +1454,11 @@ def update_bank_movement(
                 supplier_movement_id=getattr(peer, "supplier_movement_id", None),
                 amount=amount,
                 movement_date=movement_date,
-                note=note,
-                note_set=note_set,
+                note=None,
+                note_set=False,
             )
+        if note_set:
+            _relabel_transfer_peers(db, peers_cash + peers_bank, note)
     else:
         if new_bank_id is not None and new_bank_id != m.bank_account_id:
             acc = db.get(BankAccount, new_bank_id)
@@ -1619,6 +1659,16 @@ def create_transfer(
         db.refresh(bm_out)
         db.refresh(bm_in)
         bank_outs.extend([_bank_movement_out(bm_out, db=db), _bank_movement_out(bm_in, db=db)])
+
+    # Muhasebe: kaynak "Virman çıkışı → hedef", hedef "Virman girişi ← kaynak"
+    peers_cash, peers_bank = _transfer_peers(db, group_id)
+    _relabel_transfer_peers(db, peers_cash + peers_bank, payload.note)
+    for leg in peers_cash + peers_bank:
+        if not leg.category:
+            leg.category = "Virman"
+    db.commit()
+    cash_outs = [_cash_movement_out(x, db=db) for x in peers_cash]
+    bank_outs = [_bank_movement_out(x, db=db) for x in peers_bank]
 
     return TransferOut(
         transfer_group_id=group_id,

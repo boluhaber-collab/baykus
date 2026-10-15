@@ -1352,7 +1352,9 @@ def finance_report(
         for m in cq.order_by(CashMovement.movement_date.desc(), CashMovement.id.desc()).all():
             amt = _dec(m.amount)
             direction = "in" if m.movement_type in CASH_IN_TYPES else "out"
-            if direction == "in":
+            if m.movement_type.startswith("transfer"):
+                pass  # virman: gelir/gider değil, toplamlara girmez
+            elif direction == "in":
                 cash_in += amt
             else:
                 cash_out += amt
@@ -1383,7 +1385,9 @@ def finance_report(
         for m in bq.order_by(BankMovement.movement_date.desc(), BankMovement.id.desc()).all():
             amt = _dec(m.amount)
             direction = "in" if m.movement_type in BANK_IN_TYPES else "out"
-            if direction == "in":
+            if m.movement_type.startswith("transfer"):
+                pass  # virman: gelir/gider değil, toplamlara girmez
+            elif direction == "in":
                 bank_in += amt
             else:
                 bank_out += amt
@@ -1417,7 +1421,7 @@ def finance_report(
         "date_to": date_to.isoformat() if date_to else None,
         "source": source,
         "assumptions": [
-            "Transfer giriş/çıkış çift kayıt olarak görünebilir (kasa↔banka).",
+            "Virman (hesaplar arası transfer) satırları listelenir ama giriş/çıkış toplamlarına dahil edilmez.",
             "Net = giriş − çıkış (seçilen kaynak).",
         ],
     }

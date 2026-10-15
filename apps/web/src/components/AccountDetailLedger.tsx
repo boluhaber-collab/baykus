@@ -30,6 +30,7 @@ export type AccountLedgerRow = {
   cash_register_id?: number | null;
   bank_account_id?: number | null;
   transfer_group_id?: string | null;
+  transfer_counterpart_name?: string | null;
 };
 
 export type AccountLedgerKind = "cash" | "bank";
@@ -616,7 +617,7 @@ export default function AccountDetailLedger({
               const alacak = isIn ? 0 : amt;
               const islem = hareketLabel(m.movement_type, m.note, hareketFallback);
               const kullanici = accountKullanici(m.note, m.created_by_user_name);
-              const hesap = accountHesap(m.note, m.customer_name);
+              const hesap = accountHesap(m.note, m.customer_name || m.transfer_counterpart_name);
               const aciklama = accountAciklama(m.note);
               const rowHighlight = editing?.id === m.id ? "bg-sky-50/80" : undefined;
               return (

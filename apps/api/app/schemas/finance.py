@@ -62,6 +62,7 @@ class CashMovementOut(BaseModel):
     bank_account_id: int | None = None
     bank_account_name: str | None = None
     transfer_group_id: str | None = None
+    transfer_counterpart_name: str | None = None
     cari_movement_id: int | None = None
     created_by_user_id: int | None = None
     created_by_user_name: str | None = None
@@ -144,6 +145,7 @@ class BankMovementOut(BaseModel):
     cash_register_id: int | None = None
     counterpart_bank_account_id: int | None = None
     transfer_group_id: str | None = None
+    transfer_counterpart_name: str | None = None
     cari_movement_id: int | None = None
     created_by_user_id: int | None = None
     created_by_user_name: str | None = None

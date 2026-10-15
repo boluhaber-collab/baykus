@@ -366,7 +366,8 @@ def _collections_today(db: Session, today_start: datetime, tomorrow: datetime) -
     cash = (
         db.query(func.coalesce(func.sum(CashMovement.amount), 0))
         .filter(
-            CashMovement.movement_type.in_(CASH_IN_TYPES),
+            # Virman (transfer_in) tahsilat değildir
+            CashMovement.movement_type == "tahsilat",
             CashMovement.movement_date == today,
         )
         .scalar()
@@ -374,7 +375,7 @@ def _collections_today(db: Session, today_start: datetime, tomorrow: datetime) -
     bank = (
         db.query(func.coalesce(func.sum(BankMovement.amount), 0))
         .filter(
-            BankMovement.movement_type.in_(BANK_IN_TYPES),
+            BankMovement.movement_type == "deposit",
             BankMovement.movement_date == today,
         )
         .scalar()

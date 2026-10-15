@@ -130,10 +130,8 @@ export default function VirmanModal({
       return;
     }
 
-    const fromLabel = fromAcc?.name || "Kaynak";
-    const toLabel = toAcc?.name || "Hedef";
-    const autoNote = `${fromLabel} hesabından ${toLabel} hesabına transfer`;
-    const finalNote = note.trim() ? `${autoNote} - ${note.trim()}` : autoNote;
+    // Sunucu her bacağa "Virman çıkışı → hedef" / "Virman girişi ← kaynak" yazar; burada sadece ek not.
+    const finalNote = note.trim() || null;
 
     setBusy(true);
     setError("");
