@@ -12,6 +12,7 @@ import {
   formatMoney,
 } from "@/lib/api";
 import { formatTrDate, formatTrDateTime, localToday, toIsoDate } from "@/lib/dates";
+import AccountSelect from "@/components/AccountSelect";
 
 type EditState = {
   installmentId: number;
@@ -299,33 +300,25 @@ export default function LoanDetailPage() {
           <option value="none">Sadece işaretle</option>
         </select>
         {method === "nakit" ? (
-          <select
+          <AccountSelect
             value={cashRegisterId}
-            onChange={(e) => setCashRegisterId(e.target.value)}
+            onChange={setCashRegisterId}
             className="bk-input text-xs max-w-[220px]"
-          >
-            <option value="">Kasa seçin</option>
-            {cashRegs.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-                {typeof r.balance === "number" ? ` (${formatMoney(r.balance)})` : ""}
-              </option>
-            ))}
-          </select>
+            mode="cash"
+            cash={cashRegs}
+            showBalance
+            placeholder="Kasa seçin"
+          />
         ) : method === "banka" ? (
-          <select
+          <AccountSelect
             value={bankAccountId}
-            onChange={(e) => setBankAccountId(e.target.value)}
+            onChange={setBankAccountId}
             className="bk-input text-xs max-w-[240px]"
-          >
-            <option value="">Banka / hesap seçin</option>
-            {banks.map((b) => (
-              <option key={b.id} value={b.id}>
-                {(b.account_type ? `${b.account_type} · ` : "") + b.name}
-                {typeof b.balance === "number" ? ` (${formatMoney(b.balance)})` : ""}
-              </option>
-            ))}
-          </select>
+            mode="bank"
+            banks={banks}
+            showBalance
+            placeholder="Banka / hesap seçin"
+          />
         ) : null}
       </div>
 
@@ -387,36 +380,28 @@ export default function LoanDetailPage() {
               {edit.payment_method === "nakit" ? (
                 <label className="text-xs">
                   <span className="text-baykus-muted">Kasa</span>
-                  <select
+                  <AccountSelect
                     className="bk-input mt-1 w-full"
+                    mode="cash"
+                    cash={cashRegs}
                     value={edit.cash_register_id}
-                    onChange={(e) => setEdit({ ...edit, cash_register_id: e.target.value })}
+                    onChange={(v) => setEdit({ ...edit, cash_register_id: v })}
                     required
-                  >
-                    <option value="">Kasa seçin</option>
-                    {cashRegs.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Kasa seçin"
+                  />
                 </label>
               ) : edit.payment_method === "banka" ? (
                 <label className="text-xs">
                   <span className="text-baykus-muted">Banka / hesap</span>
-                  <select
+                  <AccountSelect
                     className="bk-input mt-1 w-full"
+                    mode="bank"
+                    banks={banks}
                     value={edit.bank_account_id}
-                    onChange={(e) => setEdit({ ...edit, bank_account_id: e.target.value })}
+                    onChange={(v) => setEdit({ ...edit, bank_account_id: v })}
                     required
-                  >
-                    <option value="">Hesap seçin</option>
-                    {banks.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {(b.account_type ? `${b.account_type} · ` : "") + b.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Hesap seçin"
+                  />
                 </label>
               ) : (
                 <div />

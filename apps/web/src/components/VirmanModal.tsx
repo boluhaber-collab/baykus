@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { BankAccount, CashRegister, apiFetch, formatMoney } from "@/lib/api";
 import { localToday } from "@/lib/dates";
+import AccountSelect from "@/components/AccountSelect";
+import { flattenAccountGroups, groupAccountsForSelect } from "@/lib/accountSelect";
 
 export type VirmanAccountRef =
   | { kind: "cash"; id: number; name: string; balance: number }
@@ -83,20 +85,18 @@ export default function VirmanModal({
   }, [open, cashProp, banksProp]);
 
   const options = useMemo<VirmanAccountRef[]>(() => {
-    const list: VirmanAccountRef[] = [];
-    for (const r of cash) {
-      list.push({ kind: "cash", id: r.id, name: r.name, balance: Number(r.balance) });
-    }
-    for (const a of banks) {
-      list.push({
-        kind: "bank",
-        id: a.id,
-        name: a.name,
-        balance: Number(a.balance),
-        account_type: a.account_type || "Banka",
-      });
-    }
-    return list;
+    const groups = groupAccountsForSelect({ cash, banks, mode: "unified", showBalance: false });
+    return flattenAccountGroups(groups).map((o) =>
+      o.kind === "cash"
+        ? { kind: "cash" as const, id: o.id, name: o.sortName, balance: o.balance }
+        : {
+            kind: "bank" as const,
+            id: o.id,
+            name: o.sortName,
+            balance: o.balance,
+            account_type: o.account_type || "Banka",
+          },
+    );
   }, [cash, banks]);
 
   useEffect(() => {
@@ -165,10 +165,6 @@ export default function VirmanModal({
 
   if (!open) return null;
 
-  function optionLabel(o: VirmanAccountRef): string {
-    const type = o.kind === "cash" ? "Kasa" : o.account_type || "Banka";
-    return `${type} · ${o.name} (${formatMoney(o.balance)})`;
-  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-3" role="dialog">
@@ -191,36 +187,35 @@ export default function VirmanModal({
 
           <label className="block text-xs">
             <span className="text-baykus-muted block mb-0.5">Çıkış Hesabı *</span>
-            <select
+            <AccountSelect
               className="bk-input"
+              mode="unified"
+              cash={cash}
+              banks={banks}
               value={fromKey}
-              onChange={(e) => setFromKey(e.target.value)}
+              onChange={setFromKey}
               required
-            >
-              {options.map((o) => (
-                <option key={keyOf(o)} value={keyOf(o)}>
-                  {optionLabel(o)}
-                </option>
-              ))}
-            </select>
+              showBalance
+              placeholder=""
+              hidePlaceholderWhenSelected
+            />
           </label>
 
           <label className="block text-xs">
             <span className="text-baykus-muted block mb-0.5">Hedef Hesap *</span>
-            <select
+            <AccountSelect
               className="bk-input"
+              mode="unified"
+              cash={cash}
+              banks={banks}
               value={toKey}
-              onChange={(e) => setToKey(e.target.value)}
+              onChange={setToKey}
               required
-            >
-              {options
-                .filter((o) => keyOf(o) !== fromKey)
-                .map((o) => (
-                  <option key={keyOf(o)} value={keyOf(o)}>
-                    {optionLabel(o)}
-                  </option>
-                ))}
-            </select>
+              showBalance
+              excludeKey={fromKey}
+              placeholder=""
+              hidePlaceholderWhenSelected
+            />
           </label>
 
           <div className="grid grid-cols-2 gap-3">

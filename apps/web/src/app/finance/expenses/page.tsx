@@ -8,6 +8,7 @@ import { isBhImportNote, sanitizeDisplayNote } from "@/lib/bhNote";
 import { formatTrDate, localToday } from "@/lib/dates";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
+import AccountSelect from "@/components/AccountSelect";
 
 const PERIODS = [
   { key: "30", label: "Son 30 Gün", days: 30 },
@@ -502,35 +503,27 @@ export default function ExpensesPage() {
           <option value="banka">Banka</option>
         </select>
         {form.payment_method === "nakit" ? (
-          <select
+          <AccountSelect
             className="bk-input"
+            mode="cash"
+            cash={cashRegs}
             value={form.cash_register_id}
-            onChange={(e) => setForm({ ...form, cash_register_id: e.target.value })}
+            onChange={(v) => setForm({ ...form, cash_register_id: v })}
             required
-          >
-            <option value="">Kasa seçin</option>
-            {cashRegs.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-                {typeof r.balance === "number" ? ` (${formatMoney(r.balance)})` : ""}
-              </option>
-            ))}
-          </select>
+            showBalance
+            placeholder="Kasa seçin"
+          />
         ) : (
-          <select
+          <AccountSelect
             className="bk-input"
+            mode="bank"
+            banks={banks}
             value={form.bank_account_id}
-            onChange={(e) => setForm({ ...form, bank_account_id: e.target.value })}
+            onChange={(v) => setForm({ ...form, bank_account_id: v })}
             required
-          >
-            <option value="">Banka / hesap seçin</option>
-            {banks.map((b) => (
-              <option key={b.id} value={b.id}>
-                {(b.account_type ? `${b.account_type} · ` : "") + b.name}
-                {typeof b.balance === "number" ? ` (${formatMoney(b.balance)})` : ""}
-              </option>
-            ))}
-          </select>
+            showBalance
+            placeholder="Banka / hesap seçin"
+          />
         )}
         <input
           className="bk-input md:col-span-2"

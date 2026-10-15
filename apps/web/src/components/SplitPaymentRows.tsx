@@ -7,6 +7,8 @@ import {
   apiFetch,
   formatMoney,
 } from "@/lib/api";
+import AccountSelect from "@/components/AccountSelect";
+import { flattenAccountGroups, groupAccountsForSelect } from "@/lib/accountSelect";
 
 export type SplitPaymentRow = {
   key: string;
@@ -20,15 +22,6 @@ export type SplitPaymentPayload = {
   cash_register_id?: number | null;
   bank_account_id?: number | null;
   method?: string;
-};
-
-type AccountOpt = {
-  key: string;
-  group: string;
-  label: string;
-  balance: number;
-  cash_register_id?: number;
-  bank_account_id?: number;
 };
 
 type Props = {
@@ -95,18 +88,6 @@ export function rowsMatchExpected(rows: SplitPaymentRow[], expected: number, tol
   return Math.abs(rowsSum(rows) - expected) <= tol;
 }
 
-function groupForBank(b: BankAccount): string {
-  const t = (b.account_type || "Banka").trim();
-  if (/pos/i.test(t)) return "POS";
-  if (/ortak|şirket ortağı|sirket ortagi/i.test(t)) return "Ortaklar";
-  if (/kredi kart/i.test(t)) return "Kredi Kartı";
-  return "Banka";
-}
-
-function fmtBal(n: number): string {
-  return formatMoney(n).replace(/\s?₺$/, " TL").replace("₺", "TL");
-}
-
 export default function SplitPaymentRows({
   expectedTotal,
   value,
@@ -152,40 +133,15 @@ export default function SplitPaymentRows({
     };
   }, []);
 
-  const options = useMemo<AccountOpt[]>(() => {
-    const opts: AccountOpt[] = [];
-    for (const r of cashRegs) {
-      opts.push({
-        key: `cash:${r.id}`,
-        group: "Kasa",
-        label: `${r.name} (${fmtBal(Number(r.balance || 0))})`,
-        balance: Number(r.balance || 0),
-        cash_register_id: r.id,
-      });
-    }
-    for (const b of banks) {
-      opts.push({
-        key: `bank:${b.id}`,
-        group: groupForBank(b),
-        label: `${b.name} (${fmtBal(Number(b.balance || 0))})`,
-        balance: Number(b.balance || 0),
-        bank_account_id: b.id,
-      });
-    }
-    return opts;
+  const options = useMemo(() => {
+    const groups = groupAccountsForSelect({
+      cash: cashRegs,
+      banks,
+      mode: "unified",
+      showBalance: true,
+    });
+    return flattenAccountGroups(groups);
   }, [cashRegs, banks]);
-
-  const groups = useMemo(() => {
-    const order = ["Kasa", "Banka", "POS", "Kredi Kartı", "Ortaklar"];
-    const map = new Map<string, AccountOpt[]>();
-    for (const o of options) {
-      const list = map.get(o.group) || [];
-      list.push(o);
-      map.set(o.group, list);
-    }
-    const keys = [...order.filter((g) => map.has(g)), ...[...map.keys()].filter((g) => !order.includes(g))];
-    return keys.map((g) => ({ group: g, items: map.get(g)! }));
-  }, [options]);
 
   // Default first account once loaded
   useEffect(() => {
@@ -193,9 +149,9 @@ export default function SplitPaymentRows({
     setRows((prev) => {
       let changed = false;
       const next = prev.map((r) => {
-        if (!r.accountKey || !options.some((o) => o.key === r.accountKey)) {
+        if (!r.accountKey || !options.some((o) => o.value === r.accountKey)) {
           changed = true;
-          return { ...r, accountKey: options[0]!.key };
+          return { ...r, accountKey: options[0]!.value };
         }
         return r;
       });
@@ -235,7 +191,7 @@ export default function SplitPaymentRows({
     setManual(true);
     setRows((prev) => {
       const remaining = Math.max(0, expectedTotal - rowsSum(prev));
-      const defaultKey = options[0]?.key || prev[0]?.accountKey || "";
+      const defaultKey = options[0]?.value || prev[0]?.accountKey || "";
       return [
         ...prev,
         {
@@ -263,22 +219,17 @@ export default function SplitPaymentRows({
 
         {rows.map((r, idx) => (
           <div key={r.key} className="grid grid-cols-[minmax(0,1fr)_minmax(5.5rem,7.5rem)_auto] gap-2 items-center">
-            <select
+            <AccountSelect
               className="bk-input min-w-0 truncate"
+              mode="unified"
+              cash={cashRegs}
+              banks={banks}
               value={r.accountKey}
-              onChange={(e) => updateRow(r.key, { accountKey: e.target.value })}
-            >
-              {!r.accountKey && <option value="">Hesap seçin</option>}
-              {groups.map((g) => (
-                <optgroup key={g.group} label={g.group}>
-                  {g.items.map((o) => (
-                    <option key={o.key} value={o.key}>
-                      {o.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+              onChange={(v) => updateRow(r.key, { accountKey: v })}
+              placeholder="Hesap seçin"
+              showBalance
+              hidePlaceholderWhenSelected
+            />
             <input
               className="bk-input min-w-0 tabular-nums text-right"
               inputMode="decimal"

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, formatMoney, type BankAccount, type CashRegister } from "@/lib/api";
+import AccountSelect from "@/components/AccountSelect";
 import {
   accountAciklama,
   accountHesap,
@@ -530,34 +531,30 @@ export default function AccountDetailLedger({
           {!isTransfer && ledgerKind === "cash" && cashOptions.length > 0 ? (
             <label className="text-xs">
               <span className="block mb-0.5 opacity-80">Kasa</span>
-              <select
+              <AccountSelect
                 className="bk-input"
+                mode="cash"
+                cash={cashOptions}
                 value={editAccountId}
-                onChange={(e) => setEditAccountId(e.target.value)}
-              >
-                {cashOptions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setEditAccountId}
+                placeholder=""
+                hidePlaceholderWhenSelected
+              />
             </label>
           ) : null}
           {!isTransfer && ledgerKind === "bank" && bankOptions.length > 0 ? (
             <label className="text-xs">
               <span className="block mb-0.5 opacity-80">Hesap</span>
-              <select
+              <AccountSelect
                 className="bk-input"
+                mode="bank"
+                banks={bankOptions}
                 value={editAccountId}
-                onChange={(e) => setEditAccountId(e.target.value)}
-              >
-                {bankOptions.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                    {a.institution ? ` · ${a.institution}` : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setEditAccountId}
+                showInstitution
+                placeholder=""
+                hidePlaceholderWhenSelected
+              />
             </label>
           ) : null}
           <label className={`text-xs ${isTransfer ? "sm:col-span-2" : "sm:col-span-2 lg:col-span-2"}`}>
