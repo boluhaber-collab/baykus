@@ -1131,3 +1131,36 @@ body {
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.08); opacity: 0.85; }
   }
+
+/* ── Giriş ekranları (Perakende Satış / Alış) — 1280–1366px taşma düzeltmeleri ── */
+fieldset { min-width: 0; }
+.bk-entry-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .bk-entry-grid { grid-template-columns: minmax(300px, 1fr) minmax(0, 2fr); }
+}
+@media (min-width: 1024px) and (max-width: 1440px) {
+  .bk-entry-grid { grid-template-columns: minmax(270px, 310px) minmax(0, 1fr); }
+}
+.bk-entry-row {
+  display: grid;
+  grid-template-columns: 5.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+.bk-date-time {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 0.375rem;
+  min-width: 0;
+}
+.bk-date-time .bk-input { min-width: 0; padding-left: 0.4rem; padding-right: 0.25rem; }
+.bk-entry-table-wrap { overflow-x: auto; max-width: 100%; }
+.bk-entry-table { min-width: 680px; }
+.bk-entry-table td, .bk-entry-table th { padding-left: 0.4rem; padding-right: 0.4rem; }
+.bk-entry-table th, .bk-entry-table td { white-space: nowrap; }
+.bk-entry-table td.font-medium { white-space: normal; }

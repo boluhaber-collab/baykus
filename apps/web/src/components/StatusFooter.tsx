@@ -30,14 +30,14 @@ export default function StatusFooter({
   }, [load]);
 
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-baykus-line bg-white px-3 py-2 text-xs">
-      <div className="flex flex-wrap items-center gap-2 text-baykus-muted">
+    <div className="mt-3 mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded border border-baykus-line bg-white px-3 py-2 text-xs">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-baykus-muted">
         <span className="font-semibold text-red-600">⚠ Teslim Tarihi Alarmı</span>
         <span className={ok ? "text-emerald-600" : "text-amber-600"}>
           {ok ? "✔ Bugün teslim edilecek veya geciken iş yok." : "Teslim takibi gereken açık işler var."}
         </span>
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2 shrink-0">
         <button
           type="button"
           onClick={() => {

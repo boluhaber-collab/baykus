@@ -258,9 +258,9 @@ export default function PerakendeSatisGirPage() {
 
       {error && <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>}
 
-      <div className="grid gap-2 lg:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)]">
+      <div className="bk-entry-grid">
         {/* SOL — PERAKENDE LabelFrame */}
-        <fieldset className="rounded border border-baykus-line bg-white px-3 py-2.5 space-y-2.5">
+        <fieldset className="rounded border border-baykus-line bg-white px-3 py-2.5 space-y-2.5 min-w-0">
           <legend className="px-1 text-xs font-bold tracking-wide">PERAKENDE</legend>
 
           <div className="flex flex-wrap items-center gap-2 pb-1">
@@ -281,9 +281,9 @@ export default function PerakendeSatisGirPage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
+          <div className="bk-entry-row">
             <label className="text-xs font-medium">Tarih</label>
-            <div className="flex gap-2">
+            <div className="bk-date-time">
               <input
                 type="date"
                 className="bk-input"
@@ -292,14 +292,14 @@ export default function PerakendeSatisGirPage() {
               />
               <input
                 type="time"
-                className="bk-input w-28"
+                className="bk-input"
                 value={saat}
                 onChange={(e) => setSaat(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-[7.5rem_1fr] items-center gap-2">
+          <div className="bk-entry-row">
             <label className="text-xs font-medium">Toplam Tutar</label>
             <div className="text-base font-bold tabular-nums">{formatMoney(toplam)}</div>
           </div>
@@ -337,7 +337,7 @@ export default function PerakendeSatisGirPage() {
         </fieldset>
 
         {/* SAĞ — ÜRÜN / HİZMETLER */}
-        <fieldset className="rounded border border-baykus-line bg-white px-3 py-2.5 space-y-2">
+        <fieldset className="rounded border border-baykus-line bg-white px-3 py-2.5 space-y-2 min-w-0">
           <legend className="px-1 text-xs font-bold tracking-wide">ÜRÜN / HİZMETLER</legend>
 
           <LiveSearchSelect
@@ -358,8 +358,8 @@ export default function PerakendeSatisGirPage() {
             }}
           />
 
-          <div className="bk-table-wrap">
-            <table className="bk-table">
+          <div className="bk-table-wrap bk-entry-table-wrap">
+            <table className="bk-table bk-entry-table">
               <thead>
                 <tr>
                   <th>Ürün</th>
@@ -369,7 +369,7 @@ export default function PerakendeSatisGirPage() {
                   <th>Birim Fiyat</th>
                   <th>KDV</th>
                   <th>İndirim</th>
-                  <th>Toplam</th>
+                  <th className="text-right">Toplam</th>
                 </tr>
               </thead>
               <tbody>
@@ -379,17 +379,17 @@ export default function PerakendeSatisGirPage() {
                     onClick={() => setSelectedKey(l.key)}
                     className={selectedKey === l.key ? "bg-sky-50" : ""}
                   >
-                    <td className="font-medium">{l.urun}</td>
+                    <td className="font-medium min-w-[9rem]">{l.urun}</td>
                     <td>
                       <input
-                        className="bk-input py-0.5"
+                        className="bk-input py-0.5 w-24"
                         value={l.secenek}
                         onChange={(e) => updateLine(l.key, { secenek: e.target.value })}
                       />
                     </td>
                     <td>
                       <input
-                        className="bk-input py-0.5 w-24"
+                        className="bk-input py-0.5 w-20"
                         value={l.depo}
                         onChange={(e) => updateLine(l.key, { depo: e.target.value })}
                       />
@@ -410,7 +410,7 @@ export default function PerakendeSatisGirPage() {
                         type="number"
                         min={0}
                         step="0.01"
-                        className="bk-input py-0.5 w-24 tabular-nums"
+                        className="bk-input py-0.5 w-20 tabular-nums"
                         value={l.birim_fiyat}
                         onChange={(e) =>
                           updateLine(l.key, { birim_fiyat: Number(e.target.value) || 0 })
@@ -422,7 +422,7 @@ export default function PerakendeSatisGirPage() {
                         type="number"
                         min={0}
                         step="0.01"
-                        className="bk-input py-0.5 w-20 tabular-nums"
+                        className="bk-input py-0.5 w-16 tabular-nums"
                         value={l.kdv}
                         onChange={(e) => updateLine(l.key, { kdv: Number(e.target.value) || 0 })}
                       />
@@ -432,14 +432,14 @@ export default function PerakendeSatisGirPage() {
                         type="number"
                         min={0}
                         step="0.01"
-                        className="bk-input py-0.5 w-20 tabular-nums"
+                        className="bk-input py-0.5 w-16 tabular-nums"
                         value={l.indirim}
                         onChange={(e) =>
                           updateLine(l.key, { indirim: Number(e.target.value) || 0 })
                         }
                       />
                     </td>
-                    <td className="tabular-nums font-medium whitespace-nowrap">
+                    <td className="tabular-nums font-medium whitespace-nowrap text-right">
                       {formatMoney(l.toplam)}
                     </td>
                   </tr>

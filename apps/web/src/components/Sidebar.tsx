@@ -127,7 +127,7 @@ export default function Sidebar() {
                 href={group.href || "/dashboard"}
                 className={`bk-sidebar-item ${active ? "active-bar" : ""}`}
               >
-                <span className="w-5 text-center text-[15px] opacity-95">{group.icon}</span>
+                <span className="w-5 shrink-0 text-center text-[15px] opacity-95">{group.icon}</span>
                 <span className="truncate flex-1 font-medium">{group.label}</span>
                 {hasChildren && group.tek && (
                   <span className="text-slate-500 text-[11px] font-light select-none" aria-hidden>
@@ -147,10 +147,10 @@ export default function Sidebar() {
                     active ? "text-white font-semibold" : "text-slate-300 hover:text-white"
                   }`}
                 >
-                  <span className="w-5 text-center text-[15px] opacity-95">{group.icon}</span>
+                  <span className="w-5 shrink-0 text-center text-[15px] opacity-95">{group.icon}</span>
                   <span className="truncate font-medium">{group.label}</span>
                   {group.items.some((i) => i.href.split("?")[0] === "/mail") && mailBadge > 0 && (
-                    <span className="bk-sidebar-mail-badge" title={`${mailBadge} okunmamış`}>
+                    <span className="bk-sidebar-mail-badge shrink-0 ml-auto" title={`${mailBadge} okunmamış`}>
                       {mailBadge > 99 ? "99+" : mailBadge}
                     </span>
                   )}
@@ -182,7 +182,7 @@ export default function Sidebar() {
                       >
                         <span className="truncate">{item.label}</span>
                         {item.href.split("?")[0] === "/mail" && mailBadge > 0 && (
-                          <span className="bk-sidebar-mail-badge" title={`${mailBadge} okunmamış`}>
+                          <span className="bk-sidebar-mail-badge shrink-0 ml-auto" title={`${mailBadge} okunmamış`}>
                             {mailBadge > 99 ? "99+" : mailBadge}
                           </span>
                         )}

@@ -392,6 +392,14 @@ export default function PurchaseDetailPage() {
               Düzenle
             </button>
           )}
+          {canEdit && !editing && (
+            <Link
+              href={`/purchases/new?edit=${purchase.id}`}
+              className="rounded-lg border border-baykus-600 text-baykus-700 px-4 py-2 text-sm"
+            >
+              Alış ekranında düzenle
+            </Link>
+          )}
           {editing && (
             <button
               type="button"

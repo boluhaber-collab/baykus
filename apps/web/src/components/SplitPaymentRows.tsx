@@ -43,6 +43,8 @@ type Props = {
   className?: string;
   /** Compact / embedded */
   dense?: boolean;
+  /** Kısmi ödeme serbest (kalan cari borç) — eşleşmeme uyarısı yerine sadece fazla ödeme uyarısı */
+  allowPartial?: boolean;
 };
 
 function newKey() {
@@ -113,6 +115,7 @@ export default function SplitPaymentRows({
   autoFill = true,
   className = "",
   dense = false,
+  allowPartial = false,
 }: Props) {
   const [cashRegs, setCashRegs] = useState<CashRegister[]>([]);
   const [banks, setBanks] = useState<BankAccount[]>([]);
@@ -218,7 +221,9 @@ export default function SplitPaymentRows({
   }, [rows]);
 
   const total = rowsSum(rows);
-  const mismatch = expectedTotal > 0 && Math.abs(total - expectedTotal) > 0.02;
+  const mismatch = allowPartial
+    ? total > expectedTotal + 0.02
+    : expectedTotal > 0 && Math.abs(total - expectedTotal) > 0.02;
   const amountLabel = mode === "odeme" ? "Ödeme" : "Tahsilat";
   const totalLabel = mode === "odeme" ? "Toplam Ödenen" : "Toplam Tahsil Edilen";
 
@@ -250,16 +255,16 @@ export default function SplitPaymentRows({
   return (
     <div className={`bk-split-pay ${className}`}>
       <div className={`grid gap-1 ${dense ? "text-xs" : "text-sm"}`}>
-        <div className="grid grid-cols-[1fr_7.5rem_auto] gap-2 items-end px-0.5">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(5.5rem,7.5rem)_auto] gap-2 items-end px-0.5">
           <div className="text-[11px] font-semibold text-baykus-muted">Kasa / Hesap</div>
           <div className="text-[11px] font-semibold text-baykus-muted">{amountLabel}</div>
           <div className="w-9" />
         </div>
 
         {rows.map((r, idx) => (
-          <div key={r.key} className="grid grid-cols-[1fr_7.5rem_auto] gap-2 items-center">
+          <div key={r.key} className="grid grid-cols-[minmax(0,1fr)_minmax(5.5rem,7.5rem)_auto] gap-2 items-center">
             <select
-              className="bk-input"
+              className="bk-input min-w-0 truncate"
               value={r.accountKey}
               onChange={(e) => updateRow(r.key, { accountKey: e.target.value })}
             >
@@ -275,7 +280,7 @@ export default function SplitPaymentRows({
               ))}
             </select>
             <input
-              className="bk-input tabular-nums text-right"
+              className="bk-input min-w-0 tabular-nums text-right"
               inputMode="decimal"
               value={r.amount}
               onChange={(e) => {
@@ -284,7 +289,7 @@ export default function SplitPaymentRows({
               }}
               placeholder="0,00"
             />
-            <div className="flex flex-col gap-0.5 w-9">
+            <div className="flex flex-col items-center gap-0.5 w-9 shrink-0">
               {rows.length > 1 && (
                 <button
                   type="button"
