@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
@@ -462,14 +462,11 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         )
         .one()
     )
-    month_row = (
-        db.query(
-            func.count(Order.id),
-            func.coalesce(func.sum(Order.total_amount), 0),
-        )
-        .filter(Order.created_at >= month_start, Order.status != "Sipariş İptali")
-        .one()
-    )
+    # Aylık ciro: Satış Raporu ile birebir aynı hesap (reports._sales_data)
+    from app.api.routers.reports import month_sales_total
+
+    _m_cnt, _m_rev = month_sales_total(db, month_start.date(), date.today())
+    month_row = (_m_cnt, _m_rev)
     open_orders = (
         db.query(func.count(Order.id))
         .filter(Order.status.notin_(list(CLOSED_STATUSES)))
@@ -726,8 +723,6 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
     except Exception:
         bh = None
     if bh and bh.get("month_year") == month_start.year and bh.get("month_month") == month_start.month:
-        if bh.get("orders_month_revenue") is not None:
-            month_revenue = _f(bh["orders_month_revenue"])
         if bh.get("month_net_profit") is not None:
             month_profit = _f(bh["month_net_profit"])
         if bh.get("month_expenses") is not None:

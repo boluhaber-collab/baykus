@@ -253,29 +253,83 @@ def list_reports(_: User = Depends(require_roles(*READ_ROLES))) -> dict:
 
 
 # ── Shared sales query ─────────────────────────────────────────────────────
-# Source of truth: cari_movements.movement_type == "sale"
-# (BH Detaylı Ekstre import + local order side-effects). Orders table alone is
-# empty after demo wipe even when real BH sales remain on cari.
+# Single source of truth for "ciro" — used by /api/reports/sales AND the
+# dashboard month card, so both always show the same total.
+#   A) cari_movements.movement_type == "sale" (BH ekstre / perakende import +
+#      direkt satış side-effects), dated by movement_date
+#   B) orders (not cancelled) that have no linked sale movement (atölye
+#      siparişleri, müşterisiz perakende), dated by created_at
 
 
-def _sale_ref(m: CariMovement, parsed: dict[str, Any], order: Order | None) -> str:
+SALE_TYPES = ("Perakende", "Veresiye", "Sipariş", "Cari satış")
+
+
+def _sale_ref(m: CariMovement | None, parsed: dict[str, Any], order: Order | None) -> str:
     if order and order.order_number:
         return order.order_number
     belge = parsed.get("belge")
     if belge:
         return str(belge)
-    return f"SAT-{m.id}"
+    return f"SAT-{m.id}" if m else "SAT"
 
 
-def _sale_note_display(parsed: dict[str, Any], m: CariMovement) -> str | None:
+def _sale_note_display(parsed: dict[str, Any], m: CariMovement | None, order: Order | None) -> str | None:
+    if order is not None:
+        n = sanitize_display_note(order.notes) or None
+        if n:
+            return n[:200]
+    if m is None:
+        return None
     kalem = parsed.get("kalem_raw")
     if kalem:
-        return str(kalem)[:200]
+        return sanitize_display_note(str(kalem))[:200] or None
     display = sanitize_display_note(m.note) or None
+    if display and order is not None and display.strip() == f"Satış {order.order_number}":
+        return None
     if display:
         return display[:200]
     hareket = parsed.get("hareket")
     return str(hareket) if hareket else None
+
+
+def _is_perakende_customer(c: Customer | None) -> bool:
+    if c is None:
+        return True
+    code = (getattr(c, "code", None) or "").upper()
+    name = (c.name or "").lower()
+    return code == "BH:PERAKENDE" or "perakende" in name
+
+
+def _order_lines_out(order: Order | None) -> list[dict]:
+    if order is None:
+        return []
+    out = []
+    for ln in order.lines or []:
+        variant = " / ".join(x for x in [ln.color, ln.size, ln.print_type] if x)
+        out.append(
+            {
+                "description": ln.description,
+                "variant": variant or None,
+                "quantity": int(ln.quantity or 0),
+                "unit_price": _f(ln.unit_price),
+                "discount_amount": _f(ln.discount_amount),
+                "line_total": _f(ln.line_total),
+                "line_note": sanitize_display_note(ln.line_note) or None,
+            }
+        )
+    return out
+
+
+def _payment_accounts(order: Order | None) -> str | None:
+    if order is None:
+        return None
+    labels: list[str] = []
+    for p in order.payments or []:
+        lbl = sanitize_display_note(p.notes) or (p.method or "")
+        lbl = lbl.strip()[:60]
+        if lbl and lbl not in labels:
+            labels.append(lbl)
+    return ", ".join(labels) or None
 
 
 def _sales_data(
@@ -283,40 +337,68 @@ def _sales_data(
     date_from: date | None,
     date_to: date | None,
     status: str | None,
+    *,
+    sale_type: str | None = None,
+    customer_id: int | None = None,
+    q: str | None = None,
 ) -> tuple[dict, list[dict]]:
+    from app.models.order import OrderLine  # noqa: F401
     from app.utils.bh_note import parse_bh_note
 
-    q = (
+    mq = (
         db.query(CariMovement)
         .options(
             joinedload(CariMovement.customer),
             joinedload(CariMovement.order).joinedload(Order.payments),
+            joinedload(CariMovement.order).joinedload(Order.lines),
         )
         .filter(CariMovement.movement_type == "sale")
     )
     if date_from:
-        q = q.filter(CariMovement.movement_date >= date_from)
+        mq = mq.filter(CariMovement.movement_date >= date_from)
     if date_to:
-        q = q.filter(CariMovement.movement_date <= date_to)
+        mq = mq.filter(CariMovement.movement_date <= date_to)
+    moves = mq.all()
 
-    moves = q.order_by(CariMovement.movement_date.desc(), CariMovement.id.desc()).all()
+    linked_ids = {
+        r[0]
+        for r in db.query(CariMovement.order_id)
+        .filter(CariMovement.movement_type == "sale", CariMovement.order_id.isnot(None))
+        .all()
+    }
+    oq = db.query(Order).options(joinedload(Order.payments), joinedload(Order.lines))
+    if date_from:
+        oq = oq.filter(Order.created_at >= _day_start(date_from))
+    if date_to:
+        oq = oq.filter(Order.created_at < datetime.combine(date_to, time.max))
+    orders = [o for o in oq.all() if o.id not in linked_ids]
+
+    items: list[tuple[CariMovement | None, Order | None, date | None]] = [
+        (m, m.order if m.order_id else None, m.movement_date) for m in moves
+    ] + [(None, o, o.created_at.date() if o.created_at else None) for o in orders]
 
     rows_out: list[dict] = []
     total_revenue = Decimal("0")
+    total_paid = Decimal("0")
     total_remaining = Decimal("0")
     cancelled_count = 0
     by_status: dict[str, dict[str, float | int]] = {}
+    by_type: dict[str, dict[str, float | int]] = {}
+    needle = (q or "").strip().lower()
 
-    for m in moves:
-        order: Order | None = m.order if m.order_id else None
+    for m, order, d in items:
+        cust = (m.customer if m else None) or (order.customer if order else None)
+        cust_id = (m.customer_id if m else None) or (order.customer_id if order else None)
+        if customer_id and cust_id != customer_id:
+            continue
         if status:
             if order and order.status != status:
                 continue
             if not order and status not in ("Satış", "sale"):
                 continue
 
-        parsed = parse_bh_note(m.note)
-        amt = _dec(m.debit)
+        parsed = parse_bh_note(m.note) if m else {}
+        amt = _dec(m.debit) if m else Decimal("0")
         if amt <= 0 and order is not None:
             amt = _dec(order.total_amount)
 
@@ -328,67 +410,113 @@ def _sales_data(
             paid = _paid_amount(order)
             if paid <= 0:
                 paid = _dec(order.deposit_amount)
-            rem = Decimal("0") if cancelled else (
-                max(amt - paid, Decimal("0")) if paid > 0 else _remaining(order)
-            )
+            rem = Decimal("0") if cancelled else max(amt - paid, Decimal("0"))
             due = order.due_date.isoformat() if order.due_date else None
             st = order.status or "Satış"
-            source = "order"
         else:
             st = "Satış"
-            source = "cari"
+
+        perakende = _is_perakende_customer(cust) or bool(
+            order and "perakende" in (order.channel or "").lower()
+        )
+        if m is None:
+            tip = "Perakende" if perakende else "Sipariş"
+        elif order is None:
+            tip = "Perakende" if perakende else "Cari satış"
+        else:
+            tip = "Perakende" if (perakende or rem <= 0) else "Veresiye"
+        if sale_type and tip != sale_type:
+            continue
+
+        ref = _sale_ref(m, parsed, order)
+        note = _sale_note_display(parsed, m, order)
+        lines = _order_lines_out(order)
+        if needle:
+            hay = " ".join(
+                [ref, cust.name if cust else "", note or "", tip, st]
+                + [f"{ln['description']} {ln['variant'] or ''} {ln['line_note'] or ''}" for ln in lines]
+            ).lower()
+            if needle not in hay:
+                continue
 
         if cancelled:
             cancelled_count += 1
         else:
             total_revenue += amt
+            total_paid += paid
             total_remaining += rem
-
-        bucket = by_status.setdefault(st, {"count": 0, "revenue": 0.0})
-        bucket["count"] = int(bucket["count"]) + 1
-        if not cancelled:
-            bucket["revenue"] = float(bucket["revenue"]) + _f(amt)
+        for agg, key in ((by_status, st), (by_type, tip)):
+            b = agg.setdefault(key, {"count": 0, "revenue": 0.0})
+            b["count"] = int(b["count"]) + 1
+            if not cancelled:
+                b["revenue"] = float(b["revenue"]) + _f(amt)
 
         rows_out.append(
             {
-                "id": m.id,
-                "order_number": _sale_ref(m, parsed, order),
-                "customer_id": m.customer_id,
-                "customer_name": m.customer.name if m.customer else None,
+                "id": f"m{m.id}" if m else f"o{order.id}",
+                "order_number": ref,
+                "customer_id": cust_id,
+                "customer_name": cust.name if cust else ("Perakende" if order else None),
                 "status": st,
+                "sale_type": tip,
+                "cancelled": cancelled,
                 "total_amount": _f(amt),
                 "paid_amount": _f(paid),
                 "remaining_amount": _f(rem),
-                "created_at": m.movement_date.isoformat() if m.movement_date else None,
+                "created_at": d.isoformat() if d else None,
                 "due_date": due,
-                "source": source,
-                "note": _sale_note_display(parsed, m),
+                "source": "order" if order else "cari",
+                "note": note,
+                "payment_account": _payment_accounts(order),
                 "order_id": order.id if order else None,
+                "lines": lines,
             }
         )
 
+    rows_out.sort(key=lambda r: (r["created_at"] or "", r["order_number"]), reverse=True)
+
+    def _agg(dct: dict) -> list[dict]:
+        return [
+            {"status": k, "count": int(v["count"]), "revenue": float(v["revenue"])}
+            for k, v in sorted(dct.items(), key=lambda x: -int(x[1]["count"]))
+        ]
+
+    active = len(rows_out) - cancelled_count
     summary = {
-        "order_count": len(rows_out),
-        "sale_count": len(rows_out),
+        "order_count": active,
+        "sale_count": active,
         "revenue": _f(total_revenue),
+        "paid": _f(total_paid),
         "remaining": _f(total_remaining),
         "cancelled_count": cancelled_count,
-        "by_status": [
-            {"status": k, "count": int(v["count"]), "revenue": float(v["revenue"])}
-            for k, v in sorted(by_status.items(), key=lambda x: -int(x[1]["count"]))
-        ],
+        "by_status": _agg(by_status),
+        "by_type": _agg(by_type),
         "date_from": date_from.isoformat() if date_from else None,
         "date_to": date_to.isoformat() if date_to else None,
         "status_filter": status,
-        "source": "cari_sales",
+        "source": "cari_sales+orders",
         "assumptions": [
-            "Satışlar cari hareketlerinden (movement_type=sale): BH ekstre + Perakende Satışlar (GetSalesReport) + yerel sipariş.",
-            "Perakende Satışlar müşteri kartı (BH:PERAKENDE) GetSalesReport satırlarından materialize edilir — Eylül ciro BH portal ile hizalanır.",
-            "Demo wipe sonrası siparişler boş olsa da BH satışları burada görünür.",
-            "İptal siparişe bağlı cari satışlar ciroya dahil edilmez.",
+            "Satışlar: cari satış hareketleri (BH ekstre, perakende, direkt satış) + cari hareketi olmayan siparişler.",
+            "Ana sayfadaki aylık ciro kartı aynı hesaplamayı kullanır.",
+            "İptal siparişler ciroya dahil edilmez.",
         ],
     }
     return summary, rows_out
+
+
+def month_sales_total(db: Session, month_start: date, today: date) -> tuple[int, float]:
+    s, _ = _sales_data(db, month_start, today, None)
+    return int(s["sale_count"]), float(s["revenue"])
+
+
+def _line_text(ln: dict) -> str:
+    parts = [ln["description"]]
+    if ln.get("variant"):
+        parts.append(f"({ln['variant']})")
+    txt = " ".join(parts) + f" × {ln['quantity']}"
+    if ln.get("line_note"):
+        txt += f" — {ln['line_note']}"
+    return txt
 
 
 @router.get("/sales")
@@ -399,66 +527,71 @@ def sales_report(
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     status: str | None = Query(default=None),
+    sale_type: str | None = Query(default=None, alias="type"),
+    customer_id: int | None = Query(default=None),
+    q: str | None = Query(default=None),
     format: str | None = Query(default=None, description="json | csv"),
 ):
-    summary, rows_out = _sales_data(db, date_from, date_to, status)
+    summary, rows_out = _sales_data(
+        db, date_from, date_to, status, sale_type=sale_type, customer_id=customer_id, q=q
+    )
 
     if _wants_csv(request, format):
         headers = [
-            "Belge/No",
-            "Müşteri",
-            "Tip",
-            "Tutar",
-            "Ödenen",
-            "Kalan",
-            "Tarih",
-            "Kaynak",
-            "Açıklama",
+            "Belge/No", "Tarih", "Müşteri", "Tip", "Durum", "Tutar", "Ödenen", "Kalan",
+            "Ödeme hesabı", "Açıklama",
+            "Ürün", "Varyant", "Miktar", "Birim fiyat", "Satır toplam", "Satır açıklama",
         ]
-        csv_rows = [
-            [
-                r["order_number"],
-                r["customer_name"] or "",
-                r["status"],
-                r["total_amount"],
-                r["paid_amount"],
-                r["remaining_amount"],
-                format_tr_date(r["created_at"], empty=""),
-                r.get("source") or "",
-                r.get("note") or "",
+        csv_rows: list[list[Any]] = []
+        for r in rows_out:
+            head = [
+                r["order_number"], format_tr_date(r["created_at"], empty=""), r["customer_name"] or "",
+                r["sale_type"], r["status"], r["total_amount"], r["paid_amount"], r["remaining_amount"],
+                r.get("payment_account") or "", r.get("note") or "",
             ]
-            for r in rows_out
-        ]
+            if not r["lines"]:
+                csv_rows.append(head + ["", "", "", "", "", ""])
+            for ln in r["lines"]:
+                csv_rows.append(
+                    head + [ln["description"], ln["variant"] or "", ln["quantity"], ln["unit_price"],
+                            ln["line_total"], ln["line_note"] or ""]
+                )
         return _csv_response("satis_raporu.csv", headers, csv_rows)
 
     if _wants_pdf(format):
         from app.services.pdf import build_tabular_report_pdf, _money
 
-        tablo = [
-            [
-                r["order_number"],
-                (r["customer_name"] or "")[:28],
-                r["status"],
-                _money(r["total_amount"]),
-                _money(r["paid_amount"]),
-                _money(r["remaining_amount"]),
-                format_tr_date(r["created_at"], empty=""),
-            ]
-            for r in rows_out
-        ]
+        tablo: list[list[Any]] = []
+        for r in rows_out:
+            tablo.append(
+                [
+                    r["order_number"],
+                    format_tr_date(r["created_at"], empty=""),
+                    (r["customer_name"] or "")[:26],
+                    r["sale_type"] + (" (İptal)" if r["cancelled"] else ""),
+                    _money(r["total_amount"]),
+                    _money(r["paid_amount"]),
+                    _money(r["remaining_amount"]),
+                    (r.get("note") or r.get("payment_account") or "")[:40],
+                ]
+            )
+            for ln in r["lines"]:
+                tablo.append(["", "", "  ↳ " + _line_text(ln)[:60], "", _money(ln["line_total"]), "", "", ""])
         pdf = build_tabular_report_pdf(
             "Satış Raporu",
-            ["Belge/No", "Müşteri", "Tip", "Tutar", "Ödenen", "Kalan", "Tarih"],
+            ["Belge/No", "Tarih", "Müşteri / Ürün", "Tip", "Tutar", "Ödenen", "Kalan", "Açıklama"],
             tablo,
             _app_settings_map(db),
             subtitle=format_tr_period(date_from, date_to),
             summary_boxes=[
-                ("Adet", str(summary.get("sale_count") or summary.get("order_count") or len(rows_out))),
-                ("Ciro", _money(summary.get("revenue") or 0)),
-                ("Kalan", _money(summary.get("remaining") or 0)),
+                ("Adet", str(summary["sale_count"])),
+                ("Ciro", _money(summary["revenue"])),
+                ("Tahsil", _money(summary["paid"])),
+                ("Kalan", _money(summary["remaining"])),
             ],
             table_title="Satış hareketleri",
-            ratios=[1.4, 2.2, 1.2, 1.2, 1.2, 1.2, 1.1],
+            ratios=[1.2, 0.9, 2.6, 0.9, 1.0, 1.0, 1.0, 1.6],
+            max_rows=2000,
         )
         return _pdf_response(pdf, "satis_raporu.pdf")
 
@@ -473,12 +606,14 @@ def sales_print(
     date_to: date | None = Query(default=None),
     status: str | None = Query(default=None),
 ):
+    from html import escape
+
     summary, rows = _sales_data(db, date_from, date_to, status)
     trs = "".join(
-        f"<tr><td>{r['order_number']}</td><td>{r['customer_name'] or ''}</td>"
-        f"<td>{r['status']}</td><td style='text-align:right'>{r['total_amount']:.2f}</td>"
+        f"<tr><td>{escape(r['order_number'])}</td><td>{escape(r['customer_name'] or '')}</td>"
+        f"<td>{r['sale_type']}</td><td style='text-align:right'>{r['total_amount']:.2f}</td>"
         f"<td>{format_tr_date(r['created_at'], empty='')}</td>"
-        f"<td>{(r.get('note') or '')[:80]}</td></tr>"
+        f"<td>{escape((r.get('note') or '')[:80])}</td></tr>"
         for r in rows
     )
     html = f"""<!DOCTYPE html>
@@ -491,13 +626,11 @@ th,td{{border:1px solid #cbd5e1;padding:6px 8px}} th{{background:#f1f5f9;text-al
 </style></head><body>
 <button onclick="window.print()">Yazdır</button>
 <h1>Satış Raporu</h1>
-<div class="meta">Adet: {summary['order_count']} · Ciro: {summary['revenue']:.2f} TRY
-· Kaynak: cari satış hareketleri · Aralık: {format_tr_period(date_from, date_to)}</div>
+<div class="meta">Adet: {summary['sale_count']} · Ciro: {summary['revenue']:.2f} TRY · Aralık: {format_tr_period(date_from, date_to)}</div>
 <table><thead><tr><th>Belge/No</th><th>Müşteri</th><th>Tip</th><th>Tutar</th><th>Tarih</th><th>Açıklama</th></tr></thead>
 <tbody>{trs or '<tr><td colspan="6">Kayıt yok</td></tr>'}</tbody></table>
 </body></html>"""
     return HTMLResponse(html)
-
 
 # ── Stock ──────────────────────────────────────────────────────────────────
 

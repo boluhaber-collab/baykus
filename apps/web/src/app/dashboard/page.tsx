@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppSettings, DashboardNote, DashboardSummary, Product, apiFetch, formatMoney } from "@/lib/api";
-import { formatTrDateTime } from "@/lib/dates";
+import { formatTrDateTime, localToday } from "@/lib/dates";
 import { openGlobalSearch } from "@/components/GlobalSearchOverlay";
 import MailKpiCard from "@/components/MailAlertCard";
 import { QUICK_ACTION_CATALOG, QUICK_ACTIONS } from "@/lib/nav";
@@ -317,7 +317,7 @@ export default function DashboardPage() {
       {/* KPI cards — Ciro · Masraflar · Satışlar · Kasa · Banka · E-Posta (Stok Değeri: /reports/stock) */}
       {data && (
         <div className="bk-kpi-strip bk-kpi-strip--dash" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
-          <Link href="/reports/sales" className="bk-dash-kpi" style={{ backgroundColor: "#7c3aed" }}>
+          <Link href={`/reports/sales?start=${localToday().slice(0, 8)}01&end=${localToday()}`} className="bk-dash-kpi" style={{ backgroundColor: "#7c3aed" }}>
             <div className="amt">{formatMoney(Number(data.orders_month_revenue))}</div>
             <div className="lbl">{monthName} Cirosu</div>
           </Link>
