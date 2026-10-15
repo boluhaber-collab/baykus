@@ -414,6 +414,7 @@ export function linesFromOrder(order: {
     color?: string | null;
     unit_price?: number;
     line_total?: number;
+    line_note?: string | null;
   }[];
   notes?: string | null;
 }): ExpandDetailPayload {
@@ -421,6 +422,7 @@ export function linesFromOrder(order: {
     const bits = [l.description || "Kalem"];
     if (l.size) bits.push(String(l.size));
     if (l.color) bits.push(String(l.color));
+    if (l.line_note) bits.push(String(l.line_note));
     const name = bits.join(" — ");
     const qty = Number(l.quantity ?? 1);
     return {
@@ -440,14 +442,16 @@ export function linesFromPurchase(purchase: {
     variant_name?: string | null;
     unit_cost?: number;
     line_total?: number;
+    line_note?: string | null;
   }[];
   notes?: string | null;
 }): ExpandDetailPayload {
   const lines = (purchase.lines || []).map((l) => {
-    const name =
+    const baseName =
       [l.product_name, l.variant_name].filter(Boolean).join(" / ") ||
       l.description ||
       "Kalem";
+    const name = l.line_note ? `${baseName} — ${l.line_note}` : baseName;
     const qty = Number(l.quantity ?? 1);
     return {
       label: `${qty} x ${name}`,

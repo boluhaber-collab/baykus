@@ -28,6 +28,7 @@ type Line = {
   birim: string;
   kdv: string;
   indirim: string;
+  not: string;
 };
 
 function num(s: string | number | null | undefined): number {
@@ -115,6 +116,7 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
             birim: String(l.unit_cost),
             kdv: i === 0 && tax ? String(tax) : "0",
             indirim: "0",
+            not: l.line_note || "",
           })),
         );
       })
@@ -157,6 +159,7 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
         miktar: "1",
         birim: String(cost || ""),
         kdv: "0",
+        not: "",
         indirim: "0",
       },
     ]);
@@ -198,6 +201,7 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
         unit_cost: Math.round((net / qty) * 10000) / 10000,
         product_id: l.product_id,
         variant_id: l.variant_id,
+        line_note: l.not.trim() || null,
       };
     });
     const tax = lines.reduce((s, l) => s + num(l.kdv), 0);
@@ -390,6 +394,7 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
                   <th className="text-right">Alış Fiyatı</th>
                   <th className="text-right">KDV</th>
                   <th className="text-right">İndirim</th>
+                  <th>Açıklama</th>
                   <th className="text-right">Toplam</th>
                 </tr>
               </thead>
@@ -452,12 +457,21 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
                     <td>
                       <input inputMode="decimal" className={`${numCls} w-16`} value={l.indirim} onChange={(e) => updateLine(l.key, { indirim: e.target.value })} />
                     </td>
+                    <td className="min-w-[10rem]">
+                      <input
+                        className="bk-input py-0.5 w-full"
+                        value={l.not}
+                        placeholder="Örn. 45x60 ön baskı"
+                        maxLength={2000}
+                        onChange={(e) => updateLine(l.key, { not: e.target.value })}
+                      />
+                    </td>
                     <td className="tabular-nums font-medium whitespace-nowrap text-right">{formatMoney(lineTotal(l))}</td>
                   </tr>
                 ))}
                 {lines.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center text-baykus-muted py-8">
+                    <td colSpan={9} className="text-center text-baykus-muted py-8">
                       Alışa ürün eklemek için yukarıdan arayın
                     </td>
                   </tr>

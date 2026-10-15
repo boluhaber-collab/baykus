@@ -109,6 +109,7 @@ class PurchaseLine(Base):
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    line_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     purchase: Mapped[Purchase] = relationship(back_populates="lines")
     product = relationship("Product", lazy="joined")

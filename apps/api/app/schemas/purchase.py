@@ -10,6 +10,7 @@ class PurchaseLineIn(BaseModel):
     description: str = Field(min_length=1, max_length=255)
     quantity: Decimal = Field(gt=0)
     unit_cost: Decimal = Field(ge=0)
+    line_note: str | None = Field(default=None, max_length=2000)
 
 
 class PurchaseLineOut(BaseModel):
@@ -20,6 +21,7 @@ class PurchaseLineOut(BaseModel):
     quantity: Decimal
     unit_cost: Decimal
     line_total: Decimal
+    line_note: str | None = None
     product_name: str | None = None
     variant_name: str | None = None
 

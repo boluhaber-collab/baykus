@@ -23,6 +23,7 @@ type EditLine = {
   unit_cost: string;
   product_id: string;
   variant_id: string;
+  line_note: string;
 };
 
 function toEditLines(purchase: PurchaseDetail): EditLine[] {
@@ -33,6 +34,7 @@ function toEditLines(purchase: PurchaseDetail): EditLine[] {
     unit_cost: String(l.unit_cost ?? 0),
     product_id: l.product_id != null ? String(l.product_id) : "",
     variant_id: l.variant_id != null ? String(l.variant_id) : "",
+    line_note: l.line_note || "",
   }));
 }
 
@@ -44,6 +46,7 @@ function emptyLine(): EditLine {
     unit_cost: "0",
     product_id: "",
     variant_id: "",
+    line_note: "",
   };
 }
 
@@ -202,6 +205,7 @@ export default function PurchaseDetailPage() {
         description: l.description.trim(),
         quantity: Math.max(0.01, Number(l.quantity) || 0),
         unit_cost: Math.max(0, Number(l.unit_cost) || 0),
+        line_note: l.line_note.trim() || null,
       }));
     if (!payloadLines.length) {
       setError("En az bir satır gerekli");
@@ -570,6 +574,13 @@ export default function PurchaseDetailPage() {
                             onChange={(e) => setLine(idx, { description: e.target.value })}
                             required
                           />
+                          <input
+                            className="mt-1 w-full rounded border px-2 py-1 text-xs"
+                            value={l.line_note}
+                            maxLength={2000}
+                            placeholder="Satır notu (örn. 45x60 ön baskı)"
+                            onChange={(e) => setLine(idx, { line_note: e.target.value })}
+                          />
                         </td>
                         <td className="px-3 py-2">
                           <input
@@ -715,7 +726,12 @@ export default function PurchaseDetailPage() {
                 {purchase.lines.map((l, idx) => (
                   <tr key={l.id} className="border-t border-slate-100">
                     <td className="px-4 py-3 text-slate-400">{idx + 1}</td>
-                    <td className="px-4 py-3 font-medium">{l.description}</td>
+                    <td className="px-4 py-3 font-medium">
+                      {l.description}
+                      {l.line_note ? (
+                        <div className="text-xs font-normal text-slate-500">{l.line_note}</div>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3 text-slate-500 text-xs">
                       {l.product_id ? (
                         <Link

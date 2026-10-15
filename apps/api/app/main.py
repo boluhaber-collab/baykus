@@ -75,6 +75,16 @@ def _ensure_lookup_indexes() -> None:
     except Exception as _exc:
         print(f"[baykus] startup entity repair error: {_exc}", flush=True)
 
+    # Satış/alış satır açıklaması (line_note)
+    try:
+        from app.services.line_note_migrate import run_startup_migrate as _ln_migrate
+
+        _lnr = _ln_migrate()
+        if _lnr.get("added") or not _lnr.get("ok"):
+            print(f"[baykus] startup line_note migrate: {_lnr}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup line_note migrate error: {_exc}", flush=True)
+
     # Fiyat listesi kalem sırası (sort_order)
     try:
         from app.services.price_list_sort_migrate import run_startup_migrate as _pl_sort_migrate

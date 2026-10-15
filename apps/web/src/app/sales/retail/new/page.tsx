@@ -39,6 +39,7 @@ type CartLine = {
   kdv: number;
   indirim: number;
   toplam: number;
+  not?: string;
 };
 
 function todayDateInput(): string {
@@ -236,6 +237,7 @@ export default function PerakendeSatisGirPage() {
             unit_price: l.birim_fiyat,
             discount_rate: 0,
             discount_amount: l.indirim || 0,
+            line_note: (l.not || "").trim() || null,
           })),
           payments: payments.length && tahsilatNum > 0 ? payments : undefined,
         }),
@@ -369,6 +371,7 @@ export default function PerakendeSatisGirPage() {
                   <th>Birim Fiyat</th>
                   <th>KDV</th>
                   <th>İndirim</th>
+                  <th>Açıklama</th>
                   <th className="text-right">Toplam</th>
                 </tr>
               </thead>
@@ -439,6 +442,15 @@ export default function PerakendeSatisGirPage() {
                         }
                       />
                     </td>
+                    <td className="min-w-[10rem]">
+                      <input
+                        className="bk-input py-0.5 w-full"
+                        value={l.not || ""}
+                        placeholder="Örn. 45x60 ön baskı"
+                        maxLength={2000}
+                        onChange={(e) => updateLine(l.key, { not: e.target.value })}
+                      />
+                    </td>
                     <td className="tabular-nums font-medium whitespace-nowrap text-right">
                       {formatMoney(l.toplam)}
                     </td>
@@ -446,7 +458,7 @@ export default function PerakendeSatisGirPage() {
                 ))}
                 {cart.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center text-baykus-muted py-8">
+                    <td colSpan={9} className="text-center text-baykus-muted py-8">
                       Sepete ürün eklemek için listeden seçin
                     </td>
                   </tr>

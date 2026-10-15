@@ -26,6 +26,7 @@ class OrderLineBase(BaseModel):
     unit_price: Decimal = Field(default=Decimal("0"), ge=0)
     discount_rate: Decimal = Field(default=Decimal("0"), ge=0, le=100)
     discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    line_note: str | None = Field(default=None, max_length=2000)
 
 
 class OrderLineCreate(OrderLineBase):

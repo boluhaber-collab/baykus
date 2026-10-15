@@ -309,6 +309,7 @@ export type OrderLine = {
   discount_rate?: number;
   discount_amount?: number;
   line_total?: number;
+  line_note?: string | null;
 };
 
 export type OrderListItem = {
@@ -779,6 +780,7 @@ export type PurchaseLine = {
   quantity: number;
   unit_cost: number;
   line_total: number;
+  line_note?: string | null;
   product_name?: string | null;
   variant_name?: string | null;
 };

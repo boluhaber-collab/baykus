@@ -52,6 +52,7 @@ type Line = {
   print_type: string;
   unit_price: string;
   depo: string;
+  line_note?: string;
   stock_qty?: number | null;
 };
 
@@ -358,6 +359,7 @@ function CreateSaleInner() {
         discount_rate: 0,
         discount_amount: 0,
         warehouse: l.depo || null,
+        line_note: (l.line_note || "").trim() || null,
       }));
     if (!payload.length) throw new Error("En az bir ürün satırı gerekli");
     return payload;
@@ -627,6 +629,7 @@ function CreateSaleInner() {
               <thead>
                 <tr>
                   <th>Ürün</th>
+                  <th>Ürün Adı</th>
                   <th>Açıklama</th>
                   <th>Beden</th>
                   <th>Renk</th>
@@ -669,6 +672,15 @@ function CreateSaleInner() {
                           value={line.description}
                           onChange={(e) => updateLine(line.key, { description: e.target.value })}
                           required
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="bk-input min-w-[140px]"
+                          value={line.line_note || ""}
+                          maxLength={2000}
+                          placeholder="Örn. 45x60 ön baskı"
+                          onChange={(e) => updateLine(line.key, { line_note: e.target.value })}
                         />
                       </td>
                       <td>

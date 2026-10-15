@@ -143,6 +143,7 @@ def _replace_lines(order: Order, lines_payload: list) -> None:
             discount_rate=rate,
             discount_amount=discount_amount,
             line_total=_line_total(qty, unit_price, discount_amount),
+            line_note=((data.get("line_note") or "").strip() or None),
         )
         order.lines.append(line)
     _recompute_total(order)

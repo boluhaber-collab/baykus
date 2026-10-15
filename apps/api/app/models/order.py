@@ -138,6 +138,7 @@ class OrderLine(Base):
     discount_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
     discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    line_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     order: Mapped[Order] = relationship(back_populates="lines")
 

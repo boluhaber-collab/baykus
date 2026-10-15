@@ -85,6 +85,7 @@ def _line_out(line: PurchaseLine) -> PurchaseLineOut:
         quantity=line.quantity,
         unit_cost=line.unit_cost,
         line_total=line.line_total,
+        line_note=line.line_note,
         product_name=product_name,
         variant_name=variant_name,
     )
@@ -155,6 +156,7 @@ def _build_lines(db: Session, lines_in: list[PurchaseLineIn]) -> tuple[list[Purc
                 quantity=qty,
                 unit_cost=cost,
                 line_total=line_total,
+                line_note=((row.line_note or "").strip() or None),
             )
         )
     return built, subtotal

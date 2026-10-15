@@ -608,7 +608,7 @@ def build_work_order_pdf(order: Any, settings: dict[str, str]) -> bytes:
     for line in order.lines or []:
         satirlar.append(
             [
-                _s(line.description),
+                _s(line.description) + (f" — {_s(getattr(line, 'line_note', None))}" if _s(getattr(line, "line_note", None)) else ""),
                 _s(line.size, "—"),
                 _s(line.color, "—"),
                 _s(line.print_type, "—"),
@@ -1016,7 +1016,7 @@ def build_purchase_pdf(purchase: Any, settings: dict[str, str] | None = None) ->
     for line in getattr(purchase, "lines", None) or []:
         satirlar.append(
             [
-                _s(getattr(line, "description", None))[:48],
+                (_s(getattr(line, "description", None)) + (f" — {_s(getattr(line, 'line_note', None))}" if _s(getattr(line, "line_note", None)) else ""))[:80],
                 _qty(getattr(line, "quantity", 0)),
                 _money(getattr(line, "unit_cost", 0)),
                 _money(getattr(line, "line_total", None) or (

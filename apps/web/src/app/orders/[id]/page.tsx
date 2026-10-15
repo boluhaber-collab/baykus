@@ -712,7 +712,12 @@ export default function OrderDetailPage() {
               <tbody>
                 {order.lines.map((l) => (
                   <tr key={l.id ?? `${l.description}-${l.quantity}`}>
-                    <td className="font-medium">{l.description}</td>
+                    <td className="font-medium">
+                      {l.description}
+                      {l.line_note ? (
+                        <div className="text-xs font-normal text-baykus-muted">{l.line_note}</div>
+                      ) : null}
+                    </td>
                     <td className="text-right tabular-nums">{l.quantity}</td>
                     <td>{l.size || "—"}</td>
                     <td>{l.color || "—"}</td>

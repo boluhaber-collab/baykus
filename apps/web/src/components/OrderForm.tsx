@@ -41,6 +41,7 @@ export type OrderFormPayload = {
     unit_price: number;
     discount_rate: number;
     discount_amount: number;
+    line_note?: string | null;
   }[];
 };
 
@@ -55,6 +56,7 @@ type LineState = {
   unit_price: string;
   discount_rate: string;
   discount_amount: string;
+  line_note: string;
   stock_qty?: number | null;
   is_critical?: boolean;
   price_source?: string | null;
@@ -72,6 +74,7 @@ function emptyLine(): LineState {
     unit_price: "0",
     discount_rate: "0",
     discount_amount: "0",
+    line_note: "",
     stock_qty: null,
     is_critical: false,
     price_source: null,
@@ -91,6 +94,7 @@ function fromOrderLines(lines: OrderLine[]): LineState[] {
     unit_price: String(l.unit_price ?? 0),
     discount_rate: String(l.discount_rate ?? 0),
     discount_amount: String(l.discount_amount ?? 0),
+    line_note: l.line_note || "",
     stock_qty: null,
     is_critical: false,
     price_source: null,
@@ -226,6 +230,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
             unit_price: Number(l.unit_price) || 0,
             discount_rate: Number(l.discount_rate) || 0,
             discount_amount: Number(l.discount_amount) || 0,
+            line_note: l.line_note.trim() || null,
           })),
       };
       await onSubmit(payload);
@@ -433,7 +438,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
                 )}
               </div>
               <div className="md:col-span-2">
-                <label className="block text-[10px] text-slate-500 mb-0.5">Açıklama *</label>
+                <label className="block text-[10px] text-slate-500 mb-0.5">Ürün / Tanım *</label>
                 <input
                   className={inputCls}
                   value={line.description}
@@ -485,6 +490,16 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
                   value={line.print_type}
                   onChange={(e) => updateLine(line.key, { print_type: e.target.value })}
                   placeholder="DTF, Serigrafi…"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[10px] text-slate-500 mb-0.5">Açıklama</label>
+                <input
+                  className={inputCls}
+                  value={line.line_note}
+                  maxLength={2000}
+                  onChange={(e) => updateLine(line.key, { line_note: e.target.value })}
+                  placeholder="Örn. 45x60 ön baskı"
                 />
               </div>
               <div>
