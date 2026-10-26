@@ -1142,7 +1142,10 @@ export type LoanInstallment = {
   cash_register_name?: string | null;
   bank_account_id?: number | null;
   bank_account_name?: string | null;
+  bank_account_type?: string | null;
   notes?: string | null;
+  /** BizimHesap'ta ödenmiş (aktarım) — Düzenle / İptal kapalı */
+  locked?: boolean;
 };
 
 export type Loan = {

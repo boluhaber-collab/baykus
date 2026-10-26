@@ -19,7 +19,10 @@ class LoanInstallmentOut(BaseModel):
     cash_register_name: str | None = None
     bank_account_id: int | None = None
     bank_account_name: str | None = None
+    bank_account_type: str | None = None
     notes: str | None = None
+    # BizimHesap'ta ödenmiş (aktarım) taksit — Düzenle / İptal kapalı
+    locked: bool = False
 
     model_config = {"from_attributes": True}
 

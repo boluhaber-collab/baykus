@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BankAccount,
   CashRegister,
@@ -13,6 +13,12 @@ import {
 } from "@/lib/api";
 import { formatTrDate, formatTrDateTime, localToday, toIsoDate } from "@/lib/dates";
 import AccountSelect from "@/components/AccountSelect";
+import { resolveAccountGroup } from "@/lib/accountSelect";
+
+/** Kredi taksiti POS hesabından ödenemez (POS bir ödeme aracı değil, tahsilat hesabı). */
+function isPayableBank(b: Pick<BankAccount, "account_type">): boolean {
+  return resolveAccountGroup("bank", b.account_type) !== "POS Hesapları";
+}
 
 type EditState = {
   installmentId: number;
@@ -24,6 +30,8 @@ type EditState = {
   bank_account_id: string;
   is_paid: boolean;
   payment_date: string;
+  /** Önceki hesap geçersizse (POS / pasif) uyarı */
+  prev_account_warning: string;
 };
 
 export default function LoanDetailPage() {
@@ -39,6 +47,13 @@ export default function LoanDetailPage() {
   const [bankAccountId, setBankAccountId] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => localToday());
   const [edit, setEdit] = useState<EditState | null>(null);
+  const editFormRef = useRef<HTMLFormElement | null>(null);
+
+  useEffect(() => {
+    if (edit) {
+      editFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [edit?.installmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     setError("");
@@ -49,12 +64,13 @@ export default function LoanDetailPage() {
         apiFetch<BankAccount[]>("/api/finance/banks?active=true"),
       ]);
       const activeRegs = regs.filter((r) => r.is_active !== false);
-      const activeBanks = bankList.filter((b) => b.is_active !== false);
+      // POS hesapları kredi ödemesinde listelenmez
+      const activeBanks = bankList.filter((b) => b.is_active !== false && isPayableBank(b));
       setLoan(loanData);
       setCashRegs(activeRegs);
       setBanks(activeBanks);
-      setCashRegisterId((prev) => prev || (activeRegs[0] ? String(activeRegs[0].id) : ""));
-      setBankAccountId((prev) => prev || (activeBanks[0] ? String(activeBanks[0].id) : ""));
+      // Tek kasa varsa onu öner; banka hesabı her zaman bilinçli seçilmeli (varsayılan yok)
+      setCashRegisterId((prev) => prev || (activeRegs.length === 1 ? String(activeRegs[0].id) : ""));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası");
     }
@@ -99,13 +115,20 @@ export default function LoanDetailPage() {
       setError("Nakit ödeme için kasa seçin");
       return;
     }
+    const inst0 = loan?.installments?.find((i) => i.id === installmentId);
     const accHint =
       method === "banka"
         ? banks.find((b) => String(b.id) === bankAccountId)?.name || "banka"
         : method === "nakit"
           ? cashRegs.find((r) => String(r.id) === cashRegisterId)?.name || "kasa"
           : "işaret";
-    if (!confirm(`Bu taksit için Ödeme Yap — ${accHint} kaydı oluşturulsun mu?`)) return;
+    const when = formatTrDate(paymentDate || localToday());
+    if (
+      !confirm(
+        `Taksit #${inst0?.sequence ?? ""} ödensin mi?\nHesap: ${accHint}\nÖdeme tarihi: ${when}`,
+      )
+    )
+      return;
     setBusyId(installmentId);
     setError("");
     try {
@@ -130,6 +153,10 @@ export default function LoanDetailPage() {
   }
 
   async function cancelPayment(inst: LoanInstallment) {
+    if (inst.locked) {
+      setError("Bu taksit BizimHesap'ta ödenmiş ve aktarılmış; iptal edilemez.");
+      return;
+    }
     if (
       !confirm(
         `Taksit #${inst.sequence} ödemesi iptal edilsin mi?\nBağlı kasa/banka hareketleri tersine çevrilecek.`,
@@ -154,16 +181,30 @@ export default function LoanDetailPage() {
   }
 
   function startEdit(inst: LoanInstallment) {
+    if (inst.locked) {
+      setError("Bu taksit BizimHesap'ta ödenmiş ve aktarılmış; düzenlenemez.");
+      return;
+    }
+    setError("");
+    const bankOk =
+      !!inst.bank_account_id && banks.some((b) => b.id === inst.bank_account_id);
+    const cashOk =
+      !!inst.cash_register_id && cashRegs.some((r) => r.id === inst.cash_register_id);
+    let warn = "";
+    if (inst.is_paid && inst.payment_method === "banka" && inst.bank_account_id && !bankOk) {
+      warn = `Önceki hesap: ${inst.bank_account_name || "—"}${
+        inst.bank_account_type ? ` (${inst.bank_account_type})` : ""
+      } — kredi ödemesi için geçerli değil. Ödemenin yapıldığı hesabı seçin; eski hareket o hesaptan geri alınır.`;
+    }
     setEdit({
+      prev_account_warning: warn,
       installmentId: inst.id,
       due_date: String(inst.due_date).slice(0, 10),
       amount: String(inst.amount),
       notes: inst.notes || "",
       payment_method: inst.payment_method || (inst.is_paid ? "banka" : "none"),
-      cash_register_id: inst.cash_register_id
-        ? String(inst.cash_register_id)
-        : cashRegisterId,
-      bank_account_id: inst.bank_account_id ? String(inst.bank_account_id) : bankAccountId,
+      cash_register_id: cashOk ? String(inst.cash_register_id) : cashRegisterId,
+      bank_account_id: bankOk ? String(inst.bank_account_id) : "",
       is_paid: inst.is_paid,
       payment_date: inst.paid_at
         ? toIsoDate(inst.paid_at)
@@ -324,6 +365,7 @@ export default function LoanDetailPage() {
 
       {edit && (
         <form
+          ref={editFormRef}
           onSubmit={saveEdit}
           className="rounded border bg-white p-3 grid sm:grid-cols-2 gap-2 text-sm"
         >
@@ -331,6 +373,11 @@ export default function LoanDetailPage() {
             Taksit düzenle #{(loan.installments || []).find((i) => i.id === edit.installmentId)?.sequence}
             {edit.is_paid ? " (ödeme + kasa/banka)" : " (plan)"}
           </div>
+          {edit.prev_account_warning && (
+            <div className="sm:col-span-2 rounded bg-amber-50 border border-amber-200 text-amber-900 px-2 py-1 text-xs">
+              ⚠ {edit.prev_account_warning}
+            </div>
+          )}
           <label className="text-xs">
             <span className="text-baykus-muted">Vade</span>
             <input
@@ -461,7 +508,15 @@ export default function LoanDetailPage() {
               return (
                 <tr
                   key={inst.id}
-                  className={isOverdue ? "bg-red-50" : isSoon ? "bg-amber-50" : undefined}
+                  className={
+                    edit?.installmentId === inst.id
+                      ? "bg-blue-50"
+                      : isOverdue
+                        ? "bg-red-50"
+                        : isSoon
+                          ? "bg-amber-50"
+                          : undefined
+                  }
                 >
                   <td>{inst.sequence}</td>
                   <td>
@@ -471,7 +526,20 @@ export default function LoanDetailPage() {
                   </td>
                   <td className="text-right tabular-nums">{formatMoney(Number(inst.amount))}</td>
                   <td>{inst.is_paid ? "Ödendi" : "Bekliyor"}</td>
-                  <td className="text-xs font-medium">{accountLabel(inst)}</td>
+                  <td className="text-xs font-medium">
+                    {accountLabel(inst)}
+                    {inst.is_paid &&
+                      inst.payment_method === "banka" &&
+                      inst.bank_account_type &&
+                      !isPayableBank({ account_type: inst.bank_account_type }) && (
+                        <span
+                          className="ml-1 text-[10px] font-bold text-red-700"
+                          title="POS hesabı ödeme aracı değil — Düzenle ile doğru hesabı seçin"
+                        >
+                          ⚠ POS
+                        </span>
+                      )}
+                  </td>
                   <td className="text-xs text-baykus-muted">
                     {inst.is_paid
                       ? `${inst.payment_method || "—"} · ${inst.paid_at ? formatTrDateTime(inst.paid_at) : ""}`
@@ -488,13 +556,20 @@ export default function LoanDetailPage() {
                       >
                         Ödeme Yap
                       </button>
+                    ) : inst.locked ? (
+                      <span
+                        className="text-[11px] text-baykus-muted"
+                        title="BizimHesap'ta ödenmiş taksit (aktarım kaydı) — düzenlenemez"
+                      >
+                        🔒 BizimHesap
+                      </span>
                     ) : (
                       <span className="inline-flex gap-1">
                         <button
                           type="button"
                           disabled={busyId === inst.id}
                           onClick={() => startEdit(inst)}
-                          className="rounded border border-slate-300 text-xs px-2 py-1"
+                          className="rounded border border-slate-300 bg-white text-slate-800 text-xs px-2 py-1 hover:bg-slate-50"
                         >
                           Düzenle
                         </button>
@@ -502,7 +577,7 @@ export default function LoanDetailPage() {
                           type="button"
                           disabled={busyId === inst.id}
                           onClick={() => cancelPayment(inst)}
-                          className="rounded border border-red-200 text-red-700 text-xs px-2 py-1"
+                          className="rounded border border-red-200 bg-white text-red-700 text-xs px-2 py-1 hover:bg-red-50"
                         >
                           İptal Et
                         </button>

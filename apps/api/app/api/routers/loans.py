@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 
 
@@ -99,9 +100,11 @@ def _installment_out(db: Session, inst: LoanInstallment) -> LoanInstallmentOut:
     if inst.cash_register_id:
         reg = db.get(CashRegister, inst.cash_register_id)
         cash_name = reg.name if reg else None
+    bank_type = None
     if inst.bank_account_id:
         acc = db.get(BankAccount, inst.bank_account_id)
         bank_name = acc.name if acc else None
+        bank_type = acc.account_type if acc else None
     return LoanInstallmentOut(
         id=inst.id,
         loan_id=inst.loan_id,
@@ -115,7 +118,9 @@ def _installment_out(db: Session, inst: LoanInstallment) -> LoanInstallmentOut:
         cash_register_name=cash_name,
         bank_account_id=inst.bank_account_id,
         bank_account_name=bank_name,
+        bank_account_type=bank_type,
         notes=inst.notes,
+        locked=_is_bh_paid(inst),
     )
 
 
@@ -145,12 +150,48 @@ def _get_inst(loan: Loan, installment_id: int) -> LoanInstallment:
     return inst
 
 
+_POS_RE = re.compile(r"\bpos\b", re.IGNORECASE)
+
+
+def _is_pos_account(acc: BankAccount | None) -> bool:
+    return bool(acc and _POS_RE.search(acc.account_type or ""))
+
+
+def _is_bh_paid(inst: LoanInstallment) -> bool:
+    """Taksit BizimHesap'ta ödenmiş ve öyle aktarılmış mı?
+
+    BH aktarımı: is_paid + kasa/banka hareketi yok + not BH-PLAN + paid_at tam gece yarısı.
+    Baykuş'ta "Ödeme Yap" ile ödenen taksitlerde saat bilgisi / hareket bağı olur → kilitli değil.
+    """
+    if not inst.is_paid or inst.cash_movement_id or inst.bank_movement_id:
+        return False
+    if "BH-PLAN:" not in (inst.notes or "") and "BH_IMPORT:" not in (inst.notes or ""):
+        return False
+    pa = inst.paid_at
+    return pa is None or (isinstance(pa, datetime) and pa.time() == time(0, 0))
+
+
+def _user_note(notes: str | None) -> str | None:
+    """Hareket açıklaması için BH-PLAN / BH_IMPORT izlerini ayıkla."""
+    if not notes:
+        return None
+    parts = [
+        p.strip()
+        for p in re.split(r"\s*\|\s*|\n", notes)
+        if p.strip() and not p.strip().startswith(("BH-PLAN:", "BH_IMPORT:", "BH-ID:"))
+    ]
+    return " | ".join(parts) or None
+
+
 def _refuse_bh(loan: Loan, inst: LoanInstallment) -> None:
-    blob = f"{loan.notes or ''}\n{inst.notes or ''}"
-    if "BH_IMPORT:" in blob or "BH_PLAN:" in blob:
+    """Yalnızca BizimHesap'ta ödenmiş (aktarılmış) taksit ödemeleri kilitli.
+
+    BH'den gelen kredinin bekleyen planı ve Baykuş'ta yapılan ödemeleri düzenlenebilir.
+    """
+    if _is_bh_paid(inst):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="BizimHesap aktarım kayıtları düzenlenemez / iptal edilemez",
+            detail="BizimHesap'ta ödenmiş taksit aktarım kaydıdır; düzenlenemez / iptal edilemez",
         )
 
 
@@ -214,6 +255,11 @@ def _post_finance(
         acc = db.get(BankAccount, bank_account_id)
         if not acc or not acc.is_active:
             raise HTTPException(status_code=400, detail="Banka hesabı bulunamadı")
+        if _is_pos_account(acc):
+            raise HTTPException(
+                status_code=400,
+                detail="POS hesabı ödeme aracı değildir; kredi taksiti banka / kredi kartı / kasa hesabından ödenmelidir",
+            )
         mov = BankMovement(
             bank_account_id=acc.id,
             movement_type="withdrawal",
@@ -231,7 +277,7 @@ def _post_finance(
     elif payment_method == "banka" and bank_account_id:
         # Mark-only or post_finance false — still record which account if provided
         acc = db.get(BankAccount, bank_account_id)
-        if acc:
+        if acc and not _is_pos_account(acc):
             inst.bank_account_id = acc.id
     elif payment_method == "nakit" and cash_register_id:
         reg = db.get(CashRegister, cash_register_id)
@@ -534,7 +580,7 @@ def update_installment(
             payment_method=method,
             cash_register_id=cash_id,
             bank_account_id=bank_id,
-            notes=inst.notes,
+            notes=_user_note(inst.notes),
             post_finance=post_finance,
             payment_date=pay_day,
         )
