@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BankAccount, CashRegister, Expense, ExpenseCategory, apiFetch, formatMoney } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
 import { isBhImportNote, sanitizeDisplayNote } from "@/lib/bhNote";
@@ -82,6 +82,9 @@ export default function ExpensesPage() {
   const [catDesc, setCatDesc] = useState("");
   const [editCatId, setEditCatId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Kopyala: kaynak masraf #id (yeni kayıt oluşturulur, orijinal değişmez) */
+  const [copyOfId, setCopyOfId] = useState<number | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState({
     category_id: "",
     amount: "",
@@ -144,6 +147,77 @@ export default function ExpensesPage() {
     (e) => e.id,
   );
 
+
+  /** Masraf satırını yeni masraf formuna aktar: tarih bugün, belge no boş, vade aynı gün farkıyla. */
+  const copyExpense = useCallback(
+    (src: Expense) => {
+      const today = localToday();
+      let due = "";
+      if (src.due_date) {
+        const d0 = new Date(`${String(src.expense_date).slice(0, 10)}T00:00:00`);
+        const d1 = new Date(`${String(src.due_date).slice(0, 10)}T00:00:00`);
+        const diff = Math.round((d1.getTime() - d0.getTime()) / 86400000);
+        if (Number.isFinite(diff) && diff >= 0) {
+          const t = new Date(`${today}T00:00:00`);
+          t.setDate(t.getDate() + diff);
+          due = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+        }
+      }
+      const method = src.payment_method === "banka" ? "banka" : "nakit";
+      const catActive = categories.some((c) => c.id === src.category_id && c.is_active !== false);
+      const cashOk = src.cash_register_id != null && cashRegs.some((r) => r.id === src.cash_register_id);
+      const bankOk = src.bank_account_id != null && banks.some((b) => b.id === src.bank_account_id);
+      setForm((f) => ({
+        ...f,
+        category_id: catActive ? String(src.category_id) : f.category_id,
+        amount: String(Number(src.amount) || ""),
+        expense_date: today,
+        due_date: due,
+        document_no: "",
+        payment_method: method,
+        cash_register_id: method === "nakit" && cashOk ? String(src.cash_register_id) : f.cash_register_id,
+        bank_account_id: method === "banka" && bankOk ? String(src.bank_account_id) : f.bank_account_id,
+        note: sanitizeDisplayNote(src.note) || "",
+        post_immediately: true,
+      }));
+      setCopyOfId(src.id);
+      setError("");
+      setMsg(
+        catActive
+          ? `Masraf #${src.id} forma kopyalandı — kontrol edip Kaydet'e basın`
+          : `Masraf #${src.id} forma kopyalandı — kalem pasif, masraf kalemini seçin`,
+      );
+      if (typeof window !== "undefined") {
+        formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    },
+    [categories, cashRegs, banks],
+  );
+
+  // Hesaplarım → İşlem ▾ → Kopyala (masraf kaynaklı satır): /finance/expenses?copy=<id>
+  const [pendingCopyId, setPendingCopyId] = useState<number | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = new URLSearchParams(window.location.search).get("copy");
+    const n = raw ? Number(raw) : NaN;
+    if (Number.isFinite(n) && n > 0) setPendingCopyId(n);
+  }, []);
+  useEffect(() => {
+    if (pendingCopyId == null || categories.length === 0) return;
+    const id = pendingCopyId;
+    setPendingCopyId(null);
+    (async () => {
+      try {
+        const src =
+          items.find((x) => x.id === id) || (await apiFetch<Expense>(`/api/finance/expenses/${id}`));
+        copyExpense(src);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Kopyalanacak masraf bulunamadı");
+      } finally {
+        window.history.replaceState(null, "", "/finance/expenses");
+      }
+    })();
+  }, [pendingCopyId, categories.length, items, copyExpense]);
 
   async function addCategory(e: FormEvent) {
     e.preventDefault();
@@ -238,8 +312,16 @@ export default function ExpensesPage() {
           post_immediately: form.post_immediately,
         }),
       });
-      setForm((f) => ({ ...f, amount: "", note: "", document_no: "", due_date: "" }));
-      setMsg("Masraf kaydedildi");
+      setForm((f) => ({
+        ...f,
+        amount: "",
+        note: "",
+        document_no: "",
+        due_date: "",
+        expense_date: copyOfId ? localToday() : f.expense_date,
+      }));
+      setMsg(copyOfId ? `Kopya oluşturuldu (masraf #${copyOfId} → yeni kayıt)` : "Masraf kaydedildi");
+      setCopyOfId(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gider kaydı başarısız");
@@ -438,7 +520,7 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      <form onSubmit={addExpense} className="bk-card p-3 grid md:grid-cols-4 gap-2 text-sm">
+      <form ref={formRef} onSubmit={addExpense} className="bk-card p-3 grid md:grid-cols-4 gap-2 text-sm scroll-mt-4">
         <div className="md:col-span-4 font-semibold text-sm flex items-center gap-2">
           <span
             className="inline-flex rounded px-2 py-1 text-xs text-white"
@@ -446,6 +528,29 @@ export default function ExpensesPage() {
           >
             + Yeni Masraf Gir
           </span>
+          {copyOfId ? (
+            <span className="text-xs font-normal text-slate-600">
+              Kopya (#{copyOfId}) — yeni kayıt oluşturulur, orijinal değişmez ·{" "}
+              <button
+                type="button"
+                className="text-baykus-primary hover:underline"
+                onClick={() => {
+                  setCopyOfId(null);
+                  setMsg("");
+                  setForm((f) => ({
+                    ...f,
+                    amount: "",
+                    note: "",
+                    document_no: "",
+                    due_date: "",
+                    expense_date: localToday(),
+                  }));
+                }}
+              >
+                Vazgeç
+              </button>
+            </span>
+          ) : null}
         </div>
         <select
           className="bk-input"
@@ -673,6 +778,14 @@ export default function ExpensesPage() {
                   </td>
                   <td className="text-xs text-baykus-muted max-w-[160px] truncate">{sanitizeDisplayNote(e.note) || "—"}</td>
                   <td className="text-right text-xs whitespace-nowrap space-x-2">
+                    <button
+                      type="button"
+                      className="text-baykus-primary font-semibold hover:underline"
+                      title="Aynı bilgilerle yeni masraf formu (bugünün tarihiyle)"
+                      onClick={() => copyExpense(e)}
+                    >
+                      Kopyala
+                    </button>
                     {!cancelled && !e.is_posted && (
                       <>
                         <button

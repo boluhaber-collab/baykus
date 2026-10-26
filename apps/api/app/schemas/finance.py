@@ -63,7 +63,13 @@ class CashMovementOut(BaseModel):
     bank_account_name: str | None = None
     transfer_group_id: str | None = None
     transfer_counterpart_name: str | None = None
+    transfer_counterpart_key: str | None = None
     cari_movement_id: int | None = None
+    supplier_id: int | None = None
+    supplier_movement_id: int | None = None
+    # Sistem bağlantısı: "cari" | "supplier" | "loan" | "expense" | None (kopyalanabilir düz hareket)
+    link_source: str | None = None
+    expense_id: int | None = None
     created_by_user_id: int | None = None
     created_by_user_name: str | None = None
     created_at: datetime
@@ -146,7 +152,13 @@ class BankMovementOut(BaseModel):
     counterpart_bank_account_id: int | None = None
     transfer_group_id: str | None = None
     transfer_counterpart_name: str | None = None
+    transfer_counterpart_key: str | None = None
     cari_movement_id: int | None = None
+    supplier_id: int | None = None
+    supplier_movement_id: int | None = None
+    # Sistem bağlantısı: "cari" | "supplier" | "loan" | "expense" | None (kopyalanabilir düz hareket)
+    link_source: str | None = None
+    expense_id: int | None = None
     created_by_user_id: int | None = None
     created_by_user_name: str | None = None
     created_at: datetime

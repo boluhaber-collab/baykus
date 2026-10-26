@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import AccountDetailLedger from "@/components/AccountDetailLedger";
+import AccountDetailLedger, {
+  type AccountLedgerRow,
+  copyNoteFor,
+  ledgerCopyInfo,
+} from "@/components/AccountDetailLedger";
 import StatusFooter from "@/components/StatusFooter";
 import VirmanModal from "@/components/VirmanModal";
 import {
@@ -26,6 +30,16 @@ export default function CashDetailPage() {
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<Panel>("none");
   const [showVirman, setShowVirman] = useState(false);
+  /** Kopyala: kaynak satır (#id) + virman ön-doldurma */
+  const [copyOfId, setCopyOfId] = useState<number | null>(null);
+  const [copyMovementType, setCopyMovementType] = useState<string | null>(null);
+  const [virmanCopy, setVirmanCopy] = useState<{
+    id: number;
+    fromKey: string;
+    toKey: string;
+    amount: string;
+    note: string;
+  } | null>(null);
 
   const [editName, setEditName] = useState("");
   const [editOpening, setEditOpening] = useState("0");
@@ -64,7 +78,52 @@ export default function CashDetailPage() {
   function openPanel(p: Panel) {
     setOkMsg("");
     setError("");
+    setCopyOfId(null);
+    setCopyMovementType(null);
+    if (p === "in" || p === "out") {
+      setFormAmount("");
+      setFormNote("");
+      setFormDate(localToday());
+    }
     setPanel((cur) => (cur === p ? "none" : p));
+  }
+
+  /** İşlem ▾ → Kopyala: yeni kayıt formu aynı bilgilerle, tarih bugün; orijinal değişmez. */
+  function onCopyRow(row: AccountLedgerRow) {
+    setOkMsg("");
+    setError("");
+    const info = ledgerCopyInfo(row);
+    if (info.mode === "blocked") {
+      setError(info.reason);
+      return;
+    }
+    if (info.mode === "expense") return;
+    const amount = String(Number(row.amount ?? 0) || "");
+    const note = copyNoteFor(row);
+    if (info.mode === "transfer") {
+      const self = `cash:${id}`;
+      const other = row.transfer_counterpart_key || "";
+      const isOut = row.direction !== "in";
+      setPanel("none");
+      setVirmanCopy({
+        id: row.id,
+        fromKey: isOut ? self : other,
+        toKey: isOut ? other : self,
+        amount,
+        note,
+      });
+      setShowVirman(true);
+      return;
+    }
+    setVirmanCopy(null);
+    setCopyOfId(row.id);
+    setCopyMovementType(row.movement_type);
+    setFormAmount(amount);
+    setFormNote(note);
+    setFormDate(localToday());
+    if (row.direction !== "in") setFormTypeOut(row.movement_type === "gider" ? "gider" : "odeme");
+    setPanel(row.direction === "in" ? "in" : "out");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function onUpdate(e: FormEvent) {
@@ -111,7 +170,15 @@ export default function CashDetailPage() {
       });
       setFormAmount("");
       setFormNote("");
-      setOkMsg(direction === "in" ? "Para girişi kaydedildi" : "Para çıkışı kaydedildi");
+      setOkMsg(
+        copyOfId
+          ? `Kopya oluşturuldu (#${copyOfId} → yeni ${direction === "in" ? "para girişi" : "para çıkışı"})`
+          : direction === "in"
+            ? "Para girişi kaydedildi"
+            : "Para çıkışı kaydedildi",
+      );
+      setCopyOfId(null);
+      setCopyMovementType(null);
       setPanel("none");
       await load();
     } catch (err) {
@@ -177,6 +244,11 @@ export default function CashDetailPage() {
       >
         <div className="sm:col-span-2 lg:col-span-4 font-semibold">
           {panel === "in" ? "Para Girişi / Tahsilat" : "Para Çıkışı / Ödeme"}
+          {copyOfId ? (
+            <span className="ml-2 text-xs font-normal text-slate-600">
+              · Kopya (#{copyOfId}) — yeni kayıt oluşturulur, orijinal değişmez
+            </span>
+          ) : null}
         </div>
         {panel === "out" ? (
           <label className="text-xs">
@@ -250,6 +322,8 @@ export default function CashDetailPage() {
               className={chip(showVirman, "purple")}
               onClick={() => {
                 setPanel("none");
+                setCopyOfId(null);
+                setVirmanCopy(null);
                 setShowVirman(true);
               }}
             >
@@ -268,6 +342,7 @@ export default function CashDetailPage() {
         hareketFallback={CASH_HAREKET_LABELS}
         ledgerKind="cash"
         onRowMutated={load}
+        onCopy={onCopyRow}
         onRowError={(msg) => {
           setOkMsg("");
           setError(msg);
@@ -279,8 +354,15 @@ export default function CashDetailPage() {
       />
       <VirmanModal
         open={showVirman}
-        onClose={() => setShowVirman(false)}
-        defaultFromKey={`cash:${id}`}
+        onClose={() => {
+          setShowVirman(false);
+          setVirmanCopy(null);
+        }}
+        defaultToKey={virmanCopy?.toKey ?? null}
+        defaultAmount={virmanCopy?.amount ?? null}
+        defaultNote={virmanCopy?.note ?? null}
+        copyOfId={virmanCopy?.id ?? null}
+        defaultFromKey={virmanCopy ? virmanCopy.fromKey : `cash:${id}`}
         onSaved={(msg) => {
           setOkMsg(msg);
           void load();

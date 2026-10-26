@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import AccountDetailLedger from "@/components/AccountDetailLedger";
+import AccountDetailLedger, {
+  type AccountLedgerRow,
+  copyNoteFor,
+  ledgerCopyInfo,
+} from "@/components/AccountDetailLedger";
 import StatusFooter from "@/components/StatusFooter";
 import VirmanModal from "@/components/VirmanModal";
 import {
@@ -26,6 +30,16 @@ export default function BankDetailPage() {
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState<Panel>("none");
   const [showVirman, setShowVirman] = useState(false);
+  /** Kopyala: kaynak satır (#id) + virman ön-doldurma */
+  const [copyOfId, setCopyOfId] = useState<number | null>(null);
+  const [copyMovementType, setCopyMovementType] = useState<string | null>(null);
+  const [virmanCopy, setVirmanCopy] = useState<{
+    id: number;
+    fromKey: string;
+    toKey: string;
+    amount: string;
+    note: string;
+  } | null>(null);
 
   // Update form
   const [editName, setEditName] = useState("");
@@ -71,7 +85,51 @@ export default function BankDetailPage() {
   function openPanel(p: Panel) {
     setOkMsg("");
     setError("");
+    setCopyOfId(null);
+    setCopyMovementType(null);
+    if (p === "in" || p === "out") {
+      setFormAmount("");
+      setFormNote("");
+      setFormDate(localToday());
+    }
     setPanel((cur) => (cur === p ? "none" : p));
+  }
+
+  /** İşlem ▾ → Kopyala: yeni kayıt formu aynı bilgilerle, tarih bugün; orijinal değişmez. */
+  function onCopyRow(row: AccountLedgerRow) {
+    setOkMsg("");
+    setError("");
+    const info = ledgerCopyInfo(row);
+    if (info.mode === "blocked") {
+      setError(info.reason);
+      return;
+    }
+    if (info.mode === "expense") return;
+    const amount = String(Number(row.amount ?? 0) || "");
+    const note = copyNoteFor(row);
+    if (info.mode === "transfer") {
+      const self = `bank:${id}`;
+      const other = row.transfer_counterpart_key || "";
+      const isOut = row.direction !== "in";
+      setPanel("none");
+      setVirmanCopy({
+        id: row.id,
+        fromKey: isOut ? self : other,
+        toKey: isOut ? other : self,
+        amount,
+        note,
+      });
+      setShowVirman(true);
+      return;
+    }
+    setVirmanCopy(null);
+    setCopyOfId(row.id);
+    setCopyMovementType(row.movement_type);
+    setFormAmount(amount);
+    setFormNote(note);
+    setFormDate(localToday());
+    setPanel(row.direction === "in" ? "in" : "out");
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function onUpdate(e: FormEvent) {
@@ -111,7 +169,12 @@ export default function BankDetailPage() {
       await apiFetch(`/api/finance/banks/${id}/movements`, {
         method: "POST",
         body: JSON.stringify({
-          movement_type: direction === "in" ? "deposit" : "withdrawal",
+          movement_type:
+            direction === "in"
+              ? "deposit"
+              : copyMovementType === "fee"
+                ? "fee"
+                : "withdrawal",
           amount: Number(formAmount),
           movement_date: formDate || null,
           note: formNote.trim() || (direction === "in" ? "Para Girişi" : "Para Çıkışı"),
@@ -119,7 +182,15 @@ export default function BankDetailPage() {
       });
       setFormAmount("");
       setFormNote("");
-      setOkMsg(direction === "in" ? "Para girişi kaydedildi" : "Para çıkışı kaydedildi");
+      setOkMsg(
+        copyOfId
+          ? `Kopya oluşturuldu (#${copyOfId} → yeni ${direction === "in" ? "para girişi" : "para çıkışı"})`
+          : direction === "in"
+            ? "Para girişi kaydedildi"
+            : "Para çıkışı kaydedildi",
+      );
+      setCopyOfId(null);
+      setCopyMovementType(null);
       setPanel("none");
       await load();
     } catch (err) {
@@ -228,6 +299,11 @@ export default function BankDetailPage() {
       >
         <div className="sm:col-span-2 lg:col-span-4 font-semibold">
           {panel === "in" ? "Para Girişi" : "Para Çıkışı"}
+          {copyOfId ? (
+            <span className="ml-2 text-xs font-normal text-slate-600">
+              · Kopya (#{copyOfId}) — yeni kayıt oluşturulur, orijinal değişmez
+            </span>
+          ) : null}
         </div>
         <label className="text-xs">
           <span className="block mb-0.5 opacity-80">Tutar *</span>
@@ -290,6 +366,8 @@ export default function BankDetailPage() {
               className={chip(showVirman, "purple")}
               onClick={() => {
                 setPanel("none");
+                setCopyOfId(null);
+                setVirmanCopy(null);
                 setShowVirman(true);
               }}
             >
@@ -308,6 +386,7 @@ export default function BankDetailPage() {
         hareketFallback={BANK_HAREKET_LABELS}
         ledgerKind="bank"
         onRowMutated={load}
+        onCopy={onCopyRow}
         onRowError={(msg) => {
           setOkMsg("");
           setError(msg);
@@ -319,8 +398,15 @@ export default function BankDetailPage() {
       />
       <VirmanModal
         open={showVirman}
-        onClose={() => setShowVirman(false)}
-        defaultFromKey={`bank:${id}`}
+        onClose={() => {
+          setShowVirman(false);
+          setVirmanCopy(null);
+        }}
+        defaultToKey={virmanCopy?.toKey ?? null}
+        defaultAmount={virmanCopy?.amount ?? null}
+        defaultNote={virmanCopy?.note ?? null}
+        copyOfId={virmanCopy?.id ?? null}
+        defaultFromKey={virmanCopy ? virmanCopy.fromKey : `bank:${id}`}
         onSaved={(msg) => {
           setOkMsg(msg);
           void load();

@@ -633,6 +633,11 @@ export type CashMovement = {
   bank_account_name?: string | null;
   transfer_group_id?: string | null;
   transfer_counterpart_name?: string | null;
+  /** "cash:<id>" | "bank:<id>" — karşı virman bacağı */
+  transfer_counterpart_key?: string | null;
+  /** Sistem bağlantısı: cari | supplier | loan | expense — Kopyala bunlarda kapalı / kaynağa yönlenir */
+  link_source?: string | null;
+  expense_id?: number | null;
   running_balance?: number | null;
   direction: "in" | "out" | string;
   created_by_user_id?: number | null;
@@ -655,6 +660,11 @@ export type BankMovement = {
   counterpart_bank_account_id?: number | null;
   transfer_group_id?: string | null;
   transfer_counterpart_name?: string | null;
+  /** "cash:<id>" | "bank:<id>" — karşı virman bacağı */
+  transfer_counterpart_key?: string | null;
+  /** Sistem bağlantısı: cari | supplier | loan | expense — Kopyala bunlarda kapalı / kaynağa yönlenir */
+  link_source?: string | null;
+  expense_id?: number | null;
   running_balance?: number | null;
   direction: "in" | "out" | string;
   created_by_user_id?: number | null;

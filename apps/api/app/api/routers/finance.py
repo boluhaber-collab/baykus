@@ -168,6 +168,20 @@ def _transfer_counterpart_name(db: Session | None, leg: CashMovement | BankMovem
     return None
 
 
+def _transfer_counterpart_key(db: Session | None, leg: CashMovement | BankMovement) -> str | None:
+    """"cash:<id>" | "bank:<id>" of the other transfer leg (used by Kopyala → Virman)."""
+    if db is None or not leg.transfer_group_id:
+        return None
+    pc, pb = _transfer_peers(db, leg.transfer_group_id)
+    for peer in pc + pb:
+        if type(peer) is type(leg) and peer.id == leg.id:
+            continue
+        if isinstance(peer, CashMovement):
+            return f"cash:{peer.cash_register_id}"
+        return f"bank:{peer.bank_account_id}"
+    return None
+
+
 def _relabel_transfer_peers(db: Session, peers: list, user_note: str | None) -> None:
     """Edit: each leg gets its own directional Virman note (never the same text on both)."""
     for peer in peers:
@@ -320,14 +334,54 @@ def _bank_out(db: Session, acc: BankAccount) -> BankAccountOut:
     )
 
 
+def _movement_links(db: Session | None, kind: str, ids: list[int]) -> dict[int, tuple[str, int | None]]:
+    """Which kasa/banka rows were produced by another module (gider / kredi taksiti).
+
+    Returns {movement_id: (link_source, expense_id)} — used by the UI to decide
+    whether "Kopyala" is safe (plain movement) or must go through the source form.
+    """
+    out: dict[int, tuple[str, int | None]] = {}
+    if db is None or not ids:
+        return out
+    from app.models.loan import LoanInstallment
+
+    exp_col = Expense.cash_movement_id if kind == "cash" else Expense.bank_movement_id
+    loan_col = LoanInstallment.cash_movement_id if kind == "cash" else LoanInstallment.bank_movement_id
+    for i in range(0, len(ids), 500):
+        chunk = ids[i : i + 500]
+        for mid in db.query(loan_col).filter(loan_col.in_(chunk)).all():
+            if mid[0] is not None:
+                out[mid[0]] = ("loan", None)
+        for mid, eid in db.query(exp_col, Expense.id).filter(exp_col.in_(chunk)).all():
+            if mid is not None and mid not in out:
+                out[mid] = ("expense", eid)
+    return out
+
+
+def _link_source(m, links: dict[int, tuple[str, int | None]] | None, db: Session | None, kind: str) -> tuple[str | None, int | None]:
+    if links is None:
+        links = _movement_links(db, kind, [m.id])
+    if m.id in links:
+        return links[m.id]
+    if (m.category or "") == "kredi_taksit":
+        return ("loan", None)
+    if m.supplier_movement_id is not None or m.supplier_id is not None:
+        return ("supplier", None)
+    if m.cari_movement_id is not None or m.customer_id is not None:
+        return ("cari", None)
+    return (None, None)
+
+
 def _cash_movement_out(
     m: CashMovement,
     running: Decimal | None = None,
     db: Session | None = None,
+    links: dict[int, tuple[str, int | None]] | None = None,
 ) -> CashMovementOut:
     cust_name = m.customer.name if m.customer is not None else None
     bank_name = m.bank_account.name if m.bank_account is not None else None
     user_name = _user_display_name(db, m.created_by_user_id) if db is not None else None
+    link_src, expense_id = _link_source(m, links, db, "cash")
     return CashMovementOut(
         id=m.id,
         cash_register_id=m.cash_register_id,
@@ -342,7 +396,12 @@ def _cash_movement_out(
         bank_account_name=bank_name,
         transfer_group_id=m.transfer_group_id,
         transfer_counterpart_name=_transfer_counterpart_name(db, m),
+        transfer_counterpart_key=_transfer_counterpart_key(db, m),
         cari_movement_id=m.cari_movement_id,
+        supplier_id=m.supplier_id,
+        supplier_movement_id=m.supplier_movement_id,
+        link_source=link_src,
+        expense_id=expense_id,
         created_by_user_id=m.created_by_user_id,
         created_by_user_name=user_name,
         created_at=m.created_at,
@@ -355,10 +414,12 @@ def _bank_movement_out(
     m: BankMovement,
     running: Decimal | None = None,
     db: Session | None = None,
+    links: dict[int, tuple[str, int | None]] | None = None,
 ) -> BankMovementOut:
     cust_name = m.customer.name if m.customer is not None else None
     acc_name = m.bank_account.name if m.bank_account is not None else None
     user_name = _user_display_name(db, m.created_by_user_id) if db is not None else None
+    link_src, expense_id = _link_source(m, links, db, "bank")
     return BankMovementOut(
         id=m.id,
         bank_account_id=m.bank_account_id,
@@ -374,7 +435,12 @@ def _bank_movement_out(
         counterpart_bank_account_id=m.counterpart_bank_account_id,
         transfer_group_id=m.transfer_group_id,
         transfer_counterpart_name=_transfer_counterpart_name(db, m),
+        transfer_counterpart_key=_transfer_counterpart_key(db, m),
         cari_movement_id=m.cari_movement_id,
+        supplier_id=m.supplier_id,
+        supplier_movement_id=m.supplier_movement_id,
+        link_source=link_src,
+        expense_id=expense_id,
         created_by_user_id=m.created_by_user_id,
         created_by_user_name=user_name,
         created_at=m.created_at,
@@ -996,9 +1062,11 @@ def list_cash_movements(
                 else:
                     bal -= _dec(m.amount)
                 run_map[m.id] = bal
-            return [_cash_movement_out(m, run_map.get(m.id), db) for m in rows]
+            links = _movement_links(db, "cash", [r.id for r in rows])
+            return [_cash_movement_out(m, run_map.get(m.id), db, links) for m in rows]
 
-    return [_cash_movement_out(m, db=db) for m in rows]
+    links = _movement_links(db, "cash", [r.id for r in rows])
+    return [_cash_movement_out(m, db=db, links=links) for m in rows]
 
 
 @router.post("/cash/movements", response_model=CashMovementOut, status_code=status.HTTP_201_CREATED)
@@ -1301,7 +1369,8 @@ def list_bank_account_movements(
         else:
             bal -= _dec(m.amount)
         run_map[m.id] = bal
-    return [_bank_movement_out(m, run_map.get(m.id), db) for m in rows]
+    links = _movement_links(db, "bank", [r.id for r in rows])
+    return [_bank_movement_out(m, run_map.get(m.id), db, links) for m in rows]
 
 
 @router.post(
@@ -1365,7 +1434,8 @@ def list_all_bank_movements(
     if to_date:
         q = q.filter(BankMovement.movement_date <= to_date)
     rows = q.order_by(BankMovement.movement_date.desc(), BankMovement.id.desc()).offset(skip).limit(limit).all()
-    return [_bank_movement_out(m, db=db) for m in rows]
+    links = _movement_links(db, "bank", [r.id for r in rows])
+    return [_bank_movement_out(m, db=db, links=links) for m in rows]
 
 
 @router.delete("/bank-movements/{movement_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -16,6 +16,13 @@ type Props = {
   onSaved: (message: string) => void;
   /** Prefill source account key "cash:1" | "bank:5" */
   defaultFromKey?: string | null;
+  /** Prefill target account key (Kopyala) */
+  defaultToKey?: string | null;
+  /** Prefill amount / note (Kopyala) */
+  defaultAmount?: string | number | null;
+  defaultNote?: string | null;
+  /** Kopya modu: başlık + başarı mesajı "Kopya oluşturuldu" */
+  copyOfId?: number | null;
   cash?: CashRegister[];
   banks?: BankAccount[];
 };
@@ -35,6 +42,10 @@ export default function VirmanModal({
   onClose,
   onSaved,
   defaultFromKey = null,
+  defaultToKey = null,
+  defaultAmount = null,
+  defaultNote = null,
+  copyOfId = null,
   cash: cashProp,
   banks: banksProp,
 }: Props) {
@@ -52,8 +63,8 @@ export default function VirmanModal({
   useEffect(() => {
     if (!open) return;
     setError("");
-    setAmount("");
-    setNote("");
+    setAmount(defaultAmount != null && defaultAmount !== "" ? String(defaultAmount) : "");
+    setNote(defaultNote || "");
     setDate(localToday());
     let cancelled = false;
 
@@ -105,9 +116,17 @@ export default function VirmanModal({
       ? defaultFromKey
       : keyOf(options[0]!);
     setFromKey(preferred);
+    if (
+      defaultToKey &&
+      defaultToKey !== preferred &&
+      options.some((o) => keyOf(o) === defaultToKey)
+    ) {
+      setToKey(defaultToKey);
+      return;
+    }
     const toCandidate = options.find((o) => keyOf(o) !== preferred);
     setToKey(toCandidate ? keyOf(toCandidate) : "");
-  }, [open, loaded, options, defaultFromKey]);
+  }, [open, loaded, options, defaultFromKey, defaultToKey]);
 
   const fromAcc = options.find((o) => keyOf(o) === fromKey) || null;
   const toAcc = options.find((o) => keyOf(o) === toKey) || null;
@@ -152,7 +171,11 @@ export default function VirmanModal({
             from.kind === "cash" ? from.id : to.kind === "cash" ? to.id : null,
         }),
       });
-      onSaved(`Virman kaydedildi · ${formatMoney(amt)}`);
+      onSaved(
+        copyOfId
+          ? `Kopya oluşturuldu · Virman ${formatMoney(amt)}`
+          : `Virman kaydedildi · ${formatMoney(amt)}`,
+      );
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transfer hatası");
@@ -172,7 +195,9 @@ export default function VirmanModal({
       >
         <div className="flex items-center justify-between px-4 py-3 text-white" style={{ background: "#1f6feb" }}>
           <div>
-            <div className="text-sm font-bold">Para Transferi / Virman</div>
+            <div className="text-sm font-bold">
+              Para Transferi / Virman{copyOfId ? ` · Kopya (#${copyOfId})` : ""}
+            </div>
             <div className="text-[11px] opacity-90">Hesaplar arası transfer · kasa ↔ banka ↔ ortak</div>
           </div>
           <button type="button" className="text-white/90 text-xl leading-none px-1" onClick={onClose} aria-label="Kapat">

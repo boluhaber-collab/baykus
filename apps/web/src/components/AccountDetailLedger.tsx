@@ -31,6 +31,10 @@ export type AccountLedgerRow = {
   bank_account_id?: number | null;
   transfer_group_id?: string | null;
   transfer_counterpart_name?: string | null;
+  transfer_counterpart_key?: string | null;
+  link_source?: string | null;
+  expense_id?: number | null;
+  category?: string | null;
 };
 
 export type AccountLedgerKind = "cash" | "bank";
@@ -57,7 +61,51 @@ export type AccountDetailLedgerProps = {
   onRowMutated?: () => void | Promise<void>;
   onRowError?: (message: string) => void;
   onRowOk?: (message: string) => void;
+  /** "Kopyala" — sayfa yeni kayıt formunu bu satırla doldurur (orijinal değişmez). */
+  onCopy?: (row: AccountLedgerRow) => void;
 };
+
+export type LedgerCopyInfo =
+  | { mode: "plain" }
+  | { mode: "transfer" }
+  | { mode: "expense"; href: string }
+  | { mode: "blocked"; reason: string };
+
+/**
+ * Kopyala güvenli mi? Satış/alış/cari/kredi bağlantılı hareketler kopyalanmaz
+ * (düz kasa/banka hareketi olarak çoğaltmak cari/taksit bakiyesini bozar).
+ * Masraf kaynaklı satır → Masraflar kopya formuna yönlenir.
+ */
+export function ledgerCopyInfo(row: AccountLedgerRow): LedgerCopyInfo {
+  const src = (row.link_source || "").trim();
+  if (src === "expense" && row.expense_id) {
+    return { mode: "expense", href: `/finance/expenses?copy=${row.expense_id}` };
+  }
+  if (src === "loan") return { mode: "blocked", reason: "Kredi taksit ödemesi — Krediler ekranından ödenir" };
+  if (src === "cari") return { mode: "blocked", reason: "Cari / satış tahsilatı — cari ekranından girilir" };
+  if (src === "supplier") return { mode: "blocked", reason: "Tedarikçi / alış ödemesi — tedarikçi ekranından girilir" };
+  const raw = row.note || "";
+  if (/\bSIP-\d{4}-\d+/i.test(raw) || /sat[ıi]ş\s+tahsilat/i.test(raw)) {
+    return { mode: "blocked", reason: "Satış tahsilatı — siparişe bağlı" };
+  }
+  if ((row.category || "") === "kredi_taksit" || /^\s*Kredi taksit/i.test(raw)) {
+    return { mode: "blocked", reason: "Kredi taksit ödemesi — Krediler ekranından ödenir" };
+  }
+  if (row.transfer_group_id) {
+    return row.transfer_counterpart_key
+      ? { mode: "transfer" }
+      : { mode: "blocked", reason: "Virman karşı hesabı bulunamadı" };
+  }
+  return { mode: "plain" };
+}
+
+/** Virman bacağındaki otomatik "Virman çıkışı → X ·" önekini atıp kullanıcı notunu bırakır. */
+export function copyNoteFor(row: AccountLedgerRow): string {
+  let t = accountAciklama(row.note) || "";
+  t = t.replace(/^\s*Virman\s+(?:çıkışı|girişi)\s*[→←]\s*[^·]*(?:·\s*)?/i, "");
+  t = t.replace(/^\s*.+?\s+hesab[ıi]ndan\s+.+?\s+hesab[ıi]na\s+transfer\s*(?:-\s*)?/i, "");
+  return t.trim();
+}
 
 async function printMovementSlip(m: AccountLedgerRow, accountTitle: string, islem: string) {
   const isIn = m.direction === "in";
@@ -131,6 +179,7 @@ function RowIslemMenu({
   islem,
   ledgerKind,
   onEdit,
+  onCopy,
   onRowMutated,
   onRowError,
   onRowOk,
@@ -140,6 +189,7 @@ function RowIslemMenu({
   islem: string;
   ledgerKind?: AccountLedgerKind;
   onEdit?: (row: AccountLedgerRow) => void;
+  onCopy?: (row: AccountLedgerRow) => void;
   onRowMutated?: () => void | Promise<void>;
   onRowError?: (message: string) => void;
   onRowOk?: (message: string) => void;
@@ -150,6 +200,7 @@ function RowIslemMenu({
   const fileRef = useRef<HTMLInputElement>(null);
   const imported = isBhImportNote(row.note);
   const canMutate = Boolean(ledgerKind) && !imported;
+  const copyInfo = ledgerCopyInfo(row);
 
   useEffect(() => {
     if (!open) return;
@@ -270,6 +321,40 @@ function RowIslemMenu({
               </span>
             </button>
           )}
+          {onCopy && copyInfo.mode === "expense" ? (
+            <Link
+              href={copyInfo.href}
+              role="menuitem"
+              title="Masraf kaydı — Masraflar ekranında kopya formu açılır"
+              onClick={() => setOpen(false)}
+            >
+              Kopyala
+              <span className="bk-row-islem-hint">masraf</span>
+            </Link>
+          ) : onCopy && (copyInfo.mode === "plain" || copyInfo.mode === "transfer") ? (
+            <button
+              type="button"
+              role="menuitem"
+              title="Aynı bilgilerle yeni hareket formu açar (bugünün tarihiyle)"
+              onClick={() => {
+                setOpen(false);
+                onCopy(row);
+              }}
+            >
+              Kopyala
+            </button>
+          ) : onCopy && copyInfo.mode === "blocked" ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled
+              title={copyInfo.reason}
+              className="bk-row-islem-disabled"
+            >
+              Kopyala
+              <span className="bk-row-islem-hint">bağlı</span>
+            </button>
+          ) : null}
           {canMutate ? (
             <button
               type="button"
@@ -337,6 +422,7 @@ export default function AccountDetailLedger({
   onRowMutated,
   onRowError,
   onRowOk,
+  onCopy,
 }: AccountDetailLedgerProps) {
   const [dateDir, setDateDir] = useState<DateSortDir>(DEFAULT_DATE_SORT);
   const [editing, setEditing] = useState<AccountLedgerRow | null>(null);
@@ -647,6 +733,14 @@ export default function AccountDetailLedger({
                       islem={islem}
                       ledgerKind={ledgerKind}
                       onEdit={openEdit}
+                      onCopy={
+                        onCopy
+                          ? (r) => {
+                              closeEdit();
+                              onCopy(r);
+                            }
+                          : undefined
+                      }
                       onRowMutated={onRowMutated}
                       onRowError={onRowError}
                       onRowOk={onRowOk}

@@ -299,6 +299,19 @@ def list_expenses(
     return out
 
 
+@router.get("/{expense_id}", response_model=ExpenseOut)
+def get_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*READ)),
+) -> ExpenseOut:
+    """Tek masraf — Hesaplarım → Kopyala (masraf kaynaklı satır) ön-doldurma için."""
+    row = db.get(Expense, expense_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Masraf bulunamadı")
+    return _out(row, db)
+
+
 @router.post("", response_model=ExpenseOut, status_code=status.HTTP_201_CREATED)
 def create_expense(
     payload: ExpenseCreate,

@@ -867,7 +867,8 @@ body {
     padding: 0.25rem;
     text-align: left;
   }
-  .bk-row-islem-menu button {
+  .bk-row-islem-menu button,
+  .bk-row-islem-menu a {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -882,7 +883,8 @@ body {
     border: none;
     cursor: pointer;
   }
-  .bk-row-islem-menu button:hover:not(:disabled) { background: #f1f5f9; }
+  .bk-row-islem-menu button:hover:not(:disabled),
+  .bk-row-islem-menu a:hover { background: #f1f5f9; text-decoration: none; }
   .bk-row-islem-danger { color: #be123c !important; font-weight: 600; }
   .bk-row-islem-disabled {
     color: #94a3b8 !important;
