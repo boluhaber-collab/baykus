@@ -364,6 +364,75 @@ def create_expense(
     return _out(expense, db)
 
 
+@router.put("/{expense_id}", response_model=ExpenseOut)
+def update_expense(
+    expense_id: int,
+    payload: ExpenseCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*WRITE)),
+) -> ExpenseOut:
+    """Düzenle: masraf alanları + bağlı kasa/banka hareketi (tutar/hesap/tarih) birlikte güncellenir.
+
+    İşlenmiş masrafta eski kasa/banka hareketi kaldırılıp yeni değerlerle yeniden işlenir.
+    """
+    expense = (
+        db.query(Expense)
+        .options(joinedload(Expense.category))
+        .filter(Expense.id == expense_id)
+        .first()
+    )
+    if not expense:
+        raise HTTPException(status_code=404, detail="Gider bulunamadı")
+    if getattr(expense, "is_cancelled", False):
+        raise HTTPException(status_code=400, detail="İptal edilmiş masraf düzenlenemez")
+    if _is_bh_expense(expense):
+        raise HTTPException(status_code=403, detail="BizimHesap aktarım masrafları düzenlenemez")
+    cat = db.get(ExpenseCategory, payload.category_id)
+    if not cat:
+        raise HTTPException(status_code=400, detail="Gider kategorisi bulunamadı")
+    cash_register_id = payload.cash_register_id
+    bank_account_id = payload.bank_account_id
+    if payload.payment_method == "nakit":
+        bank_account_id = None
+        if cash_register_id:
+            reg = db.get(CashRegister, cash_register_id)
+            if not reg:
+                raise HTTPException(status_code=400, detail="Kasa bulunamadı")
+    else:
+        cash_register_id = None
+        if not bank_account_id:
+            raise HTTPException(status_code=400, detail="Banka hesabı seçilmelidir")
+        if not db.get(BankAccount, bank_account_id):
+            raise HTTPException(status_code=400, detail="Banka hesabı bulunamadı")
+
+    was_posted = bool(expense.is_posted)
+    if was_posted:
+        _purge_expense_ledger(db, expense)
+        expense.is_posted = False
+        db.flush()
+    expense.category_id = payload.category_id
+    expense.amount = Decimal(str(payload.amount))
+    expense.expense_date = payload.expense_date
+    expense.due_date = payload.due_date
+    expense.document_no = payload.document_no.strip() if payload.document_no else None
+    expense.payment_method = payload.payment_method
+    expense.note = payload.note
+    expense.cash_register_id = cash_register_id
+    expense.bank_account_id = bank_account_id
+    db.flush()
+    db.refresh(expense)
+    if was_posted or payload.post_immediately:
+        post_to_ledger(db, expense, user)
+    db.commit()
+    expense = (
+        db.query(Expense)
+        .options(joinedload(Expense.category))
+        .filter(Expense.id == expense_id)
+        .first()
+    )
+    return _out(expense, db)
+
+
 @router.post("/{expense_id}/post", response_model=ExpenseOut)
 def post_expense_endpoint(
     expense_id: int,

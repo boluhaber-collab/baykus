@@ -9,6 +9,7 @@ import { formatTrDate, localToday } from "@/lib/dates";
 import { useDateSort } from "@/hooks/useDateSort";
 import SortableDateHeader from "@/components/SortableDateHeader";
 import AccountSelect from "@/components/AccountSelect";
+import ExpenseIslemMenu from "@/components/ExpenseIslemMenu";
 
 const PERIODS = [
   { key: "30", label: "Son 30 Gün", days: 30 },
@@ -84,6 +85,8 @@ export default function ExpensesPage() {
   const [saving, setSaving] = useState(false);
   /** Kopyala: kaynak masraf #id (yeni kayıt oluşturulur, orijinal değişmez) */
   const [copyOfId, setCopyOfId] = useState<number | null>(null);
+  /** Düzenle: mevcut masraf #id (PUT, bağlı kasa/banka hareketi de güncellenir) */
+  const [editId, setEditId] = useState<number | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState({
     category_id: "",
@@ -181,6 +184,7 @@ export default function ExpensesPage() {
         post_immediately: true,
       }));
       setCopyOfId(src.id);
+      setEditId(null);
       setError("");
       setMsg(
         catActive
@@ -291,8 +295,8 @@ export default function ExpensesPage() {
     }
     setSaving(true);
     try {
-      await apiFetch("/api/finance/expenses", {
-        method: "POST",
+      await apiFetch(editId ? `/api/finance/expenses/${editId}` : "/api/finance/expenses", {
+        method: editId ? "PUT" : "POST",
         body: JSON.stringify({
           category_id: Number(form.category_id),
           amount: Number(form.amount),
@@ -320,14 +324,36 @@ export default function ExpensesPage() {
         due_date: "",
         expense_date: copyOfId ? localToday() : f.expense_date,
       }));
-      setMsg(copyOfId ? `Kopya oluşturuldu (masraf #${copyOfId} → yeni kayıt)` : "Masraf kaydedildi");
+      setMsg(editId ? `Masraf #${editId} güncellendi (bağlı kasa/banka hareketi de güncellendi)` : copyOfId ? `Kopya oluşturuldu (masraf #${copyOfId} → yeni kayıt)` : "Masraf kaydedildi");
       setCopyOfId(null);
+      if (editId) setForm((f) => ({ ...f, expense_date: localToday() }));
+      setEditId(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gider kaydı başarısız");
     } finally {
       setSaving(false);
     }
+  }
+
+  function editExpense(src: Expense) {
+    setForm({
+      category_id: String(src.category_id),
+      amount: String(Number(src.amount)),
+      expense_date: src.expense_date ? String(src.expense_date).slice(0, 10) : localToday(),
+      due_date: src.due_date ? String(src.due_date).slice(0, 10) : "",
+      document_no: src.document_no || "",
+      payment_method: src.payment_method || "nakit",
+      cash_register_id: src.cash_register_id ? String(src.cash_register_id) : "",
+      bank_account_id: src.bank_account_id ? String(src.bank_account_id) : "",
+      note: src.note || "",
+      post_immediately: !!src.is_posted,
+    });
+    setEditId(src.id);
+    setCopyOfId(null);
+    setError("");
+    setMsg(`Masraf #${src.id} düzenleniyor — değişiklikleri yapıp Kaydet'e basın`);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function postExpense(id: number) {
@@ -526,8 +552,24 @@ export default function ExpensesPage() {
             className="inline-flex rounded px-2 py-1 text-xs text-white"
             style={{ background: "#dc2626" }}
           >
-            + Yeni Masraf Gir
+            {editId ? `✎ Masraf #${editId} Düzenle` : "+ Yeni Masraf Gir"}
           </span>
+          {editId ? (
+            <span className="text-xs font-normal text-slate-600">
+              Kaydedince bağlı kasa/banka hareketi de güncellenir ·{" "}
+              <button
+                type="button"
+                className="text-baykus-primary hover:underline"
+                onClick={() => {
+                  setEditId(null);
+                  setMsg("");
+                  setForm((f) => ({ ...f, amount: "", note: "", document_no: "", due_date: "", expense_date: localToday() }));
+                }}
+              >
+                Vazgeç
+              </button>
+            </span>
+          ) : null}
           {copyOfId ? (
             <span className="text-xs font-normal text-slate-600">
               Kopya (#{copyOfId}) — yeni kayıt oluşturulur, orijinal değişmez ·{" "}
@@ -777,38 +819,20 @@ export default function ExpensesPage() {
                     </span>
                   </td>
                   <td className="text-xs text-baykus-muted max-w-[160px] truncate">{sanitizeDisplayNote(e.note) || "—"}</td>
-                  <td className="text-right text-xs whitespace-nowrap space-x-2">
-                    <button
-                      type="button"
-                      className="text-baykus-primary font-semibold hover:underline"
-                      title="Aynı bilgilerle yeni masraf formu (bugünün tarihiyle)"
-                      onClick={() => copyExpense(e)}
-                    >
-                      Kopyala
-                    </button>
-                    {!cancelled && !e.is_posted && (
-                      <>
-                        <button
-                          type="button"
-                          className="text-emerald-700 font-semibold hover:underline"
-                          onClick={() => postExpense(e.id)}
-                        >
-                          İşle
-                        </button>
-                        <button type="button" className="text-red-600 hover:underline" onClick={() => removeExpense(e.id)}>
-                          Sil
-                        </button>
-                      </>
-                    )}
-                    {!cancelled && (
-                      <button
-                        type="button"
-                        className="text-red-600 hover:underline"
-                        onClick={() => void cancelExpense(e.id)}
-                      >
-                        İptal
-                      </button>
-                    )}
+                  <td className="text-right text-xs whitespace-nowrap">
+                    <ExpenseIslemMenu
+                      expense={e}
+                      cancelled={cancelled}
+                      locked={isBhImportNote(e.note)}
+                      statusLabel={st}
+                      onEdit={() => editExpense(e)}
+                      onCopy={() => copyExpense(e)}
+                      onPost={() => void postExpense(e.id)}
+                      onDelete={() => void removeExpense(e.id)}
+                      onCancel={() => void cancelExpense(e.id)}
+                      onOk={(m) => { setError(""); setMsg(m); }}
+                      onError={(m) => setError(m)}
+                    />
                   </td>
                 </tr>
               );
