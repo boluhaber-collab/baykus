@@ -12,6 +12,12 @@ from app.core.deps import get_db, require_roles
 from app.models.expense import EXPENSE_PAYMENT_METHODS, Expense, ExpenseCategory
 from app.models.finance import BankAccount, BankMovement, CashMovement, CashRegister
 from app.models.user import User
+from app.services.movement_links import (
+    BANK_OUT_TYPES,
+    CASH_OUT_TYPES,
+    movement_is_referenced,
+    owned_expense_movement,
+)
 from app.schemas.expense import (
     ExpenseCategoryCreate,
     ExpenseCategoryOut,
@@ -57,8 +63,10 @@ def _purge_expense_ledger(db: Session, expense: Expense) -> None:
     from app.models.customer import CariMovement
     from app.models.supplier import SupplierMovement
 
+    # Yalnızca bu masraf için işlenmiş çıkış hareketi silinir; bağ bayatsa
+    # (id başka kayda geçmiş: tahsilat, kapora, başka masraf…) sadece bağ kopar.
     if expense.cash_movement_id:
-        mov = db.get(CashMovement, expense.cash_movement_id)
+        mov = owned_expense_movement(db, expense, "cash")
         if mov:
             if mov.cari_movement_id:
                 cm = db.get(CariMovement, mov.cari_movement_id)
@@ -71,7 +79,7 @@ def _purge_expense_ledger(db: Session, expense: Expense) -> None:
             db.delete(mov)
         expense.cash_movement_id = None
     if expense.bank_movement_id:
-        mov = db.get(BankMovement, expense.bank_movement_id)
+        mov = owned_expense_movement(db, expense, "bank")
         if mov:
             if mov.cari_movement_id:
                 cm = db.get(CariMovement, mov.cari_movement_id)
@@ -478,16 +486,31 @@ def _try_link_unlinked_finance(db: Session, expense: Expense) -> bool:
         elif part.startswith("BH_IMPORT:"):
             guid = part[len("BH_IMPORT:") :].strip().split()[0]
     # Prefer GUID match in note; else amount+date closest
-    candidates_cash = (
-        db.query(CashMovement)
-        .filter(CashMovement.movement_date == d, CashMovement.amount == amt)
+    # Yalnızca çıkış hareketleri, virman olmayan ve başka masraf/taksite bağlı olmayanlar
+    candidates_cash = [
+        m
+        for m in db.query(CashMovement)
+        .filter(
+            CashMovement.movement_date == d,
+            CashMovement.amount == amt,
+            CashMovement.movement_type.in_(tuple(CASH_OUT_TYPES)),
+            CashMovement.transfer_group_id.is_(None),
+        )
         .all()
-    )
-    candidates_bank = (
-        db.query(BankMovement)
-        .filter(BankMovement.movement_date == d, BankMovement.amount == amt)
+        if not movement_is_referenced(db, "cash", m.id, exclude_expense_id=expense.id)
+    ]
+    candidates_bank = [
+        m
+        for m in db.query(BankMovement)
+        .filter(
+            BankMovement.movement_date == d,
+            BankMovement.amount == amt,
+            BankMovement.movement_type.in_(tuple(BANK_OUT_TYPES)),
+            BankMovement.transfer_group_id.is_(None),
+        )
         .all()
-    )
+        if not movement_is_referenced(db, "bank", m.id, exclude_expense_id=expense.id)
+    ]
     if guid:
         for m in candidates_cash:
             if guid and guid in (m.note or ""):

@@ -32,6 +32,7 @@ from app.schemas.loan import (
     LoanUpdate,
 )
 from app.services.audit import write_audit
+from app.services.movement_links import owned_loan_movement
 
 router = APIRouter(prefix="/loans", tags=["loans"])
 
@@ -196,17 +197,23 @@ def _refuse_bh(loan: Loan, inst: LoanInstallment) -> None:
 
 
 def _reverse_finance(db: Session, inst: LoanInstallment) -> None:
-    """Delete linked kasa/banka movements for this installment payment."""
+    """Delete linked kasa/banka movements for this installment payment.
+
+    Yalnızca gerçekten bu taksit için oluşturulmuş hareket silinir. Bağ bayatsa
+    (hareket silinmiş, id başka bir kayda — ör. kapora tahsilatına — yeniden
+    verilmiş) sadece bağ koparılır; başka kaydın hareketine dokunulmaz.
+    """
     if inst.cash_movement_id:
-        mov = db.get(CashMovement, inst.cash_movement_id)
+        mov = owned_loan_movement(db, inst, "cash")
         if mov:
             db.delete(mov)
         inst.cash_movement_id = None
     if inst.bank_movement_id:
-        mov = db.get(BankMovement, inst.bank_movement_id)
+        mov = owned_loan_movement(db, inst, "bank")
         if mov:
             db.delete(mov)
         inst.bank_movement_id = None
+    db.flush()
 
 
 def _post_finance(
@@ -593,11 +600,11 @@ def update_installment(
     # If amount changed on a paid installment that still has finance, refresh movement amounts
     elif inst.is_paid and "amount" in data and data["amount"] is not None:
         if inst.cash_movement_id:
-            mov = db.get(CashMovement, inst.cash_movement_id)
+            mov = owned_loan_movement(db, inst, "cash")
             if mov:
                 mov.amount = _d(inst.amount)
         if inst.bank_movement_id:
-            mov = db.get(BankMovement, inst.bank_movement_id)
+            mov = owned_loan_movement(db, inst, "bank")
             if mov:
                 mov.amount = _d(inst.amount)
 

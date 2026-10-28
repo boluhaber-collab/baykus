@@ -95,6 +95,16 @@ def _ensure_lookup_indexes() -> None:
     except Exception as _exc:
         print(f"[baykus] startup price_list sort_order migrate error: {_exc}", flush=True)
 
+    # Kredi taksiti / masraf → kasa/banka bayat bağ onarımı (+ AKBANK kapora geri yükleme)
+    try:
+        from app.services.movement_link_repair import run_startup_repair as _ml_repair
+
+        _mlr = _ml_repair()
+        if _mlr.get("unlinked") or _mlr.get("restored") or not _mlr.get("ok"):
+            print(f"[baykus] startup movement link repair: {_mlr}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup movement link repair error: {_exc}", flush=True)
+
     # Virman: transfer bacakları tahsilat/ödeme olarak etiketlenmişse düzelt
     try:
         from app.services.transfer_labels import run_startup_migrate as _tr_migrate

@@ -11,6 +11,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.services.transfer_labels import leg_note as transfer_leg_note
+from app.services.movement_links import unlink_loan_refs
 from app.core.deps import get_db, require_roles
 from app.models.customer import CariMovement, Customer
 from app.models.expense import Expense
@@ -226,6 +227,12 @@ def _mark_linked_expense_cancelled(db: Session, *, cash_movement_id: int | None 
             exp.bank_movement_id = None
         exp.is_posted = False
         exp.is_cancelled = True
+    # Kredi taksiti bağı da temizlenir: SQLite id'yi yeniden kullanınca bayat bağ
+    # başka bir kaydın hareketini gösterip Düzenle/İptal'de onu sildiriyordu.
+    if cash_movement_id is not None:
+        unlink_loan_refs(db, "cash", cash_movement_id)
+    if bank_movement_id is not None:
+        unlink_loan_refs(db, "bank", bank_movement_id)
 
 
 def _dec(v) -> Decimal:
