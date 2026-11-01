@@ -39,8 +39,9 @@ export default function EditProductPage() {
       });
       router.push(`/products/${id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Kayıt hatası");
+      // Hata formun içinde (üst ve alt Kaydet yanında) gösterilir
       setBusy(false);
+      throw e;
     }
   }
 

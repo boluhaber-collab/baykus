@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { ProductDetail, ProductVariant } from "@/lib/api";
-import { displayCode, displaySku, isBhSyncCode, maskBhSyncValue } from "@/lib/productLabel";
+import { displaySku, isBhSyncCode, maskBhSyncValue } from "@/lib/productLabel";
 import {
   ProductMeta,
   SALES_UNITS,
@@ -11,7 +11,7 @@ import {
   parseProductDescription,
   serializeProductDescription,
 } from "@/lib/productMeta";
-import { ProductFormPayload, VariantFormRow } from "@/components/ProductForm";
+import { ProductFormPayload, VariantFormRow, buildVariantPayload } from "@/components/ProductForm";
 
 type TabId =
   | "definition"
@@ -38,11 +38,11 @@ type Props = {
   busy?: boolean;
 };
 
-function emptyVariant(skuPrefix = ""): VariantFormRow {
+function emptyVariant(): VariantFormRow {
   return {
     key: Math.random().toString(36).slice(2),
     name: "",
-    sku: skuPrefix ? `${skuPrefix}-` : "",
+    sku: "",
     color: "",
     size: "",
     print_type: "",
@@ -55,6 +55,7 @@ function emptyVariant(skuPrefix = ""): VariantFormRow {
 function fromVariant(v: ProductVariant): VariantFormRow {
   return {
     key: String(v.id),
+    id: v.id,
     name: v.name || "",
     sku: v.sku || "",
     color: v.color || "",
@@ -164,27 +165,30 @@ export default function TabbedProductForm({
         critical_stock_threshold: Number(threshold) || 0,
         warehouse: warehouse.trim() || "Ana Depo",
         stock_qty: Number(stockQty) || 0,
-        variants: variants
-          .filter((v) => v.name.trim() && v.sku.trim())
-          .map((v) => ({
-            name: v.name.trim(),
-            sku: v.sku.trim(),
-            color: v.color.trim() || null,
-            size: v.size.trim() || null,
-            print_type: v.print_type.trim() || null,
-            barcode: v.barcode.trim() || null,
-            price: Number(v.price) || 0,
-            stock_qty: Number(v.stock_qty) || 0,
-          })),
+        variants: [],
       };
       if (!payload.sku || !payload.name) {
         setError("SKU ve ürün adı zorunlu");
         setTab("definition");
         return;
       }
+      if (productType !== "hizmet") {
+        const built = buildVariantPayload(variants, { includeStock: mode === "create" });
+        if (built.error) {
+          setError(built.error);
+          setTab("variants");
+          return;
+        }
+        payload.variants = built.variants;
+      } else if (mode === "edit" && variants.length > 0) {
+        // Hizmete çevrilen üründe kayıtlı varyantlara dokunma
+        delete (payload as Partial<ProductFormPayload>).variants;
+      }
       await onSubmit(payload);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kayıt hatası");
+      const msg = err instanceof Error ? err.message : "Kayıt hatası";
+      setError(`Kaydedilemedi: ${msg}`);
+      if (/varyant|stok/i.test(msg)) setTab("variants");
     } finally {
       setLoading(false);
     }
@@ -202,7 +206,7 @@ export default function TabbedProductForm({
           className="bk-btn text-white font-bold text-sm px-4 py-2"
           style={{ backgroundColor: "#22a447" }}
         >
-          ✓ Kaydet
+          {saving ? "Kaydediliyor…" : "✓ Kaydet"}
         </button>
         <button
           type="button"
@@ -532,12 +536,19 @@ export default function TabbedProductForm({
                   <p className="text-sm text-slate-600">Beden / renk / baskı varyantları</p>
                   <button
                     type="button"
-                    onClick={() => setVariants((v) => [...v, emptyVariant(displayCode(sku) || "")])}
+                    onClick={() => setVariants((v) => [...v, emptyVariant()])}
                     className="bk-btn bk-btn-ghost text-xs"
                   >
                     + Varyant
                   </button>
                 </div>
+                {mode === "edit" && (
+                  <p className="text-[11px] text-slate-500">
+                    Yeni varyant için sadece Renk (ya da Beden) yazman yeterli; ad ve SKU boşsa otomatik
+                    verilir. Yeni varyant 0 stokla açılır, stoğu Stok Girişi ya da alış ile eklenir.
+                    Hareket görmüş varyant silinmez, gizlenir. Değişiklikler <b>Kaydet</b> ile kaydedilir.
+                  </p>
+                )}
                 {variants.length === 0 && (
                   <p className="text-sm text-slate-400">
                     Varyant yok — ürün seviyesinde stok kullanılır. Stok girişi için{" "}
@@ -554,13 +565,13 @@ export default function TabbedProductForm({
                   >
                     <input
                       className={input}
-                      placeholder="Ad *"
+                      placeholder="Ad (boşsa renk/beden)"
                       value={v.name}
                       onChange={(e) => updateVariant(v.key, { name: e.target.value })}
                     />
                     <input
                       className={input}
-                      placeholder={isBhSyncCode(v.sku) ? "Senkron kodu gizli" : "SKU *"}
+                      placeholder={isBhSyncCode(v.sku) ? "Senkron kodu gizli" : "SKU (boşsa otomatik)"}
                       value={maskBhSyncValue(v.sku)}
                       onChange={(e) => updateVariant(v.key, { sku: e.target.value })}
                     />
@@ -601,13 +612,25 @@ export default function TabbedProductForm({
                         className={input}
                         type="number"
                         placeholder="Stok"
-                        value={v.stock_qty}
+                        value={mode === "edit" && v.id == null ? "0" : v.stock_qty}
+                        readOnly={mode === "edit"}
+                        title={
+                          mode === "edit"
+                            ? "Stok, Stok Girişi / Sayım / alış hareketiyle değişir"
+                            : "Başlangıç stoğu"
+                        }
                         onChange={(e) => updateVariant(v.key, { stock_qty: e.target.value })}
                       />
                       <button
                         type="button"
+                        disabled={mode === "edit" && v.id != null && Number(v.stock_qty) !== 0}
+                        title={
+                          mode === "edit" && v.id != null && Number(v.stock_qty) !== 0
+                            ? "Stoğu olan varyant kaldırılamaz; önce stok çıkışı / sayım ile sıfırlayın"
+                            : "Listeden kaldır (Kaydet ile uygulanır)"
+                        }
                         onClick={() => setVariants((rows) => rows.filter((r) => r.key !== v.key))}
-                        className="rounded-lg border border-red-200 text-red-600 px-2 text-sm"
+                        className="rounded-lg border border-red-200 text-red-600 px-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Sil
                       </button>
@@ -636,6 +659,10 @@ export default function TabbedProductForm({
           </div>
         )}
       </div>
+
+      {error && (
+        <div className="rounded-lg bg-red-50 text-red-700 px-4 py-2 text-sm" role="alert">{error}</div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button

@@ -42,6 +42,13 @@ app = FastAPI(title=cfg.app_name, version="0.1.0")
 @app.on_event("startup")
 def _ensure_lookup_indexes() -> None:
     """SQLite/Postgres: add hot lookup indexes if missing. Never block boot."""
+    # Varyant gizleme: product_variants.is_hidden (must run before any variant query)
+    try:
+        from app.services.variant_schema_migrate import run_startup_migrate as _variant_schema_migrate
+
+        _variant_schema_migrate()
+    except Exception as _exc:
+        print(f"[baykus] startup variant migrate error: {_exc}", flush=True)
     try:
         from app.db.indexes import ensure_hot_indexes
 

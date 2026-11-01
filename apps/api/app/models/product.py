@@ -37,8 +37,14 @@ class Product(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
+    # Gizli (is_hidden) varyantlar listeye gelmez: hareket görmüş varyant
+    # ürün kartından kaldırılınca silinmez, gizlenir. Geçmiş kayıtlar
+    # (stok hareketi, satış/alış satırı) varyanta bağlı kalır.
     variants: Mapped[list["ProductVariant"]] = relationship(
-        back_populates="product", cascade="all, delete-orphan"
+        primaryjoin="and_(Product.id == ProductVariant.product_id, "
+        "ProductVariant.is_hidden.is_(False))",
+        cascade="all, delete-orphan",
+        overlaps="product",
     )
     movements: Mapped[list["StockMovement"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
@@ -60,8 +66,11 @@ class ProductVariant(Base):
     barcode: Mapped[str | None] = mapped_column(String(64))
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     stock_qty: Mapped[int] = mapped_column(Integer, default=0)
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False, index=True
+    )
 
-    product: Mapped[Product] = relationship(back_populates="variants")
+    product: Mapped[Product] = relationship(overlaps="variants")
     movements: Mapped[list["StockMovement"]] = relationship(back_populates="variant")
 
 

@@ -19,6 +19,25 @@ class VariantCreate(VariantBase):
     pass
 
 
+class VariantIn(BaseModel):
+    """Ürün kartı Kaydet ile gelen varyant satırı.
+
+    id varsa mevcut varyant güncellenir; yoksa yeni varyant açılır (stok 0).
+    sku / name boş gelebilir: sku otomatik üretilir, ad renk/beden/baskıdan türetilir.
+    stock_qty mevcut varyantlarda yok sayılır (stok yalnız hareketle değişir).
+    """
+
+    id: int | None = None
+    name: str | None = Field(default=None, max_length=255)
+    sku: str | None = Field(default=None, max_length=64)
+    color: str | None = Field(default=None, max_length=50)
+    size: str | None = Field(default=None, max_length=50)
+    print_type: str | None = Field(default=None, max_length=100)
+    barcode: str | None = Field(default=None, max_length=64)
+    price: Decimal | None = None
+    stock_qty: int | None = None
+
+
 class VariantUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     sku: str | None = Field(default=None, min_length=1, max_length=64)
@@ -57,7 +76,7 @@ class ProductBase(BaseModel):
 
 class ProductCreate(ProductBase):
     stock_qty: int = 0
-    variants: list[VariantCreate] = []
+    variants: list[VariantIn] = []
 
 
 class ProductUpdate(BaseModel):
@@ -76,7 +95,7 @@ class ProductUpdate(BaseModel):
     critical_stock_threshold: int | None = None
     warehouse: str | None = None
     stock_qty: int | None = None
-    variants: list[VariantCreate] | None = None
+    variants: list[VariantIn] | None = None
 
 
 class ProductListItem(BaseModel):

@@ -28,6 +28,7 @@ from app.schemas.product import (
     StockAdjustOut,
     StockMovementOut,
     VariantCreate,
+    VariantIn,
     VariantOut,
     VariantUpdate,
 )
@@ -239,6 +240,225 @@ def _ensure_unique_variant_sku(
         raise HTTPException(status_code=400, detail=f"Varyant SKU zaten kullanılıyor: {sku}")
 
 
+
+# ── Ürün kartı varyant kaydı (Kaydet) ─────────────────────────────────────────
+_TR_ASCII = str.maketrans("İIıŞşĞğÜüÖöÇç", "IIiSsGgUuOoCc")
+
+
+def _clean(value: str | None) -> str | None:
+    if value is None:
+        return None
+    v = str(value).strip()
+    return v or None
+
+
+def _is_sync_code(code: str | None) -> bool:
+    u = (code or "").strip().upper()
+    return u.startswith(("BH:", "BHV:", "BH_IMPORT"))
+
+
+def _variant_label(color: str | None, size: str | None, print_type: str | None) -> str | None:
+    parts = [p for p in (color, size, print_type) if p]
+    return " / ".join(parts) or None
+
+
+def _norm_key(value: str | None) -> str:
+    # Türkçe büyük/küçük harf: "YEŞİL" == "yeşil" (İ/ı casefold farkı)
+    return " ".join((value or "").translate(_TR_ASCII).casefold().split())
+
+
+def _variant_identity(name, color, size, print_type) -> tuple:
+    if color or size or print_type:
+        return ("attr", _norm_key(color), _norm_key(size), _norm_key(print_type))
+    return ("name", _norm_key(name))
+
+
+def _generate_variant_sku(db: Session, product: Product, label: str, taken: set[str]) -> str:
+    base = (product.sku or "").strip()
+    if not base or _is_sync_code(base):
+        base = f"P{product.id}"
+    slug = "".join(ch if ch.isalnum() else "-" for ch in label.translate(_TR_ASCII).upper())
+    slug = "-".join(part for part in slug.split("-") if part)[:24] or "V"
+    stem = f"{base}-{slug}"[:58]
+    cand = stem
+    n = 2
+    while cand in taken or db.query(ProductVariant.id).filter(ProductVariant.sku == cand).first():
+        cand = f"{stem}-{n}"
+        n += 1
+    return cand
+
+
+def _variant_has_history(db: Session, variant_id: int) -> bool:
+    """Hareket / satış / alış / teklif / fiyat listesi / depo bakiyesi bağı var mı?"""
+    from app.models.order import OrderLine
+    from app.models.quote import QuoteLine
+    from app.models.supplier import PurchaseLine
+
+    for model in (StockMovement, OrderLine, QuoteLine, PurchaseLine, PriceListItem):
+        if db.query(model.id).filter(model.variant_id == variant_id).first():
+            return True
+    if (
+        db.query(WarehouseStock.id)
+        .filter(WarehouseStock.variant_id == variant_id, WarehouseStock.quantity != 0)
+        .first()
+    ):
+        return True
+    return False
+
+
+def _apply_variant_rows(
+    db: Session,
+    product: Product,
+    rows: list[VariantIn],
+    *,
+    creating: bool,
+) -> None:
+    """Ürün kartındaki varyant listesini kaydet.
+
+    - id ile eşleşen satır güncellenir (stok miktarı değiştirilmez).
+    - id'siz satır yeni varyant olur (stok 0; SKU boşsa otomatik).
+    - Listeden çıkarılan varyant: hareketi yoksa silinir, varsa gizlenir.
+    """
+    existing_all = (
+        db.query(ProductVariant).filter(ProductVariant.product_id == product.id).all()
+        if not creating
+        else []
+    )
+    by_id = {v.id: v for v in existing_all}
+    by_sku = {v.sku: v for v in existing_all}
+    seen_ids: set[int] = set()
+    seen_keys: dict[tuple, str] = {}
+    taken_skus: set[str] = set()
+    has_ws = (
+        not creating
+        and db.query(WarehouseStock.id).filter(WarehouseStock.product_id == product.id).first()
+        is not None
+    )
+    new_variants: list[ProductVariant] = []
+    referenced_ids = {r.id for r in rows if r.id is not None}
+
+    for idx, row in enumerate(rows, start=1):
+        name = _clean(row.name)
+        color = _clean(row.color)
+        size = _clean(row.size)
+        print_type = _clean(row.print_type)
+        sku = _clean(row.sku)
+        barcode = _clean(row.barcode)
+        label = name or _variant_label(color, size, print_type)
+        if not label:
+            if row.id is None and not sku and not barcode:
+                continue  # tamamen boş yeni satır — yok say
+            raise HTTPException(
+                status_code=400,
+                detail=f"{idx}. varyant satırı: ad veya renk / beden / baskı girin",
+            )
+        name = label
+        key = _variant_identity(name, color, size, print_type)
+        if key in seen_keys:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Aynı varyant iki kez girilmiş: {name}",
+            )
+        seen_keys[key] = name
+
+        target: ProductVariant | None = None
+        if row.id is not None:
+            target = by_id.get(row.id)
+            if target is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Varyant bulunamadı (#{row.id}) — sayfayı yenileyip tekrar deneyin",
+                )
+        elif sku and sku in by_sku:
+            target = by_sku[sku]
+        if target is None:
+            # Aynı renk/beden zaten kayıtlıysa (ya da önceden gizlenmişse) onu kullan;
+            # böylece mükerrer varyant açılmaz, gizli varyantın geçmişi korunur.
+            for v in existing_all:
+                if v.id not in seen_ids and v.id not in referenced_ids and _variant_identity(
+                    v.name, _clean(v.color), _clean(v.size), _clean(v.print_type)
+                ) == key:
+                    target = v
+                    break
+
+        if target is not None:
+            if target.id in seen_ids:
+                raise HTTPException(status_code=400, detail=f"Aynı varyant iki kez girilmiş: {name}")
+            seen_ids.add(target.id)
+            target.name = name
+            target.color = color
+            target.size = size
+            target.print_type = print_type
+            if row.barcode is not None:
+                target.barcode = barcode
+            if row.price is not None:
+                target.price = row.price
+            if sku and sku != target.sku:
+                _ensure_unique_variant_sku(db, sku, exclude_variant_id=target.id)
+                target.sku = sku
+            target.is_hidden = False
+            continue
+
+        if sku:
+            if sku in taken_skus:
+                raise HTTPException(status_code=400, detail=f"Varyant SKU iki kez girilmiş: {sku}")
+            _ensure_unique_variant_sku(db, sku)
+        else:
+            sku = _generate_variant_sku(db, product, name, taken_skus)
+        taken_skus.add(sku)
+        initial_qty = max(0, int(row.stock_qty or 0)) if creating else 0
+        nv = ProductVariant(
+            product_id=product.id,
+            name=name,
+            sku=sku,
+            color=color,
+            size=size,
+            print_type=print_type,
+            barcode=barcode,
+            price=row.price if row.price is not None else Decimal("0"),
+            stock_qty=initial_qty,
+            is_hidden=False,
+        )
+        db.add(nv)
+        new_variants.append(nv)
+
+    if not creating:
+        for v in existing_all:
+            if v.is_hidden or v.id in seen_ids:
+                continue
+            if int(v.stock_qty or 0) != 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"'{v.name}' varyantında {v.stock_qty} adet stok var; "
+                        "kaldırmadan önce stok çıkışı / sayım ile sıfırlayın"
+                    ),
+                )
+            if _variant_has_history(db, v.id):
+                v.is_hidden = True  # hareketli varyant silinmez, gizlenir
+            else:
+                db.query(WarehouseStock).filter(WarehouseStock.variant_id == v.id).delete(
+                    synchronize_session=False
+                )
+                db.delete(v)
+
+    db.flush()
+    if has_ws:
+        wh = (product.warehouse or DEFAULT_WAREHOUSE).strip() or DEFAULT_WAREHOUSE
+        for nv in new_variants:
+            db.add(
+                WarehouseStock(
+                    product_id=product.id,
+                    variant_id=nv.id,
+                    variant_key=nv.id,
+                    warehouse=wh,
+                    quantity=0,
+                )
+            )
+        db.flush()
+    db.expire(product, ["variants"])
+
+
 def _variant_match_conds(
     color_terms: list[str],
     size_terms: list[str],
@@ -264,8 +484,8 @@ def _unit_cost_expr():
 
 def _critical_exists(match_conds: list):
     """Product is critical when a matching variant (or the bare product) is under threshold."""
-    has_var = exists().where(ProductVariant.product_id == Product.id)
-    var_where = [ProductVariant.product_id == Product.id, *match_conds]
+    has_var = exists().where(ProductVariant.product_id == Product.id, ProductVariant.is_hidden.is_(False))
+    var_where = [ProductVariant.product_id == Product.id, ProductVariant.is_hidden.is_(False), *match_conds]
     var_where.append(ProductVariant.stock_qty < func.coalesce(Product.critical_stock_threshold, 0))
     crit_var = exists().where(and_(*var_where))
     crit_plain = and_(
@@ -276,8 +496,8 @@ def _critical_exists(match_conds: list):
 
 
 def _in_stock_exists(match_conds: list):
-    has_var = exists().where(ProductVariant.product_id == Product.id)
-    var_where = [ProductVariant.product_id == Product.id, *match_conds, ProductVariant.stock_qty > 0]
+    has_var = exists().where(ProductVariant.product_id == Product.id, ProductVariant.is_hidden.is_(False))
+    var_where = [ProductVariant.product_id == Product.id, ProductVariant.is_hidden.is_(False), *match_conds, ProductVariant.stock_qty > 0]
     return or_(
         Product.product_type == "hizmet",
         exists().where(and_(*var_where)),
@@ -331,7 +551,7 @@ def _apply_catalog_filters(
                     ProductVariant.name.ilike(like_sku),
                 )
             )
-        variant_exists = exists().where(and_(ProductVariant.product_id == Product.id, *vconds))
+        variant_exists = exists().where(and_(ProductVariant.product_id == Product.id, ProductVariant.is_hidden.is_(False), *vconds))
         if sku and sku.strip():
             like_sku = f"%{sku.strip()}%"
             query = query.filter(
@@ -373,7 +593,7 @@ def _variant_aggs(
     """One grouped query for the page — do not joinedload every variant."""
     if not product_ids:
         return {}
-    conds = [ProductVariant.product_id.in_(product_ids)]
+    conds = [ProductVariant.product_id.in_(product_ids), ProductVariant.is_hidden.is_(False)]
     if color_terms or size_terms or print_key:
         conds.extend(_variant_match_conds(color_terms, size_terms, print_key))
     rows = (
@@ -629,7 +849,7 @@ def list_product_counts(
             ),
         )
         .filter(Product.id.in_(id_select))
-        .filter(~exists().where(ProductVariant.product_id == Product.id))
+        .filter(~exists().where(ProductVariant.product_id == Product.id, ProductVariant.is_hidden.is_(False)))
     )
     p_qty, p_value = plain.one()
 
@@ -1237,16 +1457,12 @@ def create_product(
     if payload.product_type not in ("stoklu", "hizmet"):
         raise HTTPException(status_code=400, detail="product_type stoklu veya hizmet olmalı")
     _ensure_unique_sku(db, payload.sku)
-    for v in payload.variants:
-        _ensure_unique_variant_sku(db, v.sku)
 
     data = payload.model_dump(exclude={"variants"})
     product = Product(**data)
     db.add(product)
     db.flush()
-    for v in payload.variants:
-        db.add(ProductVariant(product_id=product.id, **v.model_dump()))
-    db.flush()
+    _apply_variant_rows(db, product, payload.variants, creating=True)
     db.refresh(product)
     product = _get_product(db, product.id)
     _sync_product_stock(product)
@@ -1371,22 +1587,7 @@ def update_product(
     product.updated_at = datetime.utcnow()
 
     if payload.variants is not None:
-        # Replace variants: update matching sku, add new, remove missing
-        existing_by_sku = {v.sku: v for v in product.variants}
-        incoming_skus = set()
-        for vdata in payload.variants:
-            incoming_skus.add(vdata.sku)
-            if vdata.sku in existing_by_sku:
-                v = existing_by_sku[vdata.sku]
-                for k, val in vdata.model_dump().items():
-                    setattr(v, k, val)
-            else:
-                _ensure_unique_variant_sku(db, vdata.sku)
-                db.add(ProductVariant(product_id=product.id, **vdata.model_dump()))
-        for v in list(product.variants):
-            if v.sku not in incoming_skus:
-                db.delete(v)
-        db.flush()
+        _apply_variant_rows(db, product, payload.variants, creating=False)
         product = _get_product(db, product_id)
 
     _sync_product_stock(product)
@@ -1474,8 +1675,20 @@ def delete_variant(
     variant = db.get(ProductVariant, variant_id)
     if not variant or variant.product_id != product_id:
         raise HTTPException(status_code=404, detail="Varyant bulunamadı")
-    db.delete(variant)
+    if int(variant.stock_qty or 0) != 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{variant.name}' varyantında {variant.stock_qty} adet stok var; önce sıfırlayın",
+        )
+    if _variant_has_history(db, variant.id):
+        variant.is_hidden = True  # hareketli varyant silinmez, gizlenir
+    else:
+        db.query(WarehouseStock).filter(WarehouseStock.variant_id == variant.id).delete(
+            synchronize_session=False
+        )
+        db.delete(variant)
     db.flush()
+    db.expire(product, ["variants"])
     product = _get_product(db, product_id)
     _sync_product_stock(product)
     product.updated_at = datetime.utcnow()

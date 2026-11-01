@@ -2,10 +2,12 @@
 
 import { FormEvent, useState } from "react";
 import { ProductDetail, ProductVariant } from "@/lib/api";
-import { displayCode, isBhSyncCode, maskBhSyncValue } from "@/lib/productLabel";
+import { isBhSyncCode, maskBhSyncValue } from "@/lib/productLabel";
 
 export type VariantFormRow = {
   key: string;
+  /** Kayıtlı varyant id'si; yeni satırda yok. */
+  id?: number;
   name: string;
   sku: string;
   color: string;
@@ -32,17 +34,72 @@ export type ProductFormPayload = {
   critical_stock_threshold: number;
   warehouse: string | null;
   stock_qty: number;
-  variants: {
-    name: string;
-    sku: string;
-    color: string | null;
-    size: string | null;
-    print_type: string | null;
-    barcode: string | null;
-    price: number;
-    stock_qty: number;
-  }[];
+  variants: VariantPayload[];
 };
+
+export type VariantPayload = {
+  id?: number;
+  name: string | null;
+  sku: string | null;
+  color: string | null;
+  size: string | null;
+  print_type: string | null;
+  barcode: string | null;
+  price: number;
+  /** Yalnız yeni üründe başlangıç stoğu; kayıtlı varyantta sunucu yok sayar. */
+  stock_qty?: number;
+};
+
+function trKey(s: string): string {
+  return s.trim().toLocaleLowerCase("tr-TR").replace(/\s+/g, " ");
+}
+
+/**
+ * Varyant satırlarını API payload'ına çevir. Hiçbir satır sessizce düşürülmez:
+ * tamamen boş yeni satır atlanır, eksik/mükerrer satır için hata döner.
+ */
+export function buildVariantPayload(
+  rows: VariantFormRow[],
+  opts: { includeStock: boolean },
+): { variants: VariantPayload[]; error: string | null } {
+  const out: VariantPayload[] = [];
+  const seen = new Set<string>();
+  let n = 0;
+  for (const v of rows) {
+    n += 1;
+    const name = v.name.trim();
+    const color = v.color.trim();
+    const size = v.size.trim();
+    const print = v.print_type.trim();
+    const sku = v.sku.trim();
+    const barcode = v.barcode.trim();
+    const label = name || [color, size, print].filter(Boolean).join(" / ");
+    if (!label) {
+      if (v.id == null && !sku && !barcode) continue;
+      return { variants: [], error: `${n}. varyant satırı: ad veya renk / beden / baskı girin` };
+    }
+    const key = color || size || print
+      ? `a|${trKey(color)}|${trKey(size)}|${trKey(print)}`
+      : `n|${trKey(name)}`;
+    if (seen.has(key)) {
+      return { variants: [], error: `Aynı varyant iki kez girilmiş: ${label}` };
+    }
+    seen.add(key);
+    const row: VariantPayload = {
+      name: name || null,
+      sku: sku || null,
+      color: color || null,
+      size: size || null,
+      print_type: print || null,
+      barcode: barcode || null,
+      price: Number(v.price) || 0,
+    };
+    if (v.id != null) row.id = v.id;
+    if (opts.includeStock && v.id == null) row.stock_qty = Number(v.stock_qty) || 0;
+    out.push(row);
+  }
+  return { variants: out, error: null };
+}
 
 type Props = {
   initial?: Partial<ProductDetail> | null;
@@ -51,11 +108,11 @@ type Props = {
   onCancel?: () => void;
 };
 
-function emptyVariant(skuPrefix = ""): VariantFormRow {
+function emptyVariant(): VariantFormRow {
   return {
     key: Math.random().toString(36).slice(2),
     name: "",
-    sku: skuPrefix ? `${skuPrefix}-` : "",
+    sku: "",
     color: "",
     size: "",
     print_type: "",
@@ -68,6 +125,7 @@ function emptyVariant(skuPrefix = ""): VariantFormRow {
 function fromVariant(v: ProductVariant): VariantFormRow {
   return {
     key: String(v.id),
+    id: v.id,
     name: v.name || "",
     sku: v.sku || "",
     color: v.color || "",
@@ -126,19 +184,14 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
         critical_stock_threshold: Number(threshold) || 0,
         warehouse: warehouse.trim() || "Ana Depo",
         stock_qty: Number(stockQty) || 0,
-        variants: variants
-          .filter((v) => v.name.trim() && v.sku.trim())
-          .map((v) => ({
-            name: v.name.trim(),
-            sku: v.sku.trim(),
-            color: v.color.trim() || null,
-            size: v.size.trim() || null,
-            print_type: v.print_type.trim() || null,
-            barcode: v.barcode.trim() || null,
-            price: Number(v.price) || 0,
-            stock_qty: Number(v.stock_qty) || 0,
-          })),
+        variants: [],
       };
+      const built = buildVariantPayload(variants, { includeStock: !initial?.id });
+      if (built.error) {
+        setError(built.error);
+        return;
+      }
+      payload.variants = built.variants;
       await onSubmit(payload);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kayıt hatası");
@@ -252,7 +305,7 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
             <h2 className="font-semibold text-slate-800">Varyantlar</h2>
             <button
               type="button"
-              onClick={() => setVariants((v) => [...v, emptyVariant(displayCode(sku) || "")])}
+              onClick={() => setVariants((v) => [...v, emptyVariant()])}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
             >
               + Varyant
@@ -264,10 +317,10 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
           <div className="space-y-3">
             {variants.map((v) => (
               <div key={v.key} className="rounded-lg border border-slate-100 bg-slate-50 p-3 grid md:grid-cols-4 gap-2">
-                <input className={input} placeholder="Ad *" value={v.name} onChange={(e) => updateVariant(v.key, { name: e.target.value })} />
+                <input className={input} placeholder="Ad (boşsa renk/beden)" value={v.name} onChange={(e) => updateVariant(v.key, { name: e.target.value })} />
                 <input
                   className={input}
-                  placeholder={isBhSyncCode(v.sku) ? "Senkron kodu gizli" : "SKU *"}
+                  placeholder={isBhSyncCode(v.sku) ? "Senkron kodu gizli" : "SKU (boşsa otomatik)"}
                   value={maskBhSyncValue(v.sku)}
                   onChange={(e) => updateVariant(v.key, { sku: e.target.value })}
                 />
@@ -277,7 +330,15 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
                 <input className={input} placeholder={isBhSyncCode(v.barcode) ? "Senkron kodu gizli" : "Barkod"} value={maskBhSyncValue(v.barcode) || (isBhSyncCode(v.barcode) ? "" : v.barcode)} onChange={(e) => updateVariant(v.key, { barcode: e.target.value })} />
                 <input className={input} type="number" step="0.01" placeholder="Fiyat" value={v.price} onChange={(e) => updateVariant(v.key, { price: e.target.value })} />
                 <div className="flex gap-2">
-                  <input className={input} type="number" placeholder="Stok" value={v.stock_qty} onChange={(e) => updateVariant(v.key, { stock_qty: e.target.value })} />
+                  <input
+                    className={input}
+                    type="number"
+                    placeholder="Stok"
+                    value={v.stock_qty}
+                    readOnly={!!initial?.id}
+                    title={initial?.id ? "Stok, Stok Girişi / Sayım hareketiyle değişir" : undefined}
+                    onChange={(e) => updateVariant(v.key, { stock_qty: e.target.value })}
+                  />
                   <button
                     type="button"
                     onClick={() => setVariants((rows) => rows.filter((r) => r.key !== v.key))}

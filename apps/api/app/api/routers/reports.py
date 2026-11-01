@@ -790,14 +790,14 @@ def stock_report(
         literal(value_basis).label("value_basis"),
         Product.product_type.label("product_type"),
         Product.is_active.label("is_active"),
-    ).select_from(ProductVariant).join(Product, Product.id == ProductVariant.product_id)
+    ).select_from(ProductVariant).join(Product, Product.id == ProductVariant.product_id).where(ProductVariant.is_hidden.is_(False))
     if var_filters:
         v_sel = v_sel.where(and_(*var_filters))
 
     selects = [v_sel]
     if not (color_terms or size_terms or (isinstance(print_type, str) and print_type.strip())):
         plain_filters = list(prod_filters)
-        plain_filters.append(~exists().where(ProductVariant.product_id == Product.id))
+        plain_filters.append(~exists().where(ProductVariant.product_id == Product.id, ProductVariant.is_hidden.is_(False)))
         if isinstance(sku, str) and sku.strip():
             like_sku = f"%{sku.strip()}%"
             plain_filters.append(or_(Product.sku.ilike(like_sku), Product.name.ilike(like_sku)))
