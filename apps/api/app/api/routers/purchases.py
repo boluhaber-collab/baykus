@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_
@@ -86,6 +86,9 @@ def _line_out(line: PurchaseLine) -> PurchaseLineOut:
         unit_cost=line.unit_cost,
         line_total=line.line_total,
         line_note=line.line_note,
+        discount_amount=line.discount_amount or Decimal("0"),
+        tax_rate=line.tax_rate or Decimal("0"),
+        tax_amount=line.tax_amount or Decimal("0"),
         product_name=product_name,
         variant_name=variant_name,
     )
@@ -101,6 +104,9 @@ def _purchase_list_item(p: Purchase) -> PurchaseListItem:
         status=p.status,
         subtotal=p.subtotal or Decimal("0"),
         tax_amount=p.tax_amount or Decimal("0"),
+        discount_type=p.discount_type or "amount",
+        discount_value=p.discount_value or Decimal("0"),
+        discount_amount=p.discount_amount or Decimal("0"),
         total_amount=p.total_amount or Decimal("0"),
         notes=p.notes,
         created_at=p.created_at,
@@ -130,9 +136,26 @@ def _reload_purchase(db: Session, purchase_id: int) -> Purchase:
     )
 
 
-def _build_lines(db: Session, lines_in: list[PurchaseLineIn]) -> tuple[list[PurchaseLine], Decimal]:
+_Q = Decimal("0.01")
+
+
+def _q(v: Decimal) -> Decimal:
+    return Decimal(v).quantize(_Q, rounding=ROUND_HALF_UP)
+
+
+def _build_lines(
+    db: Session, lines_in: list[PurchaseLineIn]
+) -> tuple[list[PurchaseLine], Decimal, bool, list[Decimal | None]]:
+    """Satırları kurar.
+
+    Dönüş: (satırlar, ara toplam = Σ satır neti, oran_modu, elle KDV tutarları).
+    unit_cost brüt birim fiyat; line_total = miktar × birim − satır indirimi (KDV hariç).
+    oran_modu: herhangi bir satırda tax_rate / tax_amount geldiyse KDV satırlardan hesaplanır.
+    """
     built: list[PurchaseLine] = []
     subtotal = Decimal("0")
+    rate_mode = False
+    manual: list[Decimal | None] = []
     for row in lines_in:
         if row.product_id is not None:
             product = db.get(Product, row.product_id)
@@ -146,8 +169,15 @@ def _build_lines(db: Session, lines_in: list[PurchaseLineIn]) -> tuple[list[Purc
                 raise HTTPException(status_code=400, detail="Varyant ürünle eşleşmiyor")
         qty = Decimal(str(row.quantity))
         cost = Decimal(str(row.unit_cost))
-        line_total = (qty * cost).quantize(Decimal("0.01"))
+        gross = _q(qty * cost)
+        disc = _q(Decimal(str(row.discount_amount or 0)))
+        if disc > gross:
+            disc = gross
+        line_total = gross - disc
         subtotal += line_total
+        if row.tax_rate is not None or row.tax_amount is not None:
+            rate_mode = True
+        manual.append(_q(Decimal(str(row.tax_amount))) if row.tax_amount is not None else None)
         built.append(
             PurchaseLine(
                 product_id=row.product_id,
@@ -157,9 +187,66 @@ def _build_lines(db: Session, lines_in: list[PurchaseLineIn]) -> tuple[list[Purc
                 unit_cost=cost,
                 line_total=line_total,
                 line_note=((row.line_note or "").strip() or None),
+                discount_amount=disc,
+                tax_rate=Decimal(str(row.tax_rate or 0)),
+                tax_amount=Decimal("0"),
             )
         )
-    return built, subtotal
+    return built, subtotal, rate_mode, manual
+
+
+def _general_discount(subtotal: Decimal, dtype: str | None, dval: Decimal | None) -> Decimal:
+    val = Decimal(str(dval or 0))
+    if val <= 0 or subtotal <= 0:
+        return Decimal("0")
+    if (dtype or "amount") == "percent":
+        return _q(subtotal * min(val, Decimal("100")) / Decimal("100"))
+    return min(_q(val), subtotal)
+
+
+def _apply_totals(
+    purchase: Purchase,
+    lines: list[PurchaseLine],
+    *,
+    rate_mode: bool,
+    manual: list[Decimal | None] | None,
+    legacy_tax: Decimal,
+) -> None:
+    """Fatura mantığı: ara toplam − genel indirim + KDV = genel toplam.
+
+    Genel indirim satırlara net tutar oranında dağıtılır; her satırın KDV'si
+    (satır neti − indirim payı) × oran ile ayrı hesaplanır. Oran modu yoksa
+    (eski kayıtlar) başlık KDV'si olduğu gibi korunur.
+    """
+    subtotal = sum((l.line_total or Decimal("0") for l in lines), Decimal("0"))
+    disc = _general_discount(subtotal, purchase.discount_type, purchase.discount_value)
+    allocs: list[Decimal] = []
+    remaining = disc
+    for i, l in enumerate(lines):
+        if i == len(lines) - 1:
+            a = remaining
+        else:
+            a = _q(disc * (l.line_total or 0) / subtotal) if subtotal > 0 else Decimal("0")
+        remaining -= a
+        allocs.append(a)
+    if rate_mode:
+        tax = Decimal("0")
+        man = manual or [None] * len(lines)
+        for l, a, m in zip(lines, allocs, man):
+            if m is not None:
+                l.tax_amount = m
+            else:
+                base = max(Decimal("0"), (l.line_total or Decimal("0")) - a)
+                l.tax_amount = _q(base * Decimal(str(l.tax_rate or 0)) / Decimal("100"))
+            tax += l.tax_amount
+    else:
+        for l in lines:
+            l.tax_amount = Decimal("0")
+        tax = _q(Decimal(str(legacy_tax or 0)))
+    purchase.subtotal = subtotal
+    purchase.discount_amount = disc
+    purchase.tax_amount = tax
+    purchase.total_amount = subtotal - disc + tax
 
 
 def _apply_stock_delta(
@@ -412,9 +499,7 @@ def create_purchase(
     else:
         number = _next_purchase_number(db)
 
-    lines, subtotal = _build_lines(db, payload.lines)
-    tax = Decimal(str(payload.tax_amount or 0))
-    total = subtotal + tax
+    lines, _subtotal, rate_mode, manual = _build_lines(db, payload.lines)
 
     purchase = Purchase(
         purchase_number=number,
@@ -422,10 +507,16 @@ def create_purchase(
         purchase_date=payload.purchase_date or date.today(),
         status="draft",
         notes=payload.notes,
-        subtotal=subtotal,
-        tax_amount=tax,
-        total_amount=total,
+        discount_type=payload.discount_type or "amount",
+        discount_value=Decimal(str(payload.discount_value or 0)),
         created_by_user_id=user.id,
+    )
+    _apply_totals(
+        purchase,
+        lines,
+        rate_mode=rate_mode,
+        manual=manual,
+        legacy_tax=Decimal(str(payload.tax_amount or 0)),
     )
     purchase.lines = lines
     db.add(purchase)
@@ -535,8 +626,17 @@ def update_purchase(
         purchase.purchase_date = data["purchase_date"]
     if "notes" in data:
         purchase.notes = data["notes"]
+    legacy_tax = purchase.tax_amount or Decimal("0")
     if "tax_amount" in data and data["tax_amount"] is not None:
-        purchase.tax_amount = Decimal(str(data["tax_amount"]))
+        legacy_tax = Decimal(str(data["tax_amount"]))
+    discount_changing = False
+    if "discount_type" in data and data["discount_type"] is not None:
+        discount_changing = discount_changing or data["discount_type"] != (purchase.discount_type or "amount")
+        purchase.discount_type = data["discount_type"]
+    if "discount_value" in data and data["discount_value"] is not None:
+        new_val = Decimal(str(data["discount_value"]))
+        discount_changing = discount_changing or new_val != (purchase.discount_value or Decimal("0"))
+        purchase.discount_value = new_val
 
     if lines_changing:
         lines_in = [PurchaseLineIn(**row) if isinstance(row, dict) else row for row in payload.lines or []]
@@ -544,13 +644,14 @@ def update_purchase(
             raise HTTPException(status_code=400, detail="En az bir satır gerekli")
         purchase.lines.clear()
         db.flush()
-        built, subtotal = _build_lines(db, lines_in)
+        built, _subtotal, rate_mode, manual = _build_lines(db, lines_in)
+        _apply_totals(purchase, built, rate_mode=rate_mode, manual=manual, legacy_tax=legacy_tax)
         purchase.lines = built
-        purchase.subtotal = subtotal
-    else:
-        subtotal = purchase.subtotal or Decimal("0")
+    elif discount_changing or ("tax_amount" in data and data["tax_amount"] is not None):
+        cur = list(purchase.lines)
+        rate_mode = any((l.tax_rate or 0) > 0 for l in cur)
+        _apply_totals(purchase, cur, rate_mode=rate_mode, manual=None, legacy_tax=legacy_tax)
 
-    purchase.total_amount = (purchase.subtotal or Decimal("0")) + (purchase.tax_amount or Decimal("0"))
     purchase.updated_at = datetime.utcnow()
 
     if was_confirmed:

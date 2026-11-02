@@ -794,6 +794,12 @@ export type PurchaseLine = {
   unit_cost: number;
   line_total: number;
   line_note?: string | null;
+  /** Satır indirimi (₺) — unit_cost brüt birim fiyat */
+  discount_amount?: number;
+  /** KDV oranı (%) */
+  tax_rate?: number;
+  /** Satırın KDV tutarı */
+  tax_amount?: number;
   product_name?: string | null;
   variant_name?: string | null;
 };
@@ -807,6 +813,10 @@ export type PurchaseListItem = {
   status: string;
   subtotal: number;
   tax_amount: number;
+  /** Fatura altı genel indirim */
+  discount_type?: "amount" | "percent";
+  discount_value?: number;
+  discount_amount?: number;
   total_amount: number;
   notes?: string | null;
   created_at: string;

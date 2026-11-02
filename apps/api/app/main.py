@@ -55,6 +55,16 @@ def _ensure_lookup_indexes() -> None:
         ensure_hot_indexes()
     except Exception:
         pass
+    # Alış KDV satır bazlı + fatura altı genel indirim sütunları
+    try:
+        from app.services.purchase_tax_migrate import run_startup_migrate as _pt_migrate
+
+        _ptr = _pt_migrate()
+        if _ptr.get("added") or not _ptr.get("ok"):
+            print(f"[baykus] startup purchase tax migrate: {_ptr}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup purchase tax migrate error: {_exc}", flush=True)
+
     # Direkt satış Sipariş Alındı → Teslim Edildi (satış faturası); status-only, no ledger re-post
     try:
         from app.services.direct_sale_invoice_migrate import run_startup_migrate

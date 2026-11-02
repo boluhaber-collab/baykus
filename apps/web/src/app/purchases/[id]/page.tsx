@@ -15,6 +15,7 @@ import { isBhImportNote } from "@/lib/bhNote";
 import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 import { formatTrDate, formatTrDateTime } from "@/lib/dates";
 import { printPdfFromApi } from "@/lib/printPdf";
+import { formatRate, r2 } from "@/lib/invoiceTotals";
 
 type EditLine = {
   key: string;
@@ -133,13 +134,8 @@ export default function PurchaseDetailPage() {
       setError("BizimHesap aktarım kayıtları düzenlenemez");
       return;
     }
-    setPurchaseDate(purchase.purchase_date ? String(purchase.purchase_date).slice(0, 10) : "");
-    setNotes(purchase.notes || "");
-    setTaxAmount(String(purchase.tax_amount ?? 0));
-    setLines(toEditLines(purchase).length ? toEditLines(purchase) : [emptyLine()]);
-    setEditing(true);
-    setError("");
-    setOkMsg("");
+    // Satır KDV oranı / indirim / genel indirim yalnızca alış ekranında düzenlenir (eski hızlı düzenleme bunları silerdi)
+    router.push(`/purchases/new?edit=${purchase.id}`);
   }
 
   function cancelEdit() {
@@ -307,6 +303,44 @@ export default function PurchaseDetailPage() {
 
   const statusLabel = PURCHASE_STATUS_LABELS[purchase.status] || purchase.status;
   const lineQty = purchase.lines.reduce((s, l) => s + Number(l.quantity || 0), 0);
+  // Fatura altı dökümü (liste sonu)
+  const invoiceRows: { label: string; value: string; strong?: boolean }[] = (() => {
+    const lineDisc = r2(purchase.lines.reduce((s, l) => s + Number(l.discount_amount || 0), 0));
+    const gross = r2(Number(purchase.subtotal || 0) + lineDisc);
+    const genel = Number(purchase.discount_amount || 0);
+    const headTax = Number(purchase.tax_amount || 0);
+    const rows: { label: string; value: string; strong?: boolean }[] = [
+      { label: "Toplam Tutar", value: formatMoney(gross) },
+    ];
+    if (lineDisc) rows.push({ label: "Satır İndirimleri", value: `−${formatMoney(lineDisc)}` });
+    if (genel)
+      rows.push({
+        label:
+          purchase.discount_type === "percent"
+            ? `Genel İndirim (%${formatRate(Number(purchase.discount_value || 0))})`
+            : "Genel İndirim",
+        value: `−${formatMoney(genel)}`,
+      });
+    rows.push({ label: "Toplam İskonto", value: lineDisc + genel ? `−${formatMoney(r2(lineDisc + genel))}` : formatMoney(0) });
+    rows.push({ label: "Ara Toplam (KDV Hariç)", value: formatMoney(r2(Number(purchase.subtotal || 0) - genel)) });
+    const byRate = new Map<number, number>();
+    for (const l of purchase.lines) {
+      const t = Number(l.tax_amount || 0);
+      const rt = Number(l.tax_rate || 0);
+      if (!t && !rt) continue;
+      byRate.set(rt, r2((byRate.get(rt) || 0) + t));
+    }
+    const sumRates = r2([...byRate.values()].reduce((s, v) => s + v, 0));
+    if (byRate.size && Math.abs(sumRates - headTax) < 0.02) {
+      [...byRate.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .forEach(([rt, amt]) => rows.push({ label: `Hesaplanan KDV (%${formatRate(rt)})`, value: formatMoney(amt) }));
+    } else {
+      rows.push({ label: "Hesaplanan KDV", value: formatMoney(headTax) });
+    }
+    rows.push({ label: "Vergiler Dahil Genel Toplam", value: formatMoney(Number(purchase.total_amount || 0)), strong: true });
+    return rows;
+  })();
 
   return (
     <div className="space-y-4">
@@ -395,14 +429,6 @@ export default function PurchaseDetailPage() {
             >
               Düzenle
             </button>
-          )}
-          {canEdit && !editing && (
-            <Link
-              href={`/purchases/new?edit=${purchase.id}`}
-              className="rounded-lg border border-baykus-600 text-baykus-700 px-4 py-2 text-sm"
-            >
-              Alış ekranında düzenle
-            </Link>
           )}
           {editing && (
             <button
@@ -653,9 +679,11 @@ export default function PurchaseDetailPage() {
               </div>
             </div>
             <div className="rounded-xl border bg-white p-3 shadow-sm">
-              <div className="text-[11px] text-slate-500 font-semibold">Ara toplam / KDV</div>
+              <div className="text-[11px] text-slate-500 font-semibold">{Number(purchase.discount_amount || 0) ? "Ara toplam / İndirim / KDV" : "Ara toplam / KDV"}</div>
               <div className="text-sm font-semibold mt-1 tabular-nums">
-                {formatMoney(Number(purchase.subtotal))} + {formatMoney(Number(purchase.tax_amount))}
+                {formatMoney(Number(purchase.subtotal))}
+                {Number(purchase.discount_amount || 0) ? ` − ${formatMoney(Number(purchase.discount_amount))}` : ""} +{" "}
+                {formatMoney(Number(purchase.tax_amount))}
               </div>
             </div>
             <div className="rounded-xl border bg-white p-3 shadow-sm">
@@ -718,8 +746,10 @@ export default function PurchaseDetailPage() {
                   <th className="px-4 py-3">Açıklama</th>
                   <th className="px-4 py-3">Ürün / varyant</th>
                   <th className="px-4 py-3 text-right">Miktar</th>
-                  <th className="px-4 py-3 text-right">Birim maliyet</th>
-                  <th className="px-4 py-3 text-right">Satır toplam</th>
+                  <th className="px-4 py-3 text-right">Birim fiyat</th>
+                  <th className="px-4 py-3 text-right">İndirim</th>
+                  <th className="px-4 py-3 text-right">KDV</th>
+                  <th className="px-4 py-3 text-right">Tutar</th>
                 </tr>
               </thead>
               <tbody>
@@ -749,6 +779,14 @@ export default function PurchaseDetailPage() {
                     <td className="px-4 py-3 text-right tabular-nums">
                       {formatMoney(Number(l.unit_cost))}
                     </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-500">
+                      {Number(l.discount_amount || 0) ? formatMoney(Number(l.discount_amount)) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-500 whitespace-nowrap">
+                      {Number(l.tax_rate || 0) || Number(l.tax_amount || 0)
+                        ? `%${formatRate(Number(l.tax_rate || 0))} · ${formatMoney(Number(l.tax_amount || 0))}`
+                        : "—"}
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">
                       {formatMoney(Number(l.line_total))}
                     </td>
@@ -756,39 +794,30 @@ export default function PurchaseDetailPage() {
                 ))}
                 {purchase.lines.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                    <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
                       Kalem yok
                     </td>
                   </tr>
                 )}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
-                  <td colSpan={3} className="px-4 py-3 text-right text-slate-600">
-                    Ara toplam
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{lineQty}</td>
-                  <td className="px-4 py-3" />
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatMoney(Number(purchase.subtotal))}
-                  </td>
-                </tr>
-                <tr className="bg-slate-50">
-                  <td colSpan={5} className="px-4 py-2 text-right text-slate-500 text-sm">
-                    KDV / vergi
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-sm">
-                    {formatMoney(Number(purchase.tax_amount))}
-                  </td>
-                </tr>
-                <tr className="bg-slate-100 font-bold">
-                  <td colSpan={5} className="px-4 py-3 text-right">
-                    Genel toplam
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-base">
-                    {formatMoney(Number(purchase.total_amount))}
-                  </td>
-                </tr>
+                {invoiceRows.map((r, i) => (
+                  <tr
+                    key={r.label}
+                    className={
+                      r.strong
+                        ? "bg-slate-100 font-bold border-t-2 border-slate-300"
+                        : `bg-slate-50 ${i === 0 ? "border-t-2 border-slate-200" : ""}`
+                    }
+                  >
+                    <td colSpan={7} className={`px-4 ${r.strong ? "py-3" : "py-1.5"} text-right ${r.strong ? "" : "text-slate-600 text-sm"}`}>
+                      {r.label}
+                    </td>
+                    <td className={`px-4 ${r.strong ? "py-3 text-base" : "py-1.5 text-sm"} text-right tabular-nums`}>
+                      {r.value}
+                    </td>
+                  </tr>
+                ))}
               </tfoot>
             </table>
           </div>

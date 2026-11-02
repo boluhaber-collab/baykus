@@ -15,6 +15,17 @@ import {
 import { localToday } from "@/lib/dates";
 import LiveSearchSelect, { useProductSearch, useSupplierSearch } from "@/components/LiveSearchSelect";
 import SplitPaymentRows, { SplitPaymentRow, rowsSum, rowsToPayload } from "@/components/SplitPaymentRows";
+import {
+  DiscountType,
+  computeInvoice,
+  distribute,
+  formatRate,
+  parseNum,
+  r2,
+} from "@/lib/invoiceTotals";
+
+const KDV_RATES = [0, 1, 10, 20];
+const DEFAULT_KDV = "20";
 
 type Line = {
   key: string;
@@ -26,19 +37,15 @@ type Line = {
   depo: string;
   miktar: string;
   birim: string;
+  /** KDV oranı (%) — tutar değil */
   kdv: string;
   indirim: string;
   not: string;
+  /** Eski alıştan gelen satır: başlıkta toplu girilmiş KDV bu satırlara oranla dağıtılır */
+  legacy?: boolean;
 };
 
-function num(s: string | number | null | undefined): number {
-  const n = Number(String(s ?? "").replace(",", ".").replace(/\s/g, ""));
-  return Number.isFinite(n) ? n : 0;
-}
-
-function lineTotal(l: Line): number {
-  return Math.max(0, num(l.miktar) * num(l.birim) - num(l.indirim) + num(l.kdv));
-}
+const num = parseNum;
 
 function nowTime(): string {
   const d = new Date();
@@ -74,6 +81,10 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
   const [existing, setExisting] = useState<PurchaseDetail | null>(null);
+  const [discType, setDiscType] = useState<DiscountType>("amount");
+  const [discValue, setDiscValue] = useState("0");
+  /** Eski kayıt: başlık seviyesinde toplu KDV (satırlara dağıtılarak gösterilir). Oran girilince null. */
+  const [legacyTax, setLegacyTax] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -102,34 +113,104 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
         if (m) setSaat(m[1]!);
         setAciklama(notes.replace(/\s*·?\s*Saat \d{2}:\d{2}/, "").trim());
         setStokaGirdi(p.status === "confirmed");
-        const tax = Number(p.tax_amount || 0);
-        setLines(
-          p.lines.map((l, i) => ({
-            key: newKey(),
-            product_id: l.product_id ?? null,
-            variant_id: l.variant_id ?? null,
-            urun: l.product_name || l.description,
-            secenek: l.variant_name || "",
-            variants: [],
-            depo: "Ana Depo",
-            miktar: String(l.quantity),
-            birim: String(l.unit_cost),
-            kdv: i === 0 && tax ? String(tax) : "0",
-            indirim: "0",
-            not: l.line_note || "",
-          })),
-        );
+        setDiscType(p.discount_type === "percent" ? "percent" : "amount");
+        setDiscValue(String(Number(p.discount_value || 0)));
+        const headerTax = r2(Number(p.tax_amount || 0));
+        const hasLineTax = p.lines.some((l) => Number(l.tax_rate || 0) > 0 || Number(l.tax_amount || 0) > 0);
+        const loaded: Line[] = p.lines.map((l) => ({
+          key: newKey(),
+          product_id: l.product_id ?? null,
+          variant_id: l.variant_id ?? null,
+          urun: l.product_name || l.description,
+          secenek: l.variant_name || "",
+          variants: [],
+          depo: "Ana Depo",
+          miktar: String(Number(l.quantity)),
+          birim: String(Number(l.unit_cost)),
+          kdv: formatRate(Number(l.tax_rate || 0)),
+          indirim: String(Number(l.discount_amount || 0)),
+          not: l.line_note || "",
+          legacy: true,
+        }));
+        const dType: DiscountType = p.discount_type === "percent" ? "percent" : "amount";
+        const dVal = Number(p.discount_value || 0);
+        const calcLines = (ls: Line[]) =>
+          computeInvoice(
+            ls.map((l) => ({ qty: num(l.miktar), price: num(l.birim), discount: num(l.indirim), rate: num(l.kdv) })),
+            dType,
+            dVal,
+          );
+        let legacy: number | null = null;
+        if (headerTax > 0) {
+          if (hasLineTax) {
+            // Satır oranları başlık KDV'sini veriyorsa oran modu; değilse (elle dağıtılmış) dağıtım modu
+            if (Math.abs(calcLines(loaded).tax - headerTax) > 0.01) legacy = headerTax;
+          } else {
+            // Eski kayıt: KDV toplu girilmiş → standart orana denk geliyorsa satırlara oran yaz
+            const base = calcLines(loaded).taxBase;
+            const implied = base > 0 ? (headerTax / base) * 100 : 0;
+            const std = [1, 8, 10, 18, 20].find((r) => Math.abs(r - implied) < 0.05);
+            const withStd = std != null ? loaded.map((l) => ({ ...l, kdv: String(std) })) : null;
+            if (withStd && Math.abs(calcLines(withStd).tax - headerTax) <= 0.001) {
+              loaded.splice(0, loaded.length, ...withStd);
+            } else {
+              const rate = formatRate(r2(implied));
+              loaded.forEach((l) => (l.kdv = rate));
+              legacy = headerTax;
+            }
+          }
+        }
+        setLegacyTax(legacy);
+        setLines(loaded);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Alış yüklenemedi"));
   }, [editId]);
 
-  const toplam = useMemo(() => lines.reduce((s, l) => s + lineTotal(l), 0), [lines]);
+  const legacyActive = legacyTax != null && lines.some((l) => l.legacy);
+  const calc = useMemo(() => {
+    const plain = computeInvoice(
+      lines.map((l) => ({ qty: num(l.miktar), price: num(l.birim), discount: num(l.indirim), rate: num(l.kdv) })),
+      discType,
+      num(discValue),
+    );
+    if (!legacyActive) return plain;
+    // Başlıktaki toplu KDV'yi eski satırlara (indirim sonrası matrah oranında) dağıt; yeni satırlar kendi oranıyla
+    const idx = lines.map((l, i) => (l.legacy ? i : -1)).filter((i) => i >= 0);
+    const shares = distribute(
+      legacyTax!,
+      idx.map((i) => Math.max(0, plain.lines[i]!.net - plain.lines[i]!.alloc)),
+    );
+    const manual = new Map(idx.map((i, k) => [i, shares[k]!]));
+    return computeInvoice(
+      lines.map((l, i) => ({
+        qty: num(l.miktar),
+        price: num(l.birim),
+        discount: num(l.indirim),
+        rate: num(l.kdv),
+        manualTax: manual.has(i) ? manual.get(i)! : null,
+      })),
+      discType,
+      num(discValue),
+    );
+  }, [lines, discType, discValue, legacyActive, legacyTax]);
+  const toplam = calc.total;
   const odenen = useMemo(() => rowsSum(payRows), [payRows]);
   const kalan = Math.max(0, toplam - odenen);
   const isConfirmed = existing?.status === "confirmed";
 
   function updateLine(key: string, patch: Partial<Line>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  }
+
+  /** KDV oranı değişince toplu (eski) KDV dağıtımı bırakılır; tüm satırlar oranla hesaplanır */
+  function setRate(key: string, value: string) {
+    setLegacyTax(null);
+    updateLine(key, { kdv: value });
+  }
+
+  function setRateAll(value: string) {
+    setLegacyTax(null);
+    setLines((prev) => prev.map((l) => ({ ...l, kdv: value })));
   }
 
   async function addProduct(id: string) {
@@ -149,6 +230,8 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
     setLines((prev) => [
       ...prev,
       {
+        // KDV oranı: son satırın oranı, yoksa %20
+
         key,
         product_id: Number(id),
         variant_id: v ? v.id : null,
@@ -158,7 +241,7 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
         depo: detail?.warehouse || listRow?.warehouse || "Ana Depo",
         miktar: "1",
         birim: String(cost || ""),
-        kdv: "0",
+        kdv: prev.length ? prev[prev.length - 1]!.kdv : DEFAULT_KDV,
         not: "",
         indirim: "0",
       },
@@ -190,21 +273,31 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
       if (!(num(l.miktar) > 0)) return setError(`${l.urun}: miktar sıfırdan büyük olmalı.`);
       if (l.variants.length > 1 && !l.variant_id) return setError(`${l.urun}: seçenek (varyant) seçin.`);
     }
+    if (num(discValue) < 0) return setError("Genel indirim negatif olamaz.");
+    if (discType === "percent" && num(discValue) > 100) return setError("Genel indirim yüzdesi 100'ü geçemez.");
     if (odenen > toplam + 0.01) return setError("Ödenen tutar alış toplamından büyük olamaz.");
     const payments = rowsToPayload(payRows);
-    const payloadLines = lines.map((l) => {
+    for (const l of lines) {
+      const r = num(l.kdv);
+      if (r < 0 || r > 100) return setError(`${l.urun}: KDV oranı 0–100 arasında olmalı.`);
+    }
+    const payloadLines = lines.map((l, i) => {
       const qty = num(l.miktar);
-      const net = Math.max(0, qty * num(l.birim) - num(l.indirim));
       return {
         description: [l.urun, l.secenek].filter(Boolean).join(" — ").slice(0, 255),
         quantity: qty,
-        unit_cost: Math.round((net / qty) * 10000) / 10000,
+        unit_cost: num(l.birim),
+        discount_amount: Math.max(0, num(l.indirim)),
+        tax_rate: r2(num(l.kdv)),
+        // Eski toplu KDV dağıtımı: satır tutarı elle gönderilir (genel toplam değişmesin)
+        tax_amount: legacyActive && l.legacy ? calc.lines[i]!.tax : null,
         product_id: l.product_id,
         variant_id: l.variant_id,
         line_note: l.not.trim() || null,
       };
     });
-    const tax = lines.reduce((s, l) => s + num(l.kdv), 0);
+    const tax = calc.tax;
+    const discountPayload = { discount_type: discType, discount_value: Math.max(0, num(discValue)) };
     const notes = [aciklama.trim(), `Saat ${saat}`].filter(Boolean).join(" · ");
     setBusy(true);
     try {
@@ -214,6 +307,7 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
           purchase_date: tarih,
           notes,
           tax_amount: tax,
+          ...discountPayload,
           lines: payloadLines,
         };
         if (existing.status === "draft") body.supplier_id = Number(supplierId);
@@ -232,6 +326,7 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
             purchase_date: tarih,
             notes,
             tax_amount: tax,
+            ...discountPayload,
             confirm: stokaGirdi,
             lines: payloadLines,
           }),
@@ -321,8 +416,11 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
           </div>
 
           <div className="bk-entry-row">
-            <label className="text-xs font-medium">Toplam Tutar</label>
-            <div className="text-base font-bold tabular-nums">{formatMoney(toplam)}</div>
+            <label className="text-xs font-medium">Genel Toplam</label>
+            <div className="text-base font-bold tabular-nums">
+              {formatMoney(toplam)}
+              <span className="ml-1 text-[10px] font-normal text-baykus-muted">KDV dahil</span>
+            </div>
           </div>
 
           <div>
@@ -392,14 +490,15 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
                   <th>Depo</th>
                   <th className="text-right">Miktar</th>
                   <th className="text-right">Alış Fiyatı</th>
-                  <th className="text-right">KDV</th>
-                  <th className="text-right">İndirim</th>
+                  <th className="text-right">KDV %</th>
+                  <th className="text-right">KDV Tutarı</th>
+                  <th className="text-right">İndirim ₺</th>
                   <th>Açıklama</th>
-                  <th className="text-right">Toplam</th>
+                  <th className="text-right" title="Miktar × Alış Fiyatı − İndirim (KDV hariç)">Tutar</th>
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l) => (
+                {lines.map((l, i) => (
                   <tr
                     key={l.key}
                     onClick={() => setSelectedKey(l.key)}
@@ -452,7 +551,17 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
                       <input inputMode="decimal" className={`${numCls} w-20`} value={l.birim} placeholder="0,00" onChange={(e) => updateLine(l.key, { birim: e.target.value })} />
                     </td>
                     <td>
-                      <input inputMode="decimal" className={`${numCls} w-16`} value={l.kdv} onChange={(e) => updateLine(l.key, { kdv: e.target.value })} />
+                      <input
+                        inputMode="decimal"
+                        list="bk-kdv-rates"
+                        className={`${numCls} w-16`}
+                        value={l.kdv}
+                        title="KDV oranı (%)"
+                        onChange={(e) => setRate(l.key, e.target.value)}
+                      />
+                    </td>
+                    <td className="tabular-nums whitespace-nowrap text-right text-baykus-muted">
+                      {formatMoney(calc.lines[i]?.tax ?? 0)}
                     </td>
                     <td>
                       <input inputMode="decimal" className={`${numCls} w-16`} value={l.indirim} onChange={(e) => updateLine(l.key, { indirim: e.target.value })} />
@@ -466,12 +575,12 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
                         onChange={(e) => updateLine(l.key, { not: e.target.value })}
                       />
                     </td>
-                    <td className="tabular-nums font-medium whitespace-nowrap text-right">{formatMoney(lineTotal(l))}</td>
+                    <td className="tabular-nums font-medium whitespace-nowrap text-right">{formatMoney(calc.lines[i]?.net ?? 0)}</td>
                   </tr>
                 ))}
                 {lines.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="text-center text-baykus-muted py-8">
+                    <td colSpan={10} className="text-center text-baykus-muted py-8">
                       Alışa ürün eklemek için yukarıdan arayın
                     </td>
                   </tr>
@@ -480,13 +589,131 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
             </table>
           </div>
 
+          <datalist id="bk-kdv-rates">
+            {KDV_RATES.map((r) => (
+              <option key={r} value={r} />
+            ))}
+          </datalist>
+
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs text-baykus-muted">
-              {lines.length} kalem · KDV {formatMoney(lines.reduce((s, l) => s + num(l.kdv), 0))}
-            </span>
+            <span className="text-xs text-baykus-muted">{lines.length} kalem</span>
             <button type="button" onClick={removeSelected} disabled={!selectedKey} className="bk-btn bk-btn-desktop-red text-xs font-bold disabled:opacity-50">
               Seçili Satırı Sil
             </button>
+          </div>
+
+          {legacyActive && (
+            <div className="rounded bg-amber-50 border border-amber-200 px-3 py-1.5 text-[11px] text-amber-900">
+              Bu alışta KDV toplu girilmiş ({formatMoney(legacyTax!)}); satırlara tutarları oranında dağıtılarak
+              gösteriliyor. Bir satırın KDV oranını değiştirirseniz tüm satırlar kendi oranıyla hesaplanır.
+            </div>
+          )}
+
+          {/* Fatura altı toplamlar */}
+          <div className="flex justify-end">
+            <table className="text-sm w-full max-w-md bk-invoice-totals">
+              <tbody>
+                <tr>
+                  <td className="py-0.5 text-baykus-muted">Toplam Tutar</td>
+                  <td className="py-0.5 text-right tabular-nums">{formatMoney(calc.gross)}</td>
+                </tr>
+                {calc.lineDiscount > 0 && (
+                  <tr>
+                    <td className="py-0.5 text-baykus-muted">Satır İndirimleri</td>
+                    <td className="py-0.5 text-right tabular-nums">−{formatMoney(calc.lineDiscount)}</td>
+                  </tr>
+                )}
+                <tr>
+                  <td className="py-0.5 text-baykus-muted">
+                    <div className="flex items-center gap-1.5">
+                      <span>Genel İndirim</span>
+                      <input
+                        inputMode="decimal"
+                        className="bk-input py-0.5 w-20 tabular-nums text-right"
+                        value={discValue}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setDiscValue(e.target.value)}
+                        aria-label="Genel indirim"
+                      />
+                      <div className="inline-flex rounded border border-baykus-line overflow-hidden text-xs">
+                        {(["amount", "percent"] as const).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setDiscType(t)}
+                            className={`px-2 py-0.5 ${discType === t ? "bg-baykus-600 text-white font-bold" : "bg-white"}`}
+                          >
+                            {t === "amount" ? "₺" : "%"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-0.5 text-right tabular-nums">
+                    {calc.generalDiscount > 0 ? `−${formatMoney(calc.generalDiscount)}` : formatMoney(0)}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-0.5 text-baykus-muted">Toplam İskonto</td>
+                  <td className="py-0.5 text-right tabular-nums">
+                    {calc.totalDiscount > 0 ? `−${formatMoney(calc.totalDiscount)}` : formatMoney(0)}
+                  </td>
+                </tr>
+                <tr className="border-t border-baykus-line">
+                  <td className="py-0.5 text-baykus-muted">Ara Toplam (KDV Hariç)</td>
+                  <td className="py-0.5 text-right tabular-nums">{formatMoney(calc.taxBase)}</td>
+                </tr>
+                {calc.taxByRate.length === 0 ? (
+                  <tr>
+                    <td className="py-0.5 text-baykus-muted">Hesaplanan KDV</td>
+                    <td className="py-0.5 text-right tabular-nums">{formatMoney(0)}</td>
+                  </tr>
+                ) : (
+                  calc.taxByRate.map((t) => (
+                    <tr key={t.rate}>
+                      <td className="py-0.5 text-baykus-muted">
+                        Hesaplanan KDV (%{formatRate(t.rate)})
+                        <span className="ml-1 text-[10px]">matrah {formatMoney(t.base)}</span>
+                      </td>
+                      <td className="py-0.5 text-right tabular-nums">{formatMoney(t.amount)}</td>
+                    </tr>
+                  ))
+                )}
+                <tr>
+                  <td className="py-0.5 text-baykus-muted">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px]">Tüm satırlara KDV</span>
+                      {KDV_RATES.map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          disabled={!lines.length}
+                          onClick={() => setRateAll(String(r))}
+                          className="rounded border border-baykus-line px-1.5 py-0 text-[11px] hover:bg-slate-100 disabled:opacity-50"
+                        >
+                          %{r}
+                        </button>
+                      ))}
+                    </div>
+                  </td>
+                  <td />
+                </tr>
+                <tr className="border-t-2 border-slate-400 font-bold">
+                  <td className="py-1">Vergiler Dahil Genel Toplam</td>
+                  <td className="py-1 text-right tabular-nums text-base">{formatMoney(calc.total)}</td>
+                </tr>
+                <tr>
+                  <td className="py-0.5 text-baykus-muted">Ödenen Tutar</td>
+                  <td className="py-0.5 text-right tabular-nums text-emerald-700">{formatMoney(odenen)}</td>
+                </tr>
+                <tr>
+                  <td className="py-0.5 font-medium">Kalan (Cari Borç)</td>
+                  <td className={`py-0.5 text-right tabular-nums font-bold ${kalan > 0 ? "text-red-700" : "text-emerald-700"}`}>
+                    {formatMoney(kalan)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </fieldset>
       </div>

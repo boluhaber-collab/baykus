@@ -2156,7 +2156,7 @@ def product_buy_sell(
             },
         )
         b["buy_qty"] += int(float(ln.quantity or 0))
-        b["buy_amount"] += _dec(ln.unit_cost) * _dec(ln.quantity)
+        b["buy_amount"] += _dec(ln.line_total) if ln.line_total is not None else _dec(ln.unit_cost) * _dec(ln.quantity)
 
     keys = set(sales_map) | set(buy_map)
     pids = {int(k) for k in keys if k.isdigit()}

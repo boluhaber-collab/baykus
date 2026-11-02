@@ -76,6 +76,16 @@ class Purchase(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
     tax_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
+    # Fatura altı genel indirim (KDV öncesi): tür "amount" (₺) | "percent" (%)
+    discount_type: Mapped[str] = mapped_column(
+        String(10), default="amount", nullable=False, server_default="amount"
+    )
+    discount_value: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
+    discount_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_by_user_id: Mapped[int | None] = mapped_column(
@@ -110,6 +120,16 @@ class PurchaseLine(Base):
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     line_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Satır indirimi (₺), KDV oranı (%) ve satırın KDV tutarı (genel indirim payı düşülerek)
+    discount_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
+    tax_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
+    tax_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
 
     purchase: Mapped[Purchase] = relationship(back_populates="lines")
     product = relationship("Product", lazy="joined")

@@ -1012,21 +1012,41 @@ def build_purchase_pdf(purchase: Any, settings: dict[str, str] | None = None) ->
     )
     y -= 1.55 * cm
 
+    def _f(v: Any) -> float:
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    lines = list(getattr(purchase, "lines", None) or [])
     satirlar: list[list[Any]] = []
-    for line in getattr(purchase, "lines", None) or []:
+    brut_toplam = 0.0
+    satir_iskonto = 0.0
+    kdv_oran: dict[float, float] = {}
+    for line in lines:
+        qty = _f(getattr(line, "quantity", 0))
+        unit = _f(getattr(line, "unit_cost", 0))
+        net = _f(getattr(line, "line_total", None)) if getattr(line, "line_total", None) is not None else qty * unit
+        disc = _f(getattr(line, "discount_amount", 0))
+        rate = _f(getattr(line, "tax_rate", 0))
+        tax = _f(getattr(line, "tax_amount", 0))
+        brut_toplam += net + disc
+        satir_iskonto += disc
+        if tax or rate:
+            kdv_oran[rate] = kdv_oran.get(rate, 0.0) + tax
+        note = _s(getattr(line, "line_note", None))
         satirlar.append(
             [
-                (_s(getattr(line, "description", None)) + (f" — {_s(getattr(line, 'line_note', None))}" if _s(getattr(line, "line_note", None)) else ""))[:80],
+                (_s(getattr(line, "description", None)) + (f" — {note}" if note else ""))[:80],
                 _qty(getattr(line, "quantity", 0)),
-                _money(getattr(line, "unit_cost", 0)),
-                _money(getattr(line, "line_total", None) or (
-                    float(getattr(line, "quantity", 0) or 0)
-                    * float(getattr(line, "unit_cost", 0) or 0)
-                )),
+                _money(unit),
+                _money(disc) if disc else "—",
+                (f"%{rate:g}" if rate else "—"),
+                _money(net),
             ]
         )
     if not satirlar:
-        satirlar.append(["Kalem yok", "", "", ""])
+        satirlar.append(["Kalem yok", "", "", "", "", ""])
 
     y, sayfa_no = pdf_excel_tablo(
         c,
@@ -1034,13 +1054,55 @@ def build_purchase_pdf(purchase: Any, settings: dict[str, str] | None = None) ->
         height,
         y,
         "Kalemler",
-        ["Ürün / Açıklama", "Miktar", "Birim", "Tutar"],
+        ["Ürün / Açıklama", "Miktar", "Birim", "İndirim", "KDV", "Tutar"],
         satirlar,
-        oranlar=[4.0, 1.0, 1.4, 1.4],
+        oranlar=[3.6, 0.9, 1.2, 1.1, 0.8, 1.3],
         sayfa_baslik="Satın Alma Belgesi",
         alt_baslik=alt,
         settings=settings,
     )
+
+    # Fatura altı toplamlar (liste sonunda)
+    genel_ind = _f(getattr(purchase, "discount_amount", 0))
+    vergi = _f(getattr(purchase, "tax_amount", 0))
+    toplam_satir: list[tuple[str, str]] = [("Toplam Tutar", _money(brut_toplam))]
+    if satir_iskonto or genel_ind:
+        dtype = getattr(purchase, "discount_type", None) or "amount"
+        dval = _f(getattr(purchase, "discount_value", 0))
+        if genel_ind:
+            etiket = f"Genel İndirim (%{dval:g})" if dtype == "percent" else "Genel İndirim"
+            if satir_iskonto:
+                toplam_satir.append(("Satır İndirimleri", "-" + _money(satir_iskonto)))
+            toplam_satir.append((etiket, "-" + _money(genel_ind)))
+        toplam_satir.append(("Toplam İskonto", "-" + _money(satir_iskonto + genel_ind)))
+        toplam_satir.append(("Ara Toplam (KDV Hariç)", _money(brut_toplam - satir_iskonto - genel_ind)))
+    oran_toplam = sum(kdv_oran.values())
+    if kdv_oran and abs(oran_toplam - vergi) < 0.02:
+        for rate in sorted(kdv_oran):
+            etiket = f"Hesaplanan KDV (%{rate:g})" if rate else "Hesaplanan KDV"
+            toplam_satir.append((etiket, _money(kdv_oran[rate])))
+    else:
+        toplam_satir.append(("Hesaplanan KDV", _money(vergi)))
+    toplam_satir.append(("Vergiler Dahil Genel Toplam", _money(getattr(purchase, "total_amount", 0))))
+
+    font = pdf_font_ayarla()
+    y, sayfa_no = _ensure_space(
+        c, width, height, y, (len(toplam_satir) * 0.5 + 0.6) * cm, sayfa_no, "Satın Alma Belgesi", alt, settings
+    )
+    y -= 0.3 * cm
+    x_lbl = width - 9.5 * cm
+    x_val = width - 1.4 * cm
+    for i, (lbl, val) in enumerate(toplam_satir):
+        son = i == len(toplam_satir) - 1
+        c.setFont(font, 9.5 if son else 8.8)
+        c.setFillColorRGB(0, 0, 0)
+        if son:
+            c.setLineWidth(0.6)
+            c.line(x_lbl, y + 0.38 * cm, x_val, y + 0.38 * cm)
+        c.drawString(x_lbl, y, lbl)
+        c.drawRightString(x_val, y, val)
+        y -= 0.5 * cm
+    y -= 0.2 * cm
 
     notes = _display_note(getattr(purchase, "notes", None))
     if notes:

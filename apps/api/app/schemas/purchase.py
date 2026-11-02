@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +12,12 @@ class PurchaseLineIn(BaseModel):
     quantity: Decimal = Field(gt=0)
     unit_cost: Decimal = Field(ge=0)
     line_note: str | None = Field(default=None, max_length=2000)
+    # Satır indirimi (₺) — unit_cost brüt birim fiyattır
+    discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    # KDV oranı (%). None → eski davranış (KDV başlıktaki tax_amount ile gelir)
+    tax_rate: Decimal | None = Field(default=None, ge=0, le=100)
+    # Elle KDV tutarı (eski kayıtlarda dağıtılmış başlık KDV'si); verilirse orandan hesaplanmaz
+    tax_amount: Decimal | None = Field(default=None, ge=0)
 
 
 class PurchaseLineOut(BaseModel):
@@ -22,6 +29,9 @@ class PurchaseLineOut(BaseModel):
     unit_cost: Decimal
     line_total: Decimal
     line_note: str | None = None
+    discount_amount: Decimal = Decimal("0")
+    tax_rate: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
     product_name: str | None = None
     variant_name: str | None = None
 
@@ -34,6 +44,8 @@ class PurchaseCreate(BaseModel):
     purchase_number: str | None = None
     notes: str | None = None
     tax_amount: Decimal = Decimal("0")
+    discount_type: Literal["amount", "percent"] = "amount"
+    discount_value: Decimal = Field(default=Decimal("0"), ge=0)
     lines: list[PurchaseLineIn] = Field(min_length=1)
     confirm: bool = False
 
@@ -43,6 +55,8 @@ class PurchaseUpdate(BaseModel):
     purchase_date: date | None = None
     notes: str | None = None
     tax_amount: Decimal | None = None
+    discount_type: Literal["amount", "percent"] | None = None
+    discount_value: Decimal | None = Field(default=None, ge=0)
     lines: list[PurchaseLineIn] | None = None
 
 
@@ -55,6 +69,9 @@ class PurchaseListItem(BaseModel):
     status: str
     subtotal: Decimal
     tax_amount: Decimal
+    discount_type: str = "amount"
+    discount_value: Decimal = Decimal("0")
+    discount_amount: Decimal = Decimal("0")
     total_amount: Decimal
     notes: str | None = None
     created_at: datetime
