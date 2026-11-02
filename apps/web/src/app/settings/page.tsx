@@ -3,13 +3,13 @@
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AppSettings,
-  VariantOption,
   apiFetch,
   clearToken,
 } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { HubTabs } from "@/components/hub/HubChrome";
+import VariantSettingsPanel from "@/components/settings/VariantSettingsPanel";
 import { QUICK_ACTION_CATALOG, DEFAULT_SOL_MENU_ORDER } from "@/lib/nav";
 
 type UserOut = {
@@ -89,7 +89,6 @@ const EMPTY: AppSettings = {
   teklif_sablon_kapanis: "",
 };
 
-const VARIANT_KINDS = ["Beden", "Renk", "Baskı", "Birim", "Ebat"];
 
 function SettingsPageInner() {
   const router = useRouter();
@@ -103,10 +102,6 @@ function SettingsPageInner() {
   const [users, setUsers] = useState<UserOut[]>([]);
   const [roles, setRoles] = useState<{ id: number; name: string; description?: string }[]>([]);
   const [settings, setSettings] = useState<AppSettings>(EMPTY);
-  const [variants, setVariants] = useState<VariantOption[]>([]);
-  const [varForm, setVarForm] = useState({ kind: "Beden", value: "", note: "" });
-  const [varFilter, setVarFilter] = useState("");
-  const [varSelected, setVarSelected] = useState<number[]>([]);
   const [menuSel, setMenuSel] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
@@ -124,18 +119,16 @@ function SettingsPageInner() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [u, r, s, v] = await Promise.all([
+      const [u, r, s] = await Promise.all([
         apiFetch<UserOut[]>("/api/settings/users"),
         apiFetch<{ roles: { id: number; name: string; description?: string }[] }>(
           "/api/settings/roles",
         ),
         apiFetch<AppSettings>("/api/settings/app"),
-        apiFetch<VariantOption[]>("/api/settings/variants").catch(() => [] as VariantOption[]),
       ]);
       setUsers(u);
       setRoles(r.roles || []);
       setSettings({ ...EMPTY, ...s });
-      setVariants(v);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yükleme hatası (admin gerekir)");
     }
@@ -320,63 +313,6 @@ function SettingsPageInner() {
     setSettings({ ...settings, sol_menu_adlari: adlar });
   }
 
-  async function saveVariant(e: FormEvent) {
-    e.preventDefault();
-    setError("");
-    setMsg("");
-    if (!varForm.kind.trim() || !varForm.value.trim()) {
-      setError("Tür ve değer alanları gerekli.");
-      return;
-    }
-    try {
-      if (varSelected.length === 1) {
-        await apiFetch(`/api/settings/variants/${varSelected[0]}`, {
-          method: "PUT",
-          body: JSON.stringify(varForm),
-        });
-      } else {
-        await apiFetch("/api/settings/variants", {
-          method: "POST",
-          body: JSON.stringify(varForm),
-        });
-      }
-      setVarForm({ kind: varForm.kind, value: "", note: "" });
-      setVarSelected([]);
-      setMsg("Varyant kaydedildi");
-      setVariants(await apiFetch<VariantOption[]>("/api/settings/variants"));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Varyant kaydı başarısız");
-    }
-  }
-
-  async function deleteVariants() {
-    if (!varSelected.length) {
-      setError("Silinecek varyantları seçin.");
-      return;
-    }
-    if (!confirm(`${varSelected.length} varyant silinsin mi?`)) return;
-    try {
-      await apiFetch("/api/settings/variants/bulk-delete", {
-        method: "POST",
-        body: JSON.stringify(varSelected),
-      });
-      setVarSelected([]);
-      setMsg("Varyantlar silindi");
-      setVariants(await apiFetch<VariantOption[]>("/api/settings/variants"));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Silme başarısız");
-    }
-  }
-
-  const filteredVariants = useMemo(() => {
-    if (!varFilter) return variants;
-    return variants.filter((v) => v.kind.toLowerCase() === varFilter.toLowerCase());
-  }, [variants, varFilter]);
-
-  const kindOptions = useMemo(() => {
-    const fromDb = variants.map((v) => v.kind);
-    return Array.from(new Set([...VARIANT_KINDS, ...fromDb]));
-  }, [variants]);
 
   const sablonPreview = useMemo(() => {
     const baslik = settings.teklif_sablon_baslik?.trim() || "Teklif Formu";
@@ -694,117 +630,7 @@ function SettingsPageInner() {
         </div>
       )}
 
-      {tab === "varyant" && (
-        <div className="space-y-4">
-          <form onSubmit={saveVariant} className="rounded-xl border bg-white p-5 shadow-sm space-y-3">
-            <h2 className="font-bold text-sm">Varyant Ekle / Güncelle</h2>
-            <div className="grid md:grid-cols-4 gap-3">
-              <div>
-                <label className="text-xs text-slate-500">Tür</label>
-                <select
-                  className={input}
-                  value={varForm.kind}
-                  onChange={(e) => {
-                    setVarForm({ ...varForm, kind: e.target.value });
-                    setVarFilter(e.target.value);
-                  }}
-                >
-                  {kindOptions.map((k) => (
-                    <option key={k}>{k}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-xs text-slate-500">Değer</label>
-                <input
-                  className={input}
-                  value={varForm.value}
-                  onChange={(e) => setVarForm({ ...varForm, value: e.target.value })}
-                />
-              </div>
-              <div className="flex items-end">
-                <button type="submit" className="rounded-lg bg-emerald-600 text-white px-4 py-2 text-sm font-bold w-full">
-                  Kaydet / Güncelle
-                </button>
-              </div>
-              <div className="md:col-span-3">
-                <label className="text-xs text-slate-500">Not</label>
-                <input
-                  className={input}
-                  value={varForm.note}
-                  onChange={(e) => setVarForm({ ...varForm, note: e.target.value })}
-                />
-              </div>
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  className="rounded-lg bg-red-600 text-white px-4 py-2 text-sm w-full"
-                  onClick={() => void deleteVariants()}
-                >
-                  Seçilenleri Sil
-                </button>
-              </div>
-            </div>
-          </form>
-          <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b font-semibold text-sm flex items-center justify-between">
-              <span>Kayıtlı Varyantlar</span>
-              <button
-                type="button"
-                className="text-xs text-slate-500 hover:underline"
-                onClick={() => setVarFilter("")}
-              >
-                Tümünü Göster
-              </button>
-            </div>
-            <table className="min-w-full text-sm">
-              <thead className="bg-slate-50 text-left">
-                <tr>
-                  <th className="px-3 py-2 w-8"></th>
-                  <th className="px-3 py-2">Tür</th>
-                  <th className="px-3 py-2">Değer</th>
-                  <th className="px-3 py-2">Not</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredVariants.map((v) => (
-                  <tr
-                    key={v.id}
-                    className={`border-t cursor-pointer ${varSelected.includes(v.id) ? "bg-sky-50" : ""}`}
-                    onClick={() => {
-                      setVarSelected([v.id]);
-                      setVarForm({ kind: v.kind, value: v.value, note: v.note || "" });
-                    }}
-                  >
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={varSelected.includes(v.id)}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          setVarSelected((prev) =>
-                            e.target.checked ? [...prev, v.id] : prev.filter((x) => x !== v.id),
-                          );
-                        }}
-                      />
-                    </td>
-                    <td className="px-3 py-2">{v.kind}</td>
-                    <td className="px-3 py-2">{v.value}</td>
-                    <td className="px-3 py-2 text-slate-500">{v.note || "—"}</td>
-                  </tr>
-                ))}
-                {filteredVariants.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
-                      Kayıtlı varyant yok
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {tab === "varyant" && <VariantSettingsPanel />}
 
       {tab === "sablon" && (
         <div className="grid lg:grid-cols-2 gap-4">

@@ -18,6 +18,10 @@ class VariantOption(Base):
     kind: Mapped[str] = mapped_column(String(80), nullable=False, index=True)  # Tür
     value: Mapped[str] = mapped_column(String(120), nullable=False)  # Değer
     note: Mapped[str | None] = mapped_column(Text)
+    # Ayarlar > Varyant Yönetimi'nde sürükle-bırak sırası (ürün kartı açılır listeleri bu sırayı izler)
+    sort_order: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

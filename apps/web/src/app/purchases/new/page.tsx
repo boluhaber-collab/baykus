@@ -20,9 +20,9 @@ function NewPurchaseForm() {
   const search = useSearchParams();
   const presetSupplier = search.get("supplier_id") || "";
   const editId = search.get("edit");
-  const modeParam = editId ? "manuel" : search.get("mode") || "talep";
+  const modeParam = editId ? "manuel" : search.get("mode") || "manuel";
 
-  const [tab, setTab] = useState<"talep" | "manuel">(modeParam === "manuel" ? "manuel" : "talep");
+  const [tab, setTab] = useState<"talep" | "manuel">(modeParam === "talep" ? "talep" : "manuel");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const supplierSearch = useSupplierSearch(suppliers, setSuppliers);
   const [supplierId, setSupplierId] = useState(presetSupplier);
@@ -79,6 +79,11 @@ function NewPurchaseForm() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Yükleme hatası"));
   }, [presetSupplier]);
+
+  // Menüden ?mode=talep / ?mode=manuel ile gelince sekmeyi URL'ye göre ayarla (varsayılan: Alış gir)
+  useEffect(() => {
+    setTab(modeParam === "talep" ? "talep" : "manuel");
+  }, [modeParam]);
 
   useEffect(() => {
     if (tab === "talep") void loadTalep();
@@ -160,7 +165,7 @@ function NewPurchaseForm() {
             ← Satın Alma
           </Link>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">{editId ? "Alış Düzenle" : tab === "manuel" ? "Alış Gir" : "Satın Alma Talebi"}</h1>
-          <p className="text-slate-500 text-sm">Tedarik Merkezi › Satın Alma Talebi · kritik stok → alış belgesi</p>
+          <p className="text-slate-500 text-sm">{tab === "manuel" ? "Tedarik Merkezi › Alış Gir · perakende düzeni" : "Tedarik Merkezi › Satın Alma Talebi · kritik stok → alış belgesi"}</p>
         </div>
         <div className="flex gap-2">
           <Link href="/stock/critical" className="bk-btn bk-btn-ghost text-xs">
@@ -179,17 +184,17 @@ function NewPurchaseForm() {
       <div className="flex gap-2">
         <button
           type="button"
-          className={`bk-btn text-xs ${tab === "talep" ? "bk-btn-primary" : "bk-btn-ghost"}`}
-          onClick={() => setTab("talep")}
-        >
-          Kritik stok talebi
-        </button>
-        <button
-          type="button"
           className={`bk-btn text-xs ${tab === "manuel" ? "bk-btn-primary" : "bk-btn-ghost"}`}
           onClick={() => setTab("manuel")}
         >
           Alış gir (perakende düzeni)
+        </button>
+        <button
+          type="button"
+          className={`bk-btn text-xs ${tab === "talep" ? "bk-btn-primary" : "bk-btn-ghost"}`}
+          onClick={() => setTab("talep")}
+        >
+          Kritik stok talebi
         </button>
       </div>
       )}

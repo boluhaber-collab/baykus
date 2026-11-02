@@ -111,6 +111,15 @@ def _ensure_lookup_indexes() -> None:
     except Exception as _exc:
         print(f"[baykus] startup line_note migrate error: {_exc}", flush=True)
 
+    # Varyant kataloğu: variant_options.sort_order + boşsa ürünlerdeki renk/beden/baskı ile doldur
+    try:
+        from app.services.variant_options import run_startup_migrate as _vo_migrate
+
+        _vor = _vo_migrate()
+        if not _vor.get("ok") or _vor.get("added_col") or _vor.get("seeded"):
+            print(f"[baykus] startup variant options migrate: {_vor}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup variant options migrate error: {_exc}", flush=True)
     # Fiyat listesi kalem sırası (sort_order)
     try:
         from app.services.price_list_sort_migrate import run_startup_migrate as _pl_sort_migrate

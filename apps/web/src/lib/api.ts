@@ -1000,6 +1000,24 @@ export type VariantOption = {
   kind: string;
   value: string;
   note?: string | null;
+  sort_order?: number;
+};
+
+export type VariantOverviewItem = {
+  id: number | null;
+  value: string;
+  note?: string | null;
+  sort_order: number;
+  in_settings: boolean;
+  variant_count: number;
+  visible_count: number;
+  product_count: number;
+};
+
+export type VariantOverviewKind = {
+  kind: string;
+  column: string | null;
+  items: VariantOverviewItem[];
 };
 
 export type QuickActionCatalogItem = {

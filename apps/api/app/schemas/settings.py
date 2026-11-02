@@ -152,6 +152,8 @@ class VariantOptionUpdate(BaseModel):
     kind: str | None = Field(default=None, min_length=1, max_length=80)
     value: str | None = Field(default=None, min_length=1, max_length=120)
     note: str | None = None
+    # Değer değişince ürün varyantlarındaki eski değer de yenisiyle değiştirilsin
+    propagate: bool = True
 
 
 class VariantOptionOut(BaseModel):
@@ -159,8 +161,31 @@ class VariantOptionOut(BaseModel):
     kind: str
     value: str
     note: str | None = None
+    sort_order: int = 0
 
     model_config = {"from_attributes": True}
+
+
+class VariantOptionReorder(BaseModel):
+    kind: str = Field(min_length=1, max_length=80)
+    ids: list[int] = Field(default_factory=list)
+
+
+class VariantOverviewItem(BaseModel):
+    id: int | None = None
+    value: str
+    note: str | None = None
+    sort_order: int = 0
+    in_settings: bool = True
+    variant_count: int = 0
+    visible_count: int = 0
+    product_count: int = 0
+
+
+class VariantOverviewKind(BaseModel):
+    kind: str
+    column: str | None = None
+    items: list[VariantOverviewItem] = Field(default_factory=list)
 
 
 class QuickActionItem(BaseModel):

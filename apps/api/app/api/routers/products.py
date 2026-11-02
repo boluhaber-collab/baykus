@@ -443,6 +443,21 @@ def _apply_variant_rows(
                 db.delete(v)
 
     db.flush()
+    # Ürüne yazılan yeni renk / beden / baskı değerleri Ayarlar > Varyant Yönetimi listesine eklenir
+    try:
+        from app.services.variant_options import ensure_options
+
+        with db.begin_nested():
+            ensure_options(
+                db,
+                {
+                    "Renk": [_clean(r.color) for r in rows],
+                    "Beden": [_clean(r.size) for r in rows],
+                    "Baskı": [_clean(r.print_type) for r in rows],
+                },
+            )
+    except Exception:  # noqa: BLE001 — katalog senkronu ürün kaydını engellemesin
+        pass
     if has_ws:
         wh = (product.warehouse or DEFAULT_WAREHOUSE).strip() or DEFAULT_WAREHOUSE
         for nv in new_variants:
@@ -920,6 +935,19 @@ def variant_facets(
     colors = _distinct(ProductVariant.color)
     sizes = sort_sizes(_distinct(ProductVariant.size))
     print_types = _distinct(ProductVariant.print_type)
+    # Ayarlar > Varyant Yönetimi sırası öncelikli (listede olmayanlar sonda)
+    try:
+        from app.services.variant_options import norm_key, options_for_kind
+
+        def _by_settings(kind: str, vals: list[str]) -> list[str]:
+            rank = {norm_key(o.value): i for i, o in enumerate(options_for_kind(db, kind))}
+            return sorted(vals, key=lambda v: (0, rank[norm_key(v)]) if norm_key(v) in rank else (1, 0))
+
+        colors = _by_settings("Renk", colors)
+        sizes = _by_settings("Beden", sizes)
+        print_types = _by_settings("Baskı", print_types)
+    except Exception:  # noqa: BLE001
+        pass
     wh_rows = (
         db.query(Warehouse.name)
         .filter(Warehouse.is_active.is_(True))

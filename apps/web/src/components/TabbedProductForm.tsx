@@ -12,6 +12,8 @@ import {
   serializeProductDescription,
 } from "@/lib/productMeta";
 import { ProductFormPayload, VariantFormRow, buildVariantPayload } from "@/components/ProductForm";
+import VariantDatalists from "@/components/VariantDatalists";
+import { VARIANT_DATALIST_IDS, useVariantChoices } from "@/lib/variantOptions";
 
 type TabId =
   | "definition"
@@ -98,6 +100,7 @@ export default function TabbedProductForm({
   const [variants, setVariants] = useState<VariantFormRow[]>(
     initial?.variants?.length ? initial.variants.map(fromVariant) : [],
   );
+  const variantChoices = useVariantChoices();
 
   const [salesUnit, setSalesUnit] = useState(parsed.meta.sales_unit || "Adet");
   const [isEcommerce, setIsEcommerce] = useState(!!parsed.meta.is_ecommerce);
@@ -532,8 +535,14 @@ export default function TabbedProductForm({
               <p className="text-sm text-slate-500">Hizmet ürünlerinde varyant kullanılmaz.</p>
             ) : (
               <>
+                <VariantDatalists choices={variantChoices} />
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-slate-600">Beden / renk / baskı varyantları</p>
+                  <p className="text-sm text-slate-600">
+                    Beden / renk / baskı varyantları{" "}
+                    <Link href="/settings?tab=varyant" className="text-[11px] text-baykus-primary hover:underline">
+                      (listeyi düzenle)
+                    </Link>
+                  </p>
                   <button
                     type="button"
                     onClick={() => setVariants((v) => [...v, emptyVariant()])}
@@ -563,50 +572,79 @@ export default function TabbedProductForm({
                     key={v.key}
                     className="rounded-lg border border-slate-100 bg-slate-50 p-3 grid md:grid-cols-4 gap-2"
                   >
-                    <input
-                      className={input}
-                      placeholder="Ad (boşsa renk/beden)"
-                      value={v.name}
-                      onChange={(e) => updateVariant(v.key, { name: e.target.value })}
-                    />
-                    <input
-                      className={input}
-                      placeholder={isBhSyncCode(v.sku) ? "Senkron kodu gizli" : "SKU (boşsa otomatik)"}
-                      value={maskBhSyncValue(v.sku)}
-                      onChange={(e) => updateVariant(v.key, { sku: e.target.value })}
-                    />
-                    <input
-                      className={input}
-                      placeholder="Renk"
-                      value={v.color}
-                      onChange={(e) => updateVariant(v.key, { color: e.target.value })}
-                    />
-                    <input
-                      className={input}
-                      placeholder="Beden"
-                      value={v.size}
-                      onChange={(e) => updateVariant(v.key, { size: e.target.value })}
-                    />
-                    <input
-                      className={input}
-                      placeholder="Baskı türü"
-                      value={v.print_type}
-                      onChange={(e) => updateVariant(v.key, { print_type: e.target.value })}
-                    />
-                    <input
-                      className={input}
-                      placeholder={isBhSyncCode(v.barcode) ? "Senkron kodu gizli" : "Barkod"}
-                      value={isBhSyncCode(v.barcode) ? "" : v.barcode}
-                      onChange={(e) => updateVariant(v.key, { barcode: e.target.value })}
-                    />
-                    <input
-                      className={input}
-                      type="number"
-                      step="0.01"
-                      placeholder="Fiyat"
-                      value={v.price}
-                      onChange={(e) => updateVariant(v.key, { price: e.target.value })}
-                    />
+                    <label className="block min-w-0">
+                      <span className="block text-[10px] font-medium text-slate-500 mb-0.5">Ad</span>
+                      <input
+                        className={input}
+                        placeholder="Ad (boşsa renk/beden)"
+                        value={v.name}
+                        onChange={(e) => updateVariant(v.key, { name: e.target.value })}
+                      />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="block text-[10px] font-medium text-slate-500 mb-0.5">SKU</span>
+                      <input
+                        className={input}
+                        placeholder={isBhSyncCode(v.sku) ? "Senkron kodu gizli" : "SKU (boşsa otomatik)"}
+                        value={maskBhSyncValue(v.sku)}
+                        onChange={(e) => updateVariant(v.key, { sku: e.target.value })}
+                      />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="block text-[10px] font-medium text-slate-500 mb-0.5">Renk</span>
+                      <input
+                        className={input}
+                        list={VARIANT_DATALIST_IDS.renk}
+                        title="Ayarlar › Varyant Yönetimi listesinden seçin ya da yeni değer yazın"
+                        placeholder="Renk"
+                        value={v.color}
+                        onChange={(e) => updateVariant(v.key, { color: e.target.value })}
+                      />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="block text-[10px] font-medium text-slate-500 mb-0.5">Beden</span>
+                      <input
+                        className={input}
+                        list={VARIANT_DATALIST_IDS.beden}
+                        title="Ayarlar › Varyant Yönetimi listesinden seçin ya da yeni değer yazın"
+                        placeholder="Beden"
+                        value={v.size}
+                        onChange={(e) => updateVariant(v.key, { size: e.target.value })}
+                      />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="block text-[10px] font-medium text-slate-500 mb-0.5">Baskı</span>
+                      <input
+                        className={input}
+                        list={VARIANT_DATALIST_IDS.baski}
+                        title="Ayarlar › Varyant Yönetimi listesinden seçin ya da yeni değer yazın"
+                        placeholder="Baskı türü"
+                        value={v.print_type}
+                        onChange={(e) => updateVariant(v.key, { print_type: e.target.value })}
+                      />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="block text-[10px] font-medium text-slate-500 mb-0.5">Barkod</span>
+                      <input
+                        className={input}
+                        placeholder={isBhSyncCode(v.barcode) ? "Senkron kodu gizli" : "Barkod"}
+                        value={isBhSyncCode(v.barcode) ? "" : v.barcode}
+                        onChange={(e) => updateVariant(v.key, { barcode: e.target.value })}
+                      />
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="block text-[10px] font-medium text-slate-500 mb-0.5">Fiyat</span>
+                      <input
+                        className={input}
+                        type="number"
+                        step="0.01"
+                        placeholder="Fiyat"
+                        value={v.price}
+                        onChange={(e) => updateVariant(v.key, { price: e.target.value })}
+                      />
+                    </label>
+                    <div className="min-w-0">
+                    <span className="block text-[10px] font-medium text-slate-500 mb-0.5">Stok</span>
                     <div className="flex gap-2">
                       <input
                         className={input}
@@ -634,6 +672,7 @@ export default function TabbedProductForm({
                       >
                         Sil
                       </button>
+                    </div>
                     </div>
                   </div>
                 ))}

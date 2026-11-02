@@ -26,8 +26,12 @@ from app.schemas.settings import (
     UserUpdate,
     VariantOptionCreate,
     VariantOptionOut,
+    VariantOptionReorder,
     VariantOptionUpdate,
+    VariantOverviewItem,
+    VariantOverviewKind,
 )
+from app.services import variant_options as vo
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -295,91 +299,227 @@ def list_quick_actions(
 
 
 # --- Varyant Yönetimi (katalog) ---
+# Tür → ürün varyant sütunu: Renk → color, Beden → size, Baskı → print_type.
+
+_VARIANT_READ = ("admin", "satış", "üretim", "muhasebe")
+_VARIANT_WRITE = ("admin", "üretim")
+
+
+def _clean_value(kind: str, value: str) -> str:
+    v = " ".join((value or "").split())
+    if kind in ("Renk", "Beden"):
+        v = vo.tr_upper(v)
+    return v
+
+
+def _find_option(db: Session, kind: str, value: str, exclude_id: int | None = None):
+    k = vo.norm_key(value)
+    for o in vo.options_for_kind(db, kind):
+        if o.id != exclude_id and vo.norm_key(o.value) == k:
+            return o
+    return None
+
 
 @router.get("/variants", response_model=list[VariantOptionOut])
 def list_variant_options(
     kind: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "satış", "üretim", "muhasebe")),
+    _: User = Depends(require_roles(*_VARIANT_READ)),
 ) -> list[VariantOptionOut]:
-    q = db.query(VariantOption).order_by(VariantOption.kind, VariantOption.value)
+    rows = db.query(VariantOption).all()
     if kind:
-        q = q.filter(VariantOption.kind.ilike(kind.strip()))
-    return [VariantOptionOut.model_validate(r) for r in q.all()]
+        ck = vo.canonical_kind(kind)
+        rows = [r for r in rows if vo.canonical_kind(r.kind) == ck]
+    rank = {k: i for i, k in enumerate(vo.KIND_ORDER)}
+    rows.sort(
+        key=lambda r: (
+            rank.get(vo.canonical_kind(r.kind), 99),
+            vo.canonical_kind(r.kind),
+            r.sort_order or 0,
+            r.id,
+        )
+    )
+    return [VariantOptionOut.model_validate(r) for r in rows]
+
+
+@router.get("/variants/overview", response_model=list[VariantOverviewKind])
+def variant_overview(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*_VARIANT_READ)),
+) -> list[VariantOverviewKind]:
+    """Ayarlardaki değerler + ürünlerde kullanılıp ayarlarda olmayanlar, kullanım sayılarıyla."""
+    kinds = list(vo.KIND_ORDER)
+    for r in db.query(VariantOption.kind).distinct().all():
+        ck = vo.canonical_kind(r[0])
+        if ck and ck not in kinds:
+            kinds.append(ck)
+    out: list[VariantOverviewKind] = []
+    for kind in kinds:
+        usage = vo.usage_counts(db, kind)
+        items: list[VariantOverviewItem] = []
+        seen: set[str] = set()
+        for o in vo.options_for_kind(db, kind):
+            k = vo.norm_key(o.value)
+            seen.add(k)
+            u = usage.get(k, {})
+            items.append(
+                VariantOverviewItem(
+                    id=o.id,
+                    value=o.value,
+                    note=o.note,
+                    sort_order=o.sort_order or 0,
+                    in_settings=True,
+                    variant_count=u.get("variant_count", 0),
+                    visible_count=u.get("visible_count", 0),
+                    product_count=u.get("product_count", 0),
+                )
+            )
+        missing = [e for k, e in usage.items() if k not in seen]
+        for val in vo.sorted_seed_values(kind, [e["value"] for e in missing]):
+            u = usage[vo.norm_key(val)]
+            items.append(
+                VariantOverviewItem(
+                    value=val,
+                    in_settings=False,
+                    variant_count=u["variant_count"],
+                    visible_count=u["visible_count"],
+                    product_count=u["product_count"],
+                )
+            )
+        out.append(VariantOverviewKind(kind=kind, column=vo.column_for(kind), items=items))
+    return out
 
 
 @router.post("/variants", response_model=VariantOptionOut, status_code=status.HTTP_201_CREATED)
 def create_variant_option(
     payload: VariantOptionCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "üretim")),
+    _: User = Depends(require_roles(*_VARIANT_WRITE)),
 ) -> VariantOptionOut:
-    kind = payload.kind.strip()
-    value = payload.value.strip()
-    existing = (
-        db.query(VariantOption)
-        .filter(
-            VariantOption.kind.ilike(kind),
-            VariantOption.value.ilike(value),
-        )
-        .first()
-    )
+    kind = vo.canonical_kind(payload.kind)
+    value = _clean_value(kind, payload.value)
+    if not kind or not value:
+        raise HTTPException(status_code=400, detail="Tür ve değer gerekli")
+    note = (payload.note or "").strip() or None
+    existing = _find_option(db, kind, value)
     if existing:
-        existing.kind = kind
-        existing.value = value
-        existing.note = (payload.note or "").strip() or None
+        if note is not None:
+            existing.note = note
         db.commit()
         db.refresh(existing)
         return VariantOptionOut.model_validate(existing)
-    row = VariantOption(kind=kind, value=value, note=(payload.note or "").strip() or None)
+    row = VariantOption(kind=kind, value=value, note=note, sort_order=vo.next_sort_order(db, kind))
     db.add(row)
     db.commit()
     db.refresh(row)
     return VariantOptionOut.model_validate(row)
 
 
-@router.put("/variants/{option_id}", response_model=VariantOptionOut)
+@router.post("/variants/sync")
+def sync_variant_options(
+    kind: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*_VARIANT_WRITE)),
+) -> dict:
+    """Ürünlerde kullanılıp ayarlarda olmayan değerleri listeye ekle."""
+    kinds = [vo.canonical_kind(kind)] if kind else list(vo.KIND_ORDER)
+    added = {k: vo.sync_missing(db, k) for k in kinds if k in vo.KIND_COLUMNS}
+    db.commit()
+    return {"added": added, "total": sum(added.values())}
+
+
+@router.post("/variants/reorder")
+def reorder_variant_options(
+    payload: VariantOptionReorder,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*_VARIANT_WRITE)),
+) -> dict:
+    kind = vo.canonical_kind(payload.kind)
+    opts = {o.id: o for o in vo.options_for_kind(db, kind)}
+    order = [i for i in payload.ids if i in opts]
+    rest = [o.id for o in sorted(opts.values(), key=lambda o: (o.sort_order or 0, o.id)) if o.id not in order]
+    for idx, oid in enumerate(order + rest):
+        opts[oid].sort_order = idx
+    db.commit()
+    return {"ok": True, "count": len(opts)}
+
+
+@router.put("/variants/{option_id}")
 def update_variant_option(
     option_id: int,
     payload: VariantOptionUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "üretim")),
-) -> VariantOptionOut:
+    _: User = Depends(require_roles(*_VARIANT_WRITE)),
+) -> dict:
     row = db.get(VariantOption, option_id)
     if not row:
         raise HTTPException(status_code=404, detail="Varyant bulunamadı")
     data = payload.model_dump(exclude_unset=True)
-    if "kind" in data and data["kind"]:
-        data["kind"] = data["kind"].strip()
-    if "value" in data and data["value"]:
-        data["value"] = data["value"].strip()
-    for k, v in data.items():
-        setattr(row, k, v)
+    kind = vo.canonical_kind(row.kind)
+    if data.get("kind") and vo.canonical_kind(data["kind"]) != kind:
+        raise HTTPException(status_code=400, detail="Değerin türü değiştirilemez; yeni türde ekleyin")
+    updated_variants = 0
+    if data.get("value"):
+        new_value = _clean_value(kind, data["value"])
+        if not new_value:
+            raise HTTPException(status_code=400, detail="Değer boş olamaz")
+        if _find_option(db, kind, new_value, exclude_id=row.id):
+            raise HTTPException(status_code=409, detail=f"'{new_value}' bu türde zaten kayıtlı")
+        old_value = row.value
+        if new_value != old_value:
+            if payload.propagate:
+                updated_variants = vo.propagate_rename(db, kind, old_value, new_value)
+            row.value = new_value
+    if "note" in data:
+        row.note = (data["note"] or "").strip() or None
     db.commit()
     db.refresh(row)
-    return VariantOptionOut.model_validate(row)
+    return {
+        "option": VariantOptionOut.model_validate(row).model_dump(),
+        "updated_variants": updated_variants,
+    }
+
+
+def _usage_of(db: Session, row: VariantOption) -> int:
+    usage = vo.usage_counts(db, row.kind)
+    return int(usage.get(vo.norm_key(row.value), {}).get("variant_count", 0))
 
 
 @router.delete("/variants/{option_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_variant_option(
     option_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "üretim")),
+    _: User = Depends(require_roles(*_VARIANT_WRITE)),
 ) -> None:
     row = db.get(VariantOption, option_id)
     if not row:
         raise HTTPException(status_code=404, detail="Varyant bulunamadı")
+    n = _usage_of(db, row)
+    if n:
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{row.value}' {n} ürün varyantında kullanılıyor; silinemez (yeniden adlandırabilirsiniz)",
+        )
     db.delete(row)
     db.commit()
 
 
-@router.post("/variants/bulk-delete", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/variants/bulk-delete")
 def bulk_delete_variants(
     ids: list[int],
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "üretim")),
-) -> None:
-    if not ids:
-        return
-    db.query(VariantOption).filter(VariantOption.id.in_(ids)).delete(synchronize_session=False)
+    _: User = Depends(require_roles(*_VARIANT_WRITE)),
+) -> dict:
+    deleted = 0
+    skipped: list[str] = []
+    for oid in ids or []:
+        row = db.get(VariantOption, oid)
+        if not row:
+            continue
+        if _usage_of(db, row):
+            skipped.append(row.value)
+            continue
+        db.delete(row)
+        deleted += 1
     db.commit()
+    return {"deleted": deleted, "skipped": skipped}

@@ -3,6 +3,8 @@
 import { FormEvent, useState } from "react";
 import { ProductDetail, ProductVariant } from "@/lib/api";
 import { isBhSyncCode, maskBhSyncValue } from "@/lib/productLabel";
+import VariantDatalists from "@/components/VariantDatalists";
+import { VARIANT_DATALIST_IDS, useVariantChoices } from "@/lib/variantOptions";
 
 export type VariantFormRow = {
   key: string;
@@ -156,6 +158,7 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
   const [variants, setVariants] = useState<VariantFormRow[]>(
     initial?.variants?.length ? initial.variants.map(fromVariant) : [],
   );
+  const variantChoices = useVariantChoices();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -311,6 +314,7 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
               + Varyant
             </button>
           </div>
+          <VariantDatalists choices={variantChoices} />
           {variants.length === 0 && (
             <p className="text-sm text-slate-400">Varyant yok — ürün seviyesinde stok kullanılır.</p>
           )}
@@ -324,9 +328,9 @@ export default function ProductForm({ initial, submitLabel, onSubmit, onCancel }
                   value={maskBhSyncValue(v.sku)}
                   onChange={(e) => updateVariant(v.key, { sku: e.target.value })}
                 />
-                <input className={input} placeholder="Renk" value={v.color} onChange={(e) => updateVariant(v.key, { color: e.target.value })} />
-                <input className={input} placeholder="Beden" value={v.size} onChange={(e) => updateVariant(v.key, { size: e.target.value })} />
-                <input className={input} placeholder="Baskı türü" value={v.print_type} onChange={(e) => updateVariant(v.key, { print_type: e.target.value })} />
+                <input className={input} list={VARIANT_DATALIST_IDS.renk} placeholder="Renk" value={v.color} onChange={(e) => updateVariant(v.key, { color: e.target.value })} />
+                <input className={input} list={VARIANT_DATALIST_IDS.beden} placeholder="Beden" value={v.size} onChange={(e) => updateVariant(v.key, { size: e.target.value })} />
+                <input className={input} list={VARIANT_DATALIST_IDS.baski} placeholder="Baskı türü" value={v.print_type} onChange={(e) => updateVariant(v.key, { print_type: e.target.value })} />
                 <input className={input} placeholder={isBhSyncCode(v.barcode) ? "Senkron kodu gizli" : "Barkod"} value={maskBhSyncValue(v.barcode) || (isBhSyncCode(v.barcode) ? "" : v.barcode)} onChange={(e) => updateVariant(v.key, { barcode: e.target.value })} />
                 <input className={input} type="number" step="0.01" placeholder="Fiyat" value={v.price} onChange={(e) => updateVariant(v.key, { price: e.target.value })} />
                 <div className="flex gap-2">

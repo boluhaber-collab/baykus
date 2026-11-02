@@ -57,7 +57,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/suppliers/payables", label: "Borç / Alacak" },
       { href: "/suppliers/payables?fis=1", label: "Borç-Alacak Fişi" },
       { href: "/suppliers/payables?pay=1", label: "Tedarikçi Ödemesi" },
-      { href: "/purchases/new", label: "Satın Alma Talebi" },
+      { href: "/purchases/new", label: "Alış Gir" },
+      { href: "/purchases/new?mode=talep", label: "Satın Alma Talebi" },
     ],
   },
   {
@@ -256,7 +257,7 @@ const PATH_LABELS: Record<string, string> = {
   "/suppliers": "Tedarik Merkezi",
   "/suppliers/payables": "Borç / Alacak",
   "/purchases": "Alış Hareketleri",
-  "/purchases/new": "Satın Alma Talebi",
+  "/purchases/new": "Alış Gir",
   "/payables": "Borçlar",
   "/finance": "Finans",
   "/finance/cash": "Günlük Kasa",

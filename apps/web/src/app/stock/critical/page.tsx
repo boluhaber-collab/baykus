@@ -64,7 +64,7 @@ export default function CriticalStockPage() {
           <Link href="/stock" className="bk-btn bk-btn-ghost text-xs" style={{ background: "#0f766e", color: "#fff" }}>
             Stok Yönetimi
           </Link>
-          <Link href="/purchases/new" className="bk-btn text-xs text-white" style={{ background: "#be123c" }}>
+          <Link href="/purchases/new?mode=talep" className="bk-btn text-xs text-white" style={{ background: "#be123c" }}>
             Satın Alma Talebi
           </Link>
           <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={load}>

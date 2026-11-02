@@ -135,7 +135,8 @@ export default function SuppliersHubPage() {
           { href: "/purchases", label: "Alış Hareketleri", color: "#198754" },
           { href: "/suppliers/payables", label: "Borç / Alacak", color: "#7c3aed" },
           { href: "/suppliers/payables?pay=1", label: "Tedarikçi Ödemesi", color: "#334155" },
-          { href: "/purchases/new", label: "Satın Alma Talebi", color: "#be123c" },
+          { href: "/purchases/new", label: "Alış Gir", color: "#be123c" },
+          { href: "/purchases/new?mode=talep", label: "Satın Alma Talebi", color: "#f59e0b" },
         ]}
       />
 
@@ -261,7 +262,7 @@ export default function SuppliersHubPage() {
       {(tab === "alislar" || tab === "satinalma") && (
         <>
           <div className="mb-2 flex justify-end">
-            <HubActionButton href="/purchases/new" label="+ Satın Alma Talebi" color="#f59e0b" />
+            <HubActionButton href="/purchases/new" label="+ Alış Gir" color="#f59e0b" />
           </div>
           <div className="bk-table-wrap">
             <table className="bk-table">

@@ -68,7 +68,7 @@ export default function PayablesPage() {
             Borç-Alacak Fişi
           </button>
           <Link href="/purchases/new" className="bk-btn text-xs text-white" style={{ background: "#be123c" }}>
-            Satın Alma Talebi
+            Alış Gir
           </Link>
           <button type="button" className="bk-btn bk-btn-ghost text-xs" onClick={load}>
             Yenile
