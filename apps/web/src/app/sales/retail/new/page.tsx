@@ -18,6 +18,8 @@ import SplitPaymentRows, {
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
 import { localToday } from "@/lib/dates";
+import InvoiceTotalsFooter, { KDV_RATES } from "@/components/InvoiceTotalsFooter";
+import { DiscountType, computeInvoice, parseNum, r2 } from "@/lib/invoiceTotals";
 import LiveSearchSelect, { useProductSearch } from "@/components/LiveSearchSelect";
 import StockDetailFilters from "@/components/StockDetailFilters";
 import {
@@ -34,13 +36,18 @@ type CartLine = {
   urun: string;
   secenek: string;
   depo: string;
-  miktar: number;
-  birim_fiyat: number;
-  kdv: number;
-  indirim: number;
-  toplam: number;
+  miktar: string;
+  birim_fiyat: string;
+  /** KDV oranı (%) — tutar değil */
+  kdv: string;
+  /** Satır indirimi (₺) */
+  indirim: string;
   not?: string;
 };
+
+/** Ürünlerde KDV oranı alanı yok → satış satırı varsayılanı %0 (eski satışlarla aynı fiyat) */
+const DEFAULT_SALE_KDV = "0";
+const num = parseNum;
 
 function todayDateInput(): string {
   return localToday();
@@ -84,10 +91,19 @@ export default function PerakendeSatisGirPage() {
     void loadMeta();
   }, [loadMeta]);
 
-  const toplam = useMemo(
-    () => cart.reduce((s, l) => s + Number(l.toplam || 0), 0),
-    [cart],
+  const [discType, setDiscType] = useState<DiscountType>("amount");
+  const [discValue, setDiscValue] = useState("0");
+  const calc = useMemo(
+    () =>
+      computeInvoice(
+        cart.map((l) => ({ qty: num(l.miktar), price: num(l.birim_fiyat), discount: num(l.indirim), rate: num(l.kdv) })),
+        discType,
+        num(discValue),
+      ),
+    [cart, discType, discValue],
   );
+  /** Vergiler dahil genel toplam — tahsilat / kasa bununla eşleşir */
+  const toplam = calc.total;
 
   const tahsilatNum = useMemo(() => rowsSum(payRows), [payRows]);
 
@@ -103,13 +119,13 @@ export default function PerakendeSatisGirPage() {
       urun: p.name,
       secenek: opts.secenek,
       depo: opts.depo,
-      miktar: 1,
-      birim_fiyat: opts.price,
-      kdv: 0,
-      indirim: 0,
-      toplam: opts.price,
+      miktar: "1",
+      birim_fiyat: String(opts.price || 0),
+      kdv: DEFAULT_SALE_KDV,
+      indirim: "0",
     };
-    setCart((prev) => [...prev, line]);
+    // KDV oranı: son satırın oranı (kullanıcı değiştirdiyse), yoksa %0
+    setCart((prev) => [...prev, { ...line, kdv: prev.length ? prev[prev.length - 1]!.kdv : DEFAULT_SALE_KDV }]);
     setSelectedKey(key);
     setVariantPick(null);
   }
@@ -162,15 +178,11 @@ export default function PerakendeSatisGirPage() {
   }
 
   function updateLine(key: string, patch: Partial<CartLine>) {
-    setCart((prev) =>
-      prev.map((l) => {
-        if (l.key !== key) return l;
-        const next = { ...l, ...patch };
-        const gross = next.miktar * next.birim_fiyat;
-        next.toplam = Math.max(0, gross - Number(next.indirim || 0) + Number(next.kdv || 0));
-        return next;
-      }),
-    );
+    setCart((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  }
+
+  function setRateAll(value: string) {
+    setCart((prev) => prev.map((l) => ({ ...l, kdv: value })));
   }
 
   function removeSelected() {
@@ -183,6 +195,21 @@ export default function PerakendeSatisGirPage() {
     setError("");
     if (cart.length === 0) {
       setError("Satışa en az bir ürün eklenmelidir.");
+      return;
+    }
+    for (const l of cart) {
+      if (!(num(l.miktar) >= 1)) {
+        setError(`${l.urun}: miktar en az 1 olmalı.`);
+        return;
+      }
+      const r = num(l.kdv);
+      if (r < 0 || r > 100) {
+        setError(`${l.urun}: KDV oranı 0–100 arasında olmalı.`);
+        return;
+      }
+    }
+    if (num(discValue) < 0 || (discType === "percent" && num(discValue) > 100)) {
+      setError("Genel indirim geçersiz (yüzde 0–100, tutar negatif olamaz).");
       return;
     }
     if (toplam <= 0) {
@@ -225,18 +252,20 @@ export default function PerakendeSatisGirPage() {
           delivery_date: tarih || localToday(),
           movement_date: tarih || localToday(),
           deposit_amount: tahsilatNum > 0 ? tahsilatNum : 0,
-          discount_amount: 0,
+          discount_type: discType,
+          discount_value: Math.max(0, num(discValue)),
           lines: cart.map((l) => ({
             product_id: l.product_id,
             variant_id: l.variant_id || null,
             description: l.urun,
-            quantity: l.miktar,
+            quantity: Math.max(1, Math.round(num(l.miktar))),
             size: null,
             color: l.secenek || null,
             print_type: null,
-            unit_price: l.birim_fiyat,
+            unit_price: Math.max(0, num(l.birim_fiyat)),
             discount_rate: 0,
-            discount_amount: l.indirim || 0,
+            discount_amount: Math.max(0, num(l.indirim)),
+            tax_rate: r2(num(l.kdv)),
             line_note: (l.not || "").trim() || null,
           })),
           payments: payments.length && tahsilatNum > 0 ? payments : undefined,
@@ -250,6 +279,8 @@ export default function PerakendeSatisGirPage() {
       setBusy(false);
     }
   }
+
+  const numCls = "bk-input py-0.5 tabular-nums text-right";
 
   return (
     <div className="space-y-2 pb-2">
@@ -302,8 +333,11 @@ export default function PerakendeSatisGirPage() {
           </div>
 
           <div className="bk-entry-row">
-            <label className="text-xs font-medium">Toplam Tutar</label>
-            <div className="text-base font-bold tabular-nums">{formatMoney(toplam)}</div>
+            <label className="text-xs font-medium">Genel Toplam</label>
+            <div className="text-base font-bold tabular-nums">
+              {formatMoney(toplam)}
+              <span className="ml-1 text-[10px] font-normal text-baykus-muted">KDV dahil</span>
+            </div>
           </div>
 
           <div>
@@ -367,16 +401,17 @@ export default function PerakendeSatisGirPage() {
                   <th>Ürün</th>
                   <th>Seçenek</th>
                   <th>Depo</th>
-                  <th>Miktar</th>
-                  <th>Birim Fiyat</th>
-                  <th>KDV</th>
-                  <th>İndirim</th>
+                  <th className="text-right">Miktar</th>
+                  <th className="text-right">Birim Fiyat</th>
+                  <th className="text-right">KDV %</th>
+                  <th className="text-right">KDV Tutarı</th>
+                  <th className="text-right">İndirim ₺</th>
                   <th>Açıklama</th>
-                  <th className="text-right">Toplam</th>
+                  <th className="text-right" title="Miktar × Birim Fiyat − İndirim (KDV hariç)">Tutar</th>
                 </tr>
               </thead>
               <tbody>
-                {cart.map((l) => (
+                {cart.map((l, i) => (
                   <tr
                     key={l.key}
                     onClick={() => setSelectedKey(l.key)}
@@ -399,47 +434,40 @@ export default function PerakendeSatisGirPage() {
                     </td>
                     <td>
                       <input
-                        type="number"
-                        min={1}
-                        className="bk-input py-0.5 w-16 tabular-nums"
+                        inputMode="numeric"
+                        className={`${numCls} w-16`}
                         value={l.miktar}
-                        onChange={(e) =>
-                          updateLine(l.key, { miktar: Math.max(1, Number(e.target.value) || 1) })
-                        }
+                        onChange={(e) => updateLine(l.key, { miktar: e.target.value })}
                       />
                     </td>
                     <td>
                       <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="bk-input py-0.5 w-20 tabular-nums"
+                        inputMode="decimal"
+                        className={`${numCls} w-20`}
                         value={l.birim_fiyat}
-                        onChange={(e) =>
-                          updateLine(l.key, { birim_fiyat: Number(e.target.value) || 0 })
-                        }
+                        placeholder="0,00"
+                        onChange={(e) => updateLine(l.key, { birim_fiyat: e.target.value })}
                       />
                     </td>
                     <td>
                       <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="bk-input py-0.5 w-16 tabular-nums"
+                        inputMode="decimal"
+                        list="bk-sale-kdv-rates"
+                        className={`${numCls} w-14`}
                         value={l.kdv}
-                        onChange={(e) => updateLine(l.key, { kdv: Number(e.target.value) || 0 })}
+                        title="KDV oranı (%)"
+                        onChange={(e) => updateLine(l.key, { kdv: e.target.value })}
                       />
+                    </td>
+                    <td className="tabular-nums whitespace-nowrap text-right text-baykus-muted">
+                      {formatMoney(calc.lines[i]?.tax ?? 0)}
                     </td>
                     <td>
                       <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="bk-input py-0.5 w-16 tabular-nums"
+                        inputMode="decimal"
+                        className={`${numCls} w-16`}
                         value={l.indirim}
-                        onChange={(e) =>
-                          updateLine(l.key, { indirim: Number(e.target.value) || 0 })
-                        }
+                        onChange={(e) => updateLine(l.key, { indirim: e.target.value })}
                       />
                     </td>
                     <td className="min-w-[10rem]">
@@ -452,13 +480,13 @@ export default function PerakendeSatisGirPage() {
                       />
                     </td>
                     <td className="tabular-nums font-medium whitespace-nowrap text-right">
-                      {formatMoney(l.toplam)}
+                      {formatMoney(calc.lines[i]?.net ?? 0)}
                     </td>
                   </tr>
                 ))}
                 {cart.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="text-center text-baykus-muted py-8">
+                    <td colSpan={10} className="text-center text-baykus-muted py-8">
                       Sepete ürün eklemek için listeden seçin
                     </td>
                   </tr>
@@ -467,15 +495,37 @@ export default function PerakendeSatisGirPage() {
             </table>
           </div>
 
-          <div className="flex justify-end">
+          <datalist id="bk-sale-kdv-rates">
+            {KDV_RATES.map((r) => (
+              <option key={r} value={r} />
+            ))}
+          </datalist>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-baykus-muted">{cart.length} kalem</span>
             <button
               type="button"
               onClick={removeSelected}
-              className="bk-btn bk-btn-desktop-red text-xs font-bold"
+              disabled={!selectedKey}
+              className="bk-btn bk-btn-desktop-red text-xs font-bold disabled:opacity-50"
             >
               Seçili Satırı Sil
             </button>
           </div>
+
+          {/* Fatura altı toplamlar */}
+          <InvoiceTotalsFooter
+            calc={calc}
+            discType={discType}
+            discValue={discValue}
+            onDiscType={setDiscType}
+            onDiscValue={setDiscValue}
+            onRateAll={setRateAll}
+            lineCount={cart.length}
+            paid={tahsilatNum}
+            paidLabel="Tahsil Edilen"
+            remainingLabel="Kalan"
+          />
         </fieldset>
       </div>
 

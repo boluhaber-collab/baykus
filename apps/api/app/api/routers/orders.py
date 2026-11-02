@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -50,9 +50,17 @@ def _dec(value: Decimal | float | int | None) -> Decimal:
     return Decimal(str(value))
 
 
+_Q = Decimal("0.01")
+
+
+def _q(value: Decimal | float | int | None) -> Decimal:
+    return _dec(value).quantize(_Q, rounding=ROUND_HALF_UP)
+
+
 def _line_total(qty: int, unit_price: Decimal, discount_amount: Decimal) -> Decimal:
-    raw = _dec(unit_price) * Decimal(qty)
-    return max(raw - _dec(discount_amount), Decimal("0"))
+    """KDV hariç satır neti = miktar × birim − satır indirimi (negatife düşmez)."""
+    raw = _q(_dec(unit_price) * Decimal(qty))
+    return max(raw - _q(discount_amount), Decimal("0"))
 
 
 def _paid_amount(order: Order) -> Decimal:
@@ -109,15 +117,76 @@ def _to_out(order: Order) -> OrderOut:
     return OrderOut(
         **base.model_dump(),
         discount_amount=_dec(order.discount_amount),
+        discount_type=order.discount_type or "amount",
+        discount_value=_dec(order.discount_value),
+        subtotal=_dec(order.subtotal),
+        tax_amount=_dec(order.tax_amount),
         lines=order.lines,
         payments=order.payments,
         status_history=order.status_history,
     )
 
 
+def _general_discount(subtotal: Decimal, dtype: str | None, value: Decimal) -> Decimal:
+    if value <= 0 or subtotal <= 0:
+        return Decimal("0")
+    if (dtype or "amount") == "percent":
+        return _q(subtotal * min(value, Decimal("100")) / Decimal("100"))
+    return min(_q(value), subtotal)
+
+
 def _recompute_total(order: Order) -> None:
-    lines_sum = sum((_dec(line.line_total) for line in order.lines), Decimal("0"))
-    order.total_amount = max(lines_sum - _dec(order.discount_amount), Decimal("0"))
+    """Fatura mantığı (frontend lib/invoiceTotals.ts ile birebir):
+    Σ satır neti − genel indirim (satırlara netleri oranında dağıtılır, son satır kalanı alır)
+    + satır KDV'leri ((net − indirim payı) × oran / 100) = Vergiler Dahil Genel Toplam.
+    Eski siparişlerde KDV 0 → toplam = Σ net − indirim (önceki formülle aynı).
+    """
+    lines = list(order.lines or [])
+    # Eski istemci/sunucu yolu: yalnız discount_amount (₺) set edilmişse ₺ indirim olarak al
+    if _dec(order.discount_value) <= 0 and _dec(order.discount_amount) > 0:
+        order.discount_type = "amount"
+        order.discount_value = _q(order.discount_amount)
+    subtotal = sum((_dec(l.line_total) for l in lines), Decimal("0"))
+    disc = _general_discount(subtotal, order.discount_type, _dec(order.discount_value))
+    remaining = disc
+    tax = Decimal("0")
+    for i, l in enumerate(lines):
+        net = _dec(l.line_total)
+        if i == len(lines) - 1:
+            alloc = remaining
+        else:
+            alloc = _q(disc * net / subtotal) if subtotal > 0 else Decimal("0")
+        remaining -= alloc
+        rate = _dec(l.tax_rate)
+        l.tax_amount = _q(max(Decimal("0"), net - alloc) * rate / Decimal("100")) if rate > 0 else Decimal("0")
+        tax += l.tax_amount
+    order.subtotal = subtotal
+    order.discount_amount = disc
+    order.tax_amount = tax
+    order.total_amount = max(subtotal - disc + tax, Decimal("0"))
+
+
+def _apply_discount_input(order: Order, data: dict) -> bool:
+    """discount_type/discount_value (yeni) veya discount_amount (eski ₺) girdisini uygular.
+    Dönüş: indirim girdisi değişti mi."""
+    dtype = data.get("discount_type")
+    dval = data.get("discount_value")
+    if dval is not None or dtype is not None:
+        new_type = dtype or order.discount_type or "amount"
+        new_val = _q(dval) if dval is not None else _dec(order.discount_value)
+        changed = new_type != (order.discount_type or "amount") or new_val != _dec(order.discount_value)
+        order.discount_type = new_type
+        order.discount_value = new_val
+        order.discount_amount = Decimal("0")  # yeniden hesaplanır
+        return changed
+    if data.get("discount_amount") is not None:
+        new_val = _q(data["discount_amount"])
+        changed = (order.discount_type or "amount") != "amount" or new_val != _dec(order.discount_value)
+        order.discount_type = "amount"
+        order.discount_value = new_val
+        order.discount_amount = new_val
+        return changed
+    return False
 
 
 def _replace_lines(order: Order, lines_payload: list) -> None:
@@ -130,7 +199,7 @@ def _replace_lines(order: Order, lines_payload: list) -> None:
         # If discount_rate given and discount_amount is 0, derive amount
         rate = _dec(data.get("discount_rate"))
         if rate > 0 and discount_amount == 0:
-            discount_amount = (unit_price * Decimal(qty) * rate / Decimal("100")).quantize(Decimal("0.01"))
+            discount_amount = _q(unit_price * Decimal(qty) * rate / Decimal("100"))
         line = OrderLine(
             product_id=data.get("product_id"),
             variant_id=data.get("variant_id"),
@@ -144,6 +213,8 @@ def _replace_lines(order: Order, lines_payload: list) -> None:
             discount_amount=discount_amount,
             line_total=_line_total(qty, unit_price, discount_amount),
             line_note=((data.get("line_note") or "").strip() or None),
+            tax_rate=_q(data.get("tax_rate")),
+            tax_amount=Decimal("0"),
         )
         order.lines.append(line)
     _recompute_total(order)
@@ -558,8 +629,18 @@ def create_order(
         design_approved_at=getattr(payload, "design_approved_at", None),
         design_whatsapp_at=getattr(payload, "design_whatsapp_at", None),
         deposit_amount=_dec(payload.deposit_amount),
-        discount_amount=_dec(payload.discount_amount),
+        discount_type="amount",
+        discount_value=Decimal("0"),
+        discount_amount=Decimal("0"),
         total_amount=Decimal("0"),
+    )
+    _apply_discount_input(
+        order,
+        {
+            "discount_type": payload.discount_type,
+            "discount_value": payload.discount_value,
+            "discount_amount": payload.discount_amount,
+        },
     )
     db.add(order)
     db.flush()
@@ -870,8 +951,10 @@ def update_order(
     data = payload.model_dump(exclude_unset=True)
     lines = data.pop("lines", None)
     new_status = data.pop("status", None)
+    disc_in = {k: data.pop(k) for k in ("discount_type", "discount_value", "discount_amount") if k in data}
+    disc_in = {k: v for k, v in disc_in.items() if v is not None}
 
-    if order.status == "Sipariş İptali" and (lines is not None or "discount_amount" in data):
+    if order.status == "Sipariş İptali" and (lines is not None or disc_in):
         raise HTTPException(
             status_code=400,
             detail="İptal edilmiş siparişte satır/iskonto düzenlenemez",
@@ -892,7 +975,7 @@ def update_order(
 
     needs_cascade = order.status != "Sipariş İptali" and (
         lines is not None
-        or "discount_amount" in data
+        or bool(disc_in)
         or "customer_id" in data
         or "deposit_amount" in data
     )
@@ -917,6 +1000,8 @@ def update_order(
 
     for key, value in data.items():
         setattr(order, key, value)
+    if disc_in:
+        _apply_discount_input(order, disc_in)
 
     if lines is not None:
         if len(lines) == 0:
@@ -930,7 +1015,7 @@ def update_order(
                 return self._d
 
         _replace_lines(order, [_Line(l) for l in lines])
-    elif "discount_amount" in data:
+    elif disc_in:
         _recompute_total(order)
 
     if new_status is not None and new_status != order.status:
@@ -1113,6 +1198,37 @@ def order_timeline(
         "status": order.status,
         "events": events,
     }
+
+@router.get("/{order_id}/invoice-pdf")
+def sale_invoice_pdf(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin", "satış", "muhasebe")),
+):
+    """Satış belgesi: satır KDV + fatura altı toplamlar (KDV dahil genel toplam)."""
+    from fastapi.responses import Response
+    from app.models.settings_model import AppSetting
+    from app.services.pdf import build_sale_invoice_pdf
+
+    order = _load_order(db, order_id)
+    rows = {s.key: (s.value or "") for s in db.query(AppSetting).all()}
+    settings = {
+        "company_name": rows.get("company_name", "Baykuş Baskı"),
+        "phone": rows.get("phone", ""),
+        "email": rows.get("email", rows.get("company_email", "")),
+        "address": rows.get("address", rows.get("adres", "")),
+        "logo_dosyasi": rows.get("logo_dosyasi", ""),
+        "form_logo_dosyasi": rows.get("form_logo_dosyasi", ""),
+        "pdf_alt_baslik": rows.get("pdf_alt_baslik", "Kişiye ve Kuruma Özel Baskı Hizmetleri"),
+        "web_adresi": rows.get("web_adresi", "www.baykusbaski.com"),
+    }
+    pdf_bytes = build_sale_invoice_pdf(order, settings)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{order.order_number}-satis-belgesi.pdf"'},
+    )
+
 
 @router.get("/{order_id}/work-order-pdf")
 def work_order_pdf(

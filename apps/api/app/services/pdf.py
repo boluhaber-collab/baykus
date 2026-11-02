@@ -981,6 +981,174 @@ def build_tabular_report_pdf(
     return buf.getvalue()
 
 
+def _draw_invoice_footer(
+    c: Any,
+    width: float,
+    height: float,
+    y: float,
+    sayfa_no: int,
+    title: str,
+    alt: str,
+    settings: dict[str, str],
+    doc: Any,
+    brut_toplam: float,
+    satir_iskonto: float,
+    kdv_oran: dict[float, float],
+    paid: float | None = None,
+) -> tuple[float, int]:
+    """Fatura altı toplamlar (liste sonunda) — alış ve satış belgeleri ortak."""
+
+    def _f(v: Any) -> float:
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    genel_ind = _f(getattr(doc, "discount_amount", 0))
+    vergi = _f(getattr(doc, "tax_amount", 0))
+    toplam = _f(getattr(doc, "total_amount", 0))
+    toplam_satir: list[tuple[str, str]] = [("Toplam Tutar", _money(brut_toplam))]
+    if satir_iskonto or genel_ind:
+        dtype = getattr(doc, "discount_type", None) or "amount"
+        dval = _f(getattr(doc, "discount_value", 0))
+        if satir_iskonto:
+            toplam_satir.append(("Satır İndirimleri", "-" + _money(satir_iskonto)))
+        if genel_ind:
+            etiket = f"Genel İndirim (%{dval:g})" if dtype == "percent" and dval > 0 else "Genel İndirim"
+            toplam_satir.append((etiket, "-" + _money(genel_ind)))
+        toplam_satir.append(("Toplam İskonto", "-" + _money(satir_iskonto + genel_ind)))
+    toplam_satir.append(("Ara Toplam (KDV Hariç)", _money(brut_toplam - satir_iskonto - genel_ind)))
+    oran_toplam = sum(kdv_oran.values())
+    if kdv_oran and abs(oran_toplam - vergi) < 0.02:
+        for rate in sorted(kdv_oran):
+            etiket = f"Hesaplanan KDV (%{rate:g})" if rate else "Hesaplanan KDV"
+            toplam_satir.append((etiket, _money(kdv_oran[rate])))
+    else:
+        toplam_satir.append(("Hesaplanan KDV", _money(vergi)))
+    toplam_satir.append(("Vergiler Dahil Genel Toplam", _money(toplam)))
+    son_idx = len(toplam_satir) - 1
+    if paid is not None:
+        toplam_satir.append(("Ödenen Tutar", _money(paid)))
+        toplam_satir.append(("Kalan", _money(max(0.0, toplam - paid))))
+
+    font = pdf_font_ayarla()
+    y, sayfa_no = _ensure_space(
+        c, width, height, y, (len(toplam_satir) * 0.5 + 0.6) * cm, sayfa_no, title, alt, settings
+    )
+    y -= 0.3 * cm
+    x_lbl = width - 9.5 * cm
+    x_val = width - 1.4 * cm
+    for i, (lbl, val) in enumerate(toplam_satir):
+        son = i == son_idx
+        c.setFont(font, 9.5 if son else 8.8)
+        c.setFillColorRGB(0, 0, 0)
+        if son:
+            c.setLineWidth(0.6)
+            c.line(x_lbl, y + 0.38 * cm, x_val, y + 0.38 * cm)
+        c.drawString(x_lbl, y, lbl)
+        c.drawRightString(x_val, y, val)
+        y -= 0.5 * cm
+    y -= 0.2 * cm
+    return y, sayfa_no
+
+
+def build_sale_invoice_pdf(order: Any, settings: dict[str, str] | None = None) -> bytes:
+    """Satış belgesi PDF — satır KDV + fatura altı toplamlar (alış belgesiyle aynı düzen)."""
+    title = "Satış Belgesi"
+    buf, c, width, height = _new_doc()
+    settings = settings or {}
+    alt = _alt_baslik_from_settings(settings, "Baykuş Baskı")
+    y = pdf_modern_baslik(c, width, height, title, alt, settings)
+
+    def _f(v: Any) -> float:
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    customer = getattr(order, "customer", None)
+    payments = list(getattr(order, "payments", None) or [])
+    paid = sum(_f(getattr(p, "amount", 0)) for p in payments)
+    if paid <= 0:
+        paid = _f(getattr(order, "deposit_amount", 0))
+    tarih = getattr(order, "delivery_date", None) or getattr(order, "created_at", None)
+    bilgiler = [
+        ("Belge No", _s(getattr(order, "order_number", None), "—")),
+        ("Tarih", _date_tr(tarih)),
+        ("Müşteri", _s(getattr(customer, "name", None), "Perakende")),
+        ("Durum", _s(getattr(order, "status", None), "—")),
+        ("Ara toplam (KDV hariç)", _money(_f(getattr(order, "total_amount", 0)) - _f(getattr(order, "tax_amount", 0)))),
+        ("KDV", _money(getattr(order, "tax_amount", 0))),
+    ]
+    y = _info_boxes_two_col(c, y, bilgiler, per_col=3)
+    pdf_modern_kutu(
+        c, 10.7 * cm, y, 8.6 * cm, 1.15 * cm, "Genel Toplam (KDV dahil)",
+        _money(getattr(order, "total_amount", 0)), fill=(0.90, 0.96, 0.92),
+    )
+    y -= 1.55 * cm
+
+    satirlar: list[list[Any]] = []
+    brut_toplam = 0.0
+    satir_iskonto = 0.0
+    kdv_oran: dict[float, float] = {}
+    for line in list(getattr(order, "lines", None) or []):
+        qty = _f(getattr(line, "quantity", 0))
+        unit = _f(getattr(line, "unit_price", 0))
+        net = _f(getattr(line, "line_total", None)) if getattr(line, "line_total", None) is not None else qty * unit
+        disc = _f(getattr(line, "discount_amount", 0))
+        rate = _f(getattr(line, "tax_rate", 0))
+        tax = _f(getattr(line, "tax_amount", 0))
+        brut_toplam += net + disc
+        satir_iskonto += disc
+        if tax or rate:
+            kdv_oran[rate] = kdv_oran.get(rate, 0.0) + tax
+        note = _s(getattr(line, "line_note", None))
+        extra = " ".join(x for x in (_s(getattr(line, "size", None)), _s(getattr(line, "color", None))) if x)
+        desc = _s(getattr(line, "description", None))
+        if extra:
+            desc += f" ({extra})"
+        if note:
+            desc += f" — {note}"
+        satirlar.append(
+            [
+                desc[:80],
+                _qty(getattr(line, "quantity", 0)),
+                _money(unit),
+                _money(disc) if disc else "—",
+                _money(net),
+                f"%{rate:g}",
+                _money(tax),
+            ]
+        )
+    if not satirlar:
+        satirlar.append(["Kalem yok", "", "", "", "", "", ""])
+
+    y, sayfa_no = pdf_excel_tablo(
+        c, width, height, y, "Kalemler",
+        ["Ürün / Açıklama", "Miktar", "Birim", "İndirim", "Tutar", "KDV %", "KDV"],
+        satirlar,
+        oranlar=[3.3, 0.8, 1.1, 1.0, 1.2, 0.7, 1.1],
+        sayfa_baslik=title, alt_baslik=alt, settings=settings,
+    )
+    y, sayfa_no = _draw_invoice_footer(
+        c, width, height, y, sayfa_no, title, alt, settings,
+        order, brut_toplam, satir_iskonto, kdv_oran, paid=paid,
+    )
+
+    notes = _display_note(getattr(order, "notes", None))
+    if notes:
+        font = pdf_font_ayarla()
+        y, sayfa_no = _ensure_space(c, width, height, y, 1.5 * cm, sayfa_no, title, alt, settings)
+        c.setFont(font, 8.5)
+        c.setFillColorRGB(0.25, 0.25, 0.25)
+        c.drawString(1.4 * cm, y, f"Not: {notes[:120]}")
+        c.setFillColorRGB(0, 0, 0)
+
+    pdf_modern_altbilgi(c, width, sayfa_no, settings)
+    c.save()
+    return buf.getvalue()
+
+
 def build_purchase_pdf(purchase: Any, settings: dict[str, str] | None = None) -> bytes:
     """Satın alma belgesi PDF — antetli letterhead."""
     buf, c, width, height = _new_doc()
@@ -1062,47 +1230,10 @@ def build_purchase_pdf(purchase: Any, settings: dict[str, str] | None = None) ->
         settings=settings,
     )
 
-    # Fatura altı toplamlar (liste sonunda)
-    genel_ind = _f(getattr(purchase, "discount_amount", 0))
-    vergi = _f(getattr(purchase, "tax_amount", 0))
-    toplam_satir: list[tuple[str, str]] = [("Toplam Tutar", _money(brut_toplam))]
-    if satir_iskonto or genel_ind:
-        dtype = getattr(purchase, "discount_type", None) or "amount"
-        dval = _f(getattr(purchase, "discount_value", 0))
-        if genel_ind:
-            etiket = f"Genel İndirim (%{dval:g})" if dtype == "percent" else "Genel İndirim"
-            if satir_iskonto:
-                toplam_satir.append(("Satır İndirimleri", "-" + _money(satir_iskonto)))
-            toplam_satir.append((etiket, "-" + _money(genel_ind)))
-        toplam_satir.append(("Toplam İskonto", "-" + _money(satir_iskonto + genel_ind)))
-        toplam_satir.append(("Ara Toplam (KDV Hariç)", _money(brut_toplam - satir_iskonto - genel_ind)))
-    oran_toplam = sum(kdv_oran.values())
-    if kdv_oran and abs(oran_toplam - vergi) < 0.02:
-        for rate in sorted(kdv_oran):
-            etiket = f"Hesaplanan KDV (%{rate:g})" if rate else "Hesaplanan KDV"
-            toplam_satir.append((etiket, _money(kdv_oran[rate])))
-    else:
-        toplam_satir.append(("Hesaplanan KDV", _money(vergi)))
-    toplam_satir.append(("Vergiler Dahil Genel Toplam", _money(getattr(purchase, "total_amount", 0))))
-
-    font = pdf_font_ayarla()
-    y, sayfa_no = _ensure_space(
-        c, width, height, y, (len(toplam_satir) * 0.5 + 0.6) * cm, sayfa_no, "Satın Alma Belgesi", alt, settings
+    y, sayfa_no = _draw_invoice_footer(
+        c, width, height, y, sayfa_no, "Satın Alma Belgesi", alt, settings,
+        purchase, brut_toplam, satir_iskonto, kdv_oran,
     )
-    y -= 0.3 * cm
-    x_lbl = width - 9.5 * cm
-    x_val = width - 1.4 * cm
-    for i, (lbl, val) in enumerate(toplam_satir):
-        son = i == len(toplam_satir) - 1
-        c.setFont(font, 9.5 if son else 8.8)
-        c.setFillColorRGB(0, 0, 0)
-        if son:
-            c.setLineWidth(0.6)
-            c.line(x_lbl, y + 0.38 * cm, x_val, y + 0.38 * cm)
-        c.drawString(x_lbl, y, lbl)
-        c.drawRightString(x_val, y, val)
-        y -= 0.5 * cm
-    y -= 0.2 * cm
 
     notes = _display_note(getattr(purchase, "notes", None))
     if notes:

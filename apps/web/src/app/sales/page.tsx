@@ -170,7 +170,7 @@ export default function DirektSatislarPage() {
     }
     try {
       const { printPdfFromApi } = await import("@/lib/printPdf");
-      await printPdfFromApi(`/api/orders/${selectedId}/work-order-pdf`);
+      await printPdfFromApi(`/api/orders/${selectedId}/invoice-pdf`);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Yazdırma hatası");
     }
@@ -185,7 +185,7 @@ export default function DirektSatislarPage() {
     try {
       const { downloadPdf } = await import("@/lib/api");
       await downloadPdf(
-        `/api/orders/${selectedId}/work-order-pdf`,
+        `/api/orders/${selectedId}/invoice-pdf`,
         `${o?.order_number || selectedId}-belge.pdf`,
       );
     } catch (e) {

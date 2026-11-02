@@ -18,6 +18,8 @@ import {
   designStatusBadgeClass,
 } from "@/lib/api";
 import StatusFooter from "@/components/StatusFooter";
+import InvoiceTotalsFooter from "@/components/InvoiceTotalsFooter";
+import { computeInvoice, formatRate } from "@/lib/invoiceTotals";
 import SplitPaymentRows, {
   SplitPaymentRow,
   rowsSum,
@@ -109,6 +111,26 @@ export default function OrderDetailPage() {
       })();
     }, 400);
     return () => clearTimeout(tmr);
+  }, [order]);
+
+  /** Fatura altı toplamlar (API ile aynı formül; eski ₺ iskontolu siparişler korunur) */
+  const invoiceCalc = useMemo(() => {
+    if (!order) return null;
+    const dv = Number(order.discount_value || 0);
+    const legacy = !(dv > 0) && Number(order.discount_amount || 0) > 0;
+    const type = legacy ? "amount" : order.discount_type === "percent" ? "percent" : "amount";
+    const value = legacy ? Number(order.discount_amount || 0) : dv;
+    const calc = computeInvoice(
+      order.lines.map((l) => ({
+        qty: Number(l.quantity || 0),
+        price: Number(l.unit_price || 0),
+        discount: Math.max(0, Number(l.quantity || 0) * Number(l.unit_price || 0) - Number(l.line_total || 0)),
+        rate: Number(l.tax_rate || 0),
+      })),
+      type,
+      value,
+    );
+    return { calc, type: type as "amount" | "percent", value };
   }, [order]);
 
   const designTemplates = useMemo(() => {
@@ -398,6 +420,20 @@ export default function OrderDetailPage() {
             className="rounded-lg bg-slate-800 text-white px-3 py-2 text-sm font-medium"
           >
             İş Emri PDF
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await downloadPdf(`/api/orders/${id}/invoice-pdf`, `${order.order_number}-satis-belgesi.pdf`);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "PDF hatası");
+              }
+            }}
+            className="rounded-lg bg-slate-700 text-white px-3 py-2 text-sm font-medium"
+            title="Satır KDV ve fatura altı toplamlarıyla satış belgesi"
+          >
+            Satış Belgesi PDF
           </button>
           <button
             type="button"
@@ -706,7 +742,9 @@ export default function OrderDetailPage() {
                   <th>Baskı</th>
                   <th className="text-right">Birim</th>
                   <th className="text-right">İskonto</th>
-                  <th className="text-right">Satır</th>
+                  <th className="text-right" title="KDV hariç">Tutar</th>
+                  <th className="text-right">KDV %</th>
+                  <th className="text-right">KDV Tutarı</th>
                 </tr>
               </thead>
               <tbody>
@@ -729,11 +767,26 @@ export default function OrderDetailPage() {
                         : formatMoney(Number(l.discount_amount || 0))}
                     </td>
                     <td className="text-right tabular-nums font-medium">{formatMoney(Number(l.line_total || 0))}</td>
+                    <td className="text-right tabular-nums">%{formatRate(Number(l.tax_rate || 0))}</td>
+                    <td className="text-right tabular-nums">{formatMoney(Number(l.tax_amount || 0))}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             </div>
+            {invoiceCalc && (
+              <div className="px-3 py-2 border-t border-baykus-line">
+                <InvoiceTotalsFooter
+                  readOnly
+                  calc={invoiceCalc.calc}
+                  discType={invoiceCalc.type}
+                  discValue={String(invoiceCalc.value)}
+                  lineCount={order.lines.length}
+                  paid={Number(order.paid_amount || 0) > 0 ? Number(order.paid_amount) : Number(order.deposit_amount || 0)}
+                  remainingLabel="Kalan"
+                />
+              </div>
+            )}
           </div>
 
           {order.status_history?.length > 0 && (

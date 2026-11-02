@@ -20,6 +20,8 @@ import SplitPaymentRows, {
   rowsToPayload,
 } from "@/components/SplitPaymentRows";
 import { localToday } from "@/lib/dates";
+import InvoiceTotalsFooter, { KDV_RATES } from "@/components/InvoiceTotalsFooter";
+import { DiscountType, computeInvoice, parseNum, r2 } from "@/lib/invoiceTotals";
 import StockDetailFilters from "@/components/StockDetailFilters";
 import {
   EMPTY_STOCK_FILTERS,
@@ -51,6 +53,10 @@ type Line = {
   color: string;
   print_type: string;
   unit_price: string;
+  /** Satır indirimi (₺) */
+  discount: string;
+  /** KDV oranı (%) */
+  tax_rate: string;
   depo: string;
   line_note?: string;
   stock_qty?: number | null;
@@ -86,10 +92,16 @@ function emptyLine(): Line {
     color: "",
     print_type: "",
     unit_price: "0",
+    discount: "0",
+    tax_rate: DEFAULT_SALE_KDV,
     depo: "Ana Depo",
     stock_qty: null,
   };
 }
+
+/** Ürünlerde KDV oranı alanı yok → satış satırı varsayılanı %0 */
+const DEFAULT_SALE_KDV = "0";
+const num = parseNum;
 
 function normalizeType(raw: string | null): SaleType {
   const v = (raw || "kayitli").trim().toLowerCase();
@@ -302,13 +314,30 @@ function CreateSaleInner() {
     setVariantPick(null);
   }
 
-  const linesTotal = useMemo(() => {
-    return lines.reduce((sum, l) => {
-      const qty = Number(l.quantity) || 0;
-      const price = Number(l.unit_price) || 0;
-      return sum + qty * price;
-    }, 0);
-  }, [lines]);
+  const [discType, setDiscType] = useState<DiscountType>("amount");
+  const [discValue, setDiscValue] = useState("0");
+  const isQuoteType = saleType === "teklif";
+  const calc = useMemo(
+    () =>
+      computeInvoice(
+        lines.map((l) => ({
+          qty: num(l.quantity),
+          price: num(l.unit_price),
+          discount: num(l.discount),
+          // Teklifte KDV yok (teklif modeli vergisiz)
+          rate: isQuoteType ? 0 : num(l.tax_rate),
+        })),
+        discType,
+        num(discValue),
+      ),
+    [lines, discType, discValue, isQuoteType],
+  );
+  /** Vergiler dahil genel toplam (tahsilat / cari borç bununla eşleşir) */
+  const linesTotal = calc.total;
+
+  function setRateAll(value: string) {
+    setLines((prev) => prev.map((l) => ({ ...l, tax_rate: value })));
+  }
 
   const payAmountNum = veresiye ? 0 : rowsSum(payRows);
   const remaining = Math.max(0, linesTotal - payAmountNum);
@@ -351,17 +380,25 @@ function CreateSaleInner() {
         product_id: l.product_id ? Number(l.product_id) : null,
         variant_id: l.variant_id ? Number(l.variant_id) : null,
         description: l.description.trim(),
-        quantity: Math.max(1, Number(l.quantity) || 1),
+        quantity: Math.max(1, Math.round(num(l.quantity)) || 1),
         size: l.size || null,
         color: l.color || null,
         print_type: l.print_type || null,
-        unit_price: Number(l.unit_price) || 0,
+        unit_price: Math.max(0, num(l.unit_price)),
         discount_rate: 0,
-        discount_amount: 0,
+        discount_amount: Math.max(0, num(l.discount)),
+        tax_rate: saleType === "teklif" ? 0 : r2(Math.min(100, Math.max(0, num(l.tax_rate)))),
         warehouse: l.depo || null,
         line_note: (l.line_note || "").trim() || null,
       }));
     if (!payload.length) throw new Error("En az bir ürün satırı gerekli");
+    for (const l of lines) {
+      const r = num(l.tax_rate);
+      if (l.description.trim() && (r < 0 || r > 100)) throw new Error(`${l.description}: KDV oranı 0–100 olmalı`);
+    }
+    if (num(discValue) < 0 || (discType === "percent" && num(discValue) > 100)) {
+      throw new Error("Genel indirim geçersiz (yüzde 0–100, tutar negatif olamaz)");
+    }
     return payload;
   }
 
@@ -391,8 +428,9 @@ function CreateSaleInner() {
             status: "Taslak",
             notes: notes || null,
             valid_until: dueDate || null,
-            discount_amount: 0,
-            lines: payloadLines,
+            // Teklif modeli ₺ genel iskonto tutar; % ise hesaplanan tutar gönderilir
+            discount_amount: calc.generalDiscount,
+            lines: payloadLines.map(({ tax_rate: _t, ...rest }) => rest),
           }),
         });
         setMsg("Teklif kaydedildi");
@@ -430,7 +468,8 @@ function CreateSaleInner() {
           delivery_date: delivered ? saleDate || dueDate || localToday() : null,
           movement_date: saleDate || localToday(),
           deposit_amount: amount > 0 ? amount : 0,
-          discount_amount: 0,
+          discount_type: discType,
+          discount_value: Math.max(0, num(discValue)),
           lines: payloadLines,
           payments: payments.length ? payments : undefined,
         }),
@@ -451,6 +490,7 @@ function CreateSaleInner() {
     }
   }
 
+  const numCls = "bk-input py-0.5 tabular-nums text-right";
   const meta = SALE_TYPES.find((t) => t.id === saleType) || SALE_TYPES[2];
 
   return (
@@ -635,15 +675,18 @@ function CreateSaleInner() {
                   <th>Renk</th>
                   <th>Depo</th>
                   <th>Baskı</th>
-                  <th>Adet</th>
-                  <th>Birim Fiyat</th>
-                  <th>Toplam</th>
+                  <th className="text-right">Adet</th>
+                  <th className="text-right">Birim Fiyat</th>
+                  <th className="text-right">İndirim ₺</th>
+                  {!isQuoteType && <th className="text-right">KDV %</th>}
+                  {!isQuoteType && <th className="text-right">KDV Tutarı</th>}
+                  <th className="text-right" title="Adet × Birim Fiyat − İndirim (KDV hariç)">Tutar</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line) => {
-                  const lineTot = (Number(line.quantity) || 0) * (Number(line.unit_price) || 0);
+                {lines.map((line, i) => {
+                  const lc = calc.lines[i];
                   return (
                     <tr key={line.key}>
                       <td className="min-w-[160px]">
@@ -726,9 +769,8 @@ function CreateSaleInner() {
                       </td>
                       <td>
                         <input
-                          className="bk-input w-16"
-                          type="number"
-                          min={1}
+                          className={`${numCls} w-14`}
+                          inputMode="numeric"
                           value={line.quantity}
                           onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
                         />
@@ -736,10 +778,8 @@ function CreateSaleInner() {
                       <td>
                         <div className="flex flex-col gap-0.5">
                           <input
-                            className="bk-input w-24"
-                            type="number"
-                            min={0}
-                            step="0.01"
+                            className={`${numCls} w-24`}
+                            inputMode="decimal"
                             value={line.unit_price}
                             onChange={(e) => updateLine(line.key, { unit_price: e.target.value })}
                           />
@@ -761,7 +801,36 @@ function CreateSaleInner() {
                           )}
                         </div>
                       </td>
-                      <td className="tabular-nums text-xs font-semibold">{formatMoney(lineTot)}</td>
+                      <td>
+                        <input
+                          className={`${numCls} w-16`}
+                          inputMode="decimal"
+                          value={line.discount}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => updateLine(line.key, { discount: e.target.value })}
+                        />
+                      </td>
+                      {!isQuoteType && (
+                        <td>
+                          <input
+                            className={`${numCls} w-14`}
+                            inputMode="decimal"
+                            list="bk-sale-kdv-rates"
+                            title="KDV oranı (%)"
+                            value={line.tax_rate}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => updateLine(line.key, { tax_rate: e.target.value })}
+                          />
+                        </td>
+                      )}
+                      {!isQuoteType && (
+                        <td className="tabular-nums text-xs text-right text-baykus-muted whitespace-nowrap">
+                          {formatMoney(lc?.tax ?? 0)}
+                        </td>
+                      )}
+                      <td className="tabular-nums text-xs font-semibold text-right whitespace-nowrap">
+                        {formatMoney(lc?.net ?? 0)}
+                      </td>
                       <td>
                         <button
                           type="button"
@@ -777,7 +846,25 @@ function CreateSaleInner() {
               </tbody>
             </table>
           </div>
-          <div className="text-right text-sm font-semibold tabular-nums">Ara toplam: {formatMoney(linesTotal)}</div>
+          <datalist id="bk-sale-kdv-rates">
+            {KDV_RATES.map((r) => (
+              <option key={r} value={r} />
+            ))}
+          </datalist>
+          {/* Fatura altı toplamlar */}
+          <InvoiceTotalsFooter
+            calc={calc}
+            discType={discType}
+            discValue={discValue}
+            onDiscType={setDiscType}
+            onDiscValue={setDiscValue}
+            onRateAll={setRateAll}
+            lineCount={lines.length}
+            hideTax={isQuoteType}
+            paid={isQuoteType ? undefined : payAmountNum}
+            paidLabel="Tahsilat"
+            remainingLabel={veresiye ? "Kalan (Cari Borç)" : "Kalan"}
+          />
         </fieldset>
 
         {saleType !== "teklif" && (
@@ -802,7 +889,7 @@ function CreateSaleInner() {
             )}
             <div className="text-xs space-y-0.5">
               <div>
-                Toplam: <strong className="tabular-nums">{formatMoney(linesTotal)}</strong>
+                Genel Toplam (KDV dahil): <strong className="tabular-nums">{formatMoney(linesTotal)}</strong>
                 {" · "}
                 Tahsilat:{" "}
                 <strong className="tabular-nums text-emerald-700">

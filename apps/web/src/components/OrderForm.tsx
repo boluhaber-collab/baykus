@@ -16,6 +16,21 @@ import {
 } from "@/lib/api";
 import LiveSearchSelect, { useCustomerSearch, useProductSearch } from "@/components/LiveSearchSelect";
 import { localToday } from "@/lib/dates";
+import InvoiceTotalsFooter, { KDV_RATES } from "@/components/InvoiceTotalsFooter";
+import { DiscountType, computeInvoice, parseNum, r2 } from "@/lib/invoiceTotals";
+
+const num = parseNum;
+/** Ürünlerde KDV alanı yok → yeni satış satırı %0 */
+const DEFAULT_SALE_KDV = "0";
+
+/** Satır indirimi ₺: tutar girilmişse o, yoksa oran × brüt (API ile aynı) */
+function lineDiscountAmount(l: { quantity: string; unit_price: string; discount_rate: string; discount_amount: string }) {
+  const amt = num(l.discount_amount);
+  if (amt > 0) return r2(amt);
+  const rate = num(l.discount_rate);
+  if (rate > 0) return r2((r2(num(l.quantity) * num(l.unit_price)) * rate) / 100);
+  return 0;
+}
 
 export type OrderFormPayload = {
   customer_id: number | null;
@@ -29,7 +44,9 @@ export type OrderFormPayload = {
   design_status: string;
   design_notes: string | null;
   deposit_amount: number;
-  discount_amount: number;
+  /** Genel indirim: ₺ veya % (API fatura mantığıyla hesaplar) */
+  discount_type: DiscountType;
+  discount_value: number;
   lines: {
     product_id?: number | null;
     variant_id?: number | null;
@@ -41,6 +58,7 @@ export type OrderFormPayload = {
     unit_price: number;
     discount_rate: number;
     discount_amount: number;
+    tax_rate: number;
     line_note?: string | null;
   }[];
 };
@@ -48,6 +66,7 @@ export type OrderFormPayload = {
 type LineState = {
   key: string;
   product_id: string;
+  variant_id: string;
   description: string;
   quantity: string;
   size: string;
@@ -56,6 +75,7 @@ type LineState = {
   unit_price: string;
   discount_rate: string;
   discount_amount: string;
+  tax_rate: string;
   line_note: string;
   stock_qty?: number | null;
   is_critical?: boolean;
@@ -66,6 +86,7 @@ function emptyLine(): LineState {
   return {
     key: Math.random().toString(36).slice(2),
     product_id: "",
+    variant_id: "",
     description: "",
     quantity: "1",
     size: "",
@@ -74,6 +95,7 @@ function emptyLine(): LineState {
     unit_price: "0",
     discount_rate: "0",
     discount_amount: "0",
+    tax_rate: DEFAULT_SALE_KDV,
     line_note: "",
     stock_qty: null,
     is_critical: false,
@@ -86,6 +108,7 @@ function fromOrderLines(lines: OrderLine[]): LineState[] {
   return lines.map((l) => ({
     key: String(l.id ?? Math.random().toString(36).slice(2)),
     product_id: l.product_id != null ? String(l.product_id) : "",
+    variant_id: l.variant_id != null ? String(l.variant_id) : "",
     description: l.description || "",
     quantity: String(l.quantity ?? 1),
     size: l.size || "",
@@ -94,6 +117,7 @@ function fromOrderLines(lines: OrderLine[]): LineState[] {
     unit_price: String(l.unit_price ?? 0),
     discount_rate: String(l.discount_rate ?? 0),
     discount_amount: String(l.discount_amount ?? 0),
+    tax_rate: String(Number(l.tax_rate ?? 0)),
     line_note: l.line_note || "",
     stock_qty: null,
     is_critical: false,
@@ -130,7 +154,15 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
   const [designStatus, setDesignStatus] = useState(initial?.design_status || "Bekliyor");
   const [designNotes, setDesignNotes] = useState(initial?.design_notes || "");
   const [deposit, setDeposit] = useState(String(initial?.deposit_amount ?? 0));
-  const [discount, setDiscount] = useState(String(initial?.discount_amount ?? 0));
+  // Eski siparişler: discount_value yoksa ₺ discount_amount korunur (toplam değişmez)
+  const [discType, setDiscType] = useState<DiscountType>(() =>
+    initial && Number(initial.discount_value ?? 0) > 0 && initial.discount_type === "percent" ? "percent" : "amount",
+  );
+  const [discValue, setDiscValue] = useState(() => {
+    if (!initial) return "0";
+    const v = Number(initial.discount_value ?? 0);
+    return String(v > 0 ? v : Number(initial.discount_amount ?? 0));
+  });
   const [lines, setLines] = useState<LineState[]>(() =>
     initial ? fromOrderLines(initial.lines) : [emptyLine()],
   );
@@ -154,18 +186,24 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
     [customers, customerId],
   );
 
-    const linesSubtotal = useMemo(() => {
-    return lines.reduce((sum, l) => {
-      const qty = Number(l.quantity) || 0;
-      const price = Number(l.unit_price) || 0;
-      let disc = Number(l.discount_amount) || 0;
-      const rate = Number(l.discount_rate) || 0;
-      if (rate > 0 && disc === 0) disc = (qty * price * rate) / 100;
-      return sum + Math.max(qty * price - disc, 0);
-    }, 0);
-  }, [lines]);
+  const calc = useMemo(
+    () =>
+      computeInvoice(
+        lines.map((l) => ({
+          qty: num(l.quantity),
+          price: num(l.unit_price),
+          discount: lineDiscountAmount(l),
+          rate: num(l.tax_rate),
+        })),
+        discType,
+        num(discValue),
+      ),
+    [lines, discType, discValue],
+  );
 
-  const grandTotal = Math.max(linesSubtotal - (Number(discount) || 0), 0);
+  function setRateAll(value: string) {
+    setLines((prev) => prev.map((l) => ({ ...l, tax_rate: value })));
+  }
 
   function updateLine(key: string, patch: Partial<LineState>) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -175,6 +213,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
     const product = products.find((p) => String(p.id) === productId);
     updateLine(key, {
       product_id: productId,
+      variant_id: "",
       description: product?.name || "",
       unit_price: product ? String(product.base_price ?? 0) : "0",
       stock_qty: product?.stock_qty ?? null,
@@ -203,6 +242,17 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
       setError("En az bir satır açıklaması gerekli");
       return;
     }
+    for (const l of lines) {
+      const r = num(l.tax_rate);
+      if (l.description.trim() && (r < 0 || r > 100)) {
+        setError(`${l.description}: KDV oranı 0–100 olmalı`);
+        return;
+      }
+    }
+    if (num(discValue) < 0 || (discType === "percent" && num(discValue) > 100)) {
+      setError("Genel indirim geçersiz (yüzde 0–100, tutar negatif olamaz)");
+      return;
+    }
     setLoading(true);
     try {
       const payload: OrderFormPayload = {
@@ -216,20 +266,23 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
         channel,
         design_status: designStatus,
         design_notes: designNotes.trim() || null,
-        deposit_amount: Number(deposit) || 0,
-        discount_amount: Number(discount) || 0,
+        deposit_amount: num(deposit),
+        discount_type: discType,
+        discount_value: Math.max(0, num(discValue)),
         lines: lines
           .filter((l) => l.description.trim())
           .map((l) => ({
             product_id: l.product_id ? Number(l.product_id) : null,
+            variant_id: l.variant_id ? Number(l.variant_id) : null,
             description: l.description.trim(),
-            quantity: Math.max(1, Number(l.quantity) || 1),
+            quantity: Math.max(1, Math.round(num(l.quantity)) || 1),
             size: l.size.trim() || null,
             color: l.color.trim() || null,
             print_type: l.print_type.trim() || null,
-            unit_price: Number(l.unit_price) || 0,
-            discount_rate: Number(l.discount_rate) || 0,
-            discount_amount: Number(l.discount_amount) || 0,
+            unit_price: Math.max(0, num(l.unit_price)),
+            discount_rate: num(l.discount_rate),
+            discount_amount: num(l.discount_amount),
+            tax_rate: r2(num(l.tax_rate)),
             line_note: l.line_note.trim() || null,
           })),
       };
@@ -324,23 +377,10 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Tahsilat / Kapora (₺)</label>
           <input
-            type="number"
-            min={0}
-            step="0.01"
+            inputMode="decimal"
             className={inputCls}
             value={deposit}
             onChange={(e) => setDeposit(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Sipariş İskontosu (₺)</label>
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            className={inputCls}
-            value={discount}
-            onChange={(e) => setDiscount(e.target.value)}
           />
         </div>
         <div>
@@ -449,8 +489,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
               <div>
                 <label className="block text-[10px] text-slate-500 mb-0.5">Adet</label>
                 <input
-                  type="number"
-                  min={1}
+                  inputMode="numeric"
                   className={inputCls}
                   value={line.quantity}
                   onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
@@ -459,9 +498,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
               <div>
                 <label className="block text-[10px] text-slate-500 mb-0.5">Birim Fiyat</label>
                 <input
-                  type="number"
-                  min={0}
-                  step="0.01"
+                  inputMode="decimal"
                   className={inputCls}
                   value={line.unit_price}
                   onChange={(e) => updateLine(line.key, { unit_price: e.target.value })}
@@ -505,10 +542,7 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
               <div>
                 <label className="block text-[10px] text-slate-500 mb-0.5">İskonto %</label>
                 <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="0.01"
+                  inputMode="decimal"
                   className={inputCls}
                   value={line.discount_rate}
                   onChange={(e) => updateLine(line.key, { discount_rate: e.target.value })}
@@ -517,13 +551,36 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
               <div>
                 <label className="block text-[10px] text-slate-500 mb-0.5">İskonto ₺</label>
                 <input
-                  type="number"
-                  min={0}
-                  step="0.01"
+                  inputMode="decimal"
                   className={inputCls}
                   value={line.discount_amount}
                   onChange={(e) => updateLine(line.key, { discount_amount: e.target.value })}
                 />
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-0.5">KDV %</label>
+                <input
+                  inputMode="decimal"
+                  list="bk-order-kdv-rates"
+                  className={`${inputCls} text-right tabular-nums`}
+                  value={line.tax_rate}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => updateLine(line.key, { tax_rate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-0.5">KDV Tutarı</label>
+                <div className="px-1 py-2 text-sm text-right tabular-nums text-slate-600">
+                  {formatMoney(calc.lines[idx]?.tax ?? 0)}
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-0.5" title="KDV hariç, satır indirimi düşülmüş">
+                  Tutar
+                </label>
+                <div className="px-1 py-2 text-sm text-right tabular-nums font-semibold">
+                  {formatMoney(calc.lines[idx]?.net ?? 0)}
+                </div>
               </div>
               <div className="flex items-end">
                 <button
@@ -539,23 +596,26 @@ export default function OrderForm({ initial, submitLabel, onSubmit, onCancel }: 
           ))}
         </div>
 
-        <div className="flex justify-end gap-6 text-sm pt-2 border-t border-slate-100">
-          <div>
-            Ara toplam:{" "}
-            <strong>
-              {new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(
-                linesSubtotal,
-              )}
-            </strong>
-          </div>
-          <div>
-            Genel toplam:{" "}
-            <strong>
-              {new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY" }).format(
-                grandTotal,
-              )}
-            </strong>
-          </div>
+        <datalist id="bk-order-kdv-rates">
+          {KDV_RATES.map((r) => (
+            <option key={r} value={r} />
+          ))}
+        </datalist>
+
+        {/* Fatura altı toplamlar */}
+        <div className="pt-2 border-t border-slate-100">
+          <InvoiceTotalsFooter
+            calc={calc}
+            discType={discType}
+            discValue={discValue}
+            onDiscType={setDiscType}
+            onDiscValue={setDiscValue}
+            onRateAll={setRateAll}
+            lineCount={lines.length}
+            paid={num(deposit)}
+            paidLabel="Kapora / Ödenen"
+            remainingLabel="Kalan"
+          />
         </div>
       </div>
 

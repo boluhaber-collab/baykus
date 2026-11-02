@@ -55,6 +55,15 @@ def _ensure_lookup_indexes() -> None:
         ensure_hot_indexes()
     except Exception:
         pass
+    # Satış KDV satır bazlı + fatura altı genel indirim sütunları (sipariş sorgularından önce)
+    try:
+        from app.services.order_tax_migrate import run_startup_migrate as _ot_migrate
+
+        _otr = _ot_migrate()
+        if _otr.get("added") or not _otr.get("ok"):
+            print(f"[baykus] startup order tax migrate: {_otr}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup order tax migrate error: {_exc}", flush=True)
     # Alış KDV satır bazlı + fatura altı genel indirim sütunları
     try:
         from app.services.purchase_tax_migrate import run_startup_migrate as _pt_migrate

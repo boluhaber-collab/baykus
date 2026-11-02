@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -27,6 +28,8 @@ class OrderLineBase(BaseModel):
     discount_rate: Decimal = Field(default=Decimal("0"), ge=0, le=100)
     discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
     line_note: str | None = Field(default=None, max_length=2000)
+    # KDV oranı (%) — satır KDV'si genel indirim payı düşülmüş net üzerinden hesaplanır
+    tax_rate: Decimal = Field(default=Decimal("0"), ge=0, le=100)
 
 
 class OrderLineCreate(OrderLineBase):
@@ -36,6 +39,7 @@ class OrderLineCreate(OrderLineBase):
 class OrderLineOut(OrderLineBase):
     id: int
     line_total: Decimal
+    tax_amount: Decimal = Decimal("0")
 
     model_config = {"from_attributes": True}
 
@@ -77,7 +81,10 @@ class OrderCreate(BaseModel):
     design_approved_at: datetime | None = None
     design_whatsapp_at: datetime | None = None
     deposit_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    # Eski istemciler: genel indirim ₺ tutarı. Yeni: discount_type + discount_value (fatura altı)
     discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    discount_type: Literal["amount", "percent"] | None = None
+    discount_value: Decimal | None = Field(default=None, ge=0)
     lines: list[OrderLineCreate] = Field(default_factory=list, min_length=1)
     # Optional split deposit (BizimHesap-style); sum used as deposit when deposit_amount is 0
     payments: list[PaymentLineIn] | None = None
@@ -112,6 +119,8 @@ class OrderUpdate(BaseModel):
     design_whatsapp_at: datetime | None = None
     deposit_amount: Decimal | None = Field(default=None, ge=0)
     discount_amount: Decimal | None = Field(default=None, ge=0)
+    discount_type: Literal["amount", "percent"] | None = None
+    discount_value: Decimal | None = Field(default=None, ge=0)
     lines: list[OrderLineCreate] | None = None
 
     @field_validator("status")
@@ -171,6 +180,10 @@ class OrderListItem(BaseModel):
 
 class OrderOut(OrderListItem):
     discount_amount: Decimal
+    discount_type: str = "amount"
+    discount_value: Decimal = Decimal("0")
+    subtotal: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
     lines: list[OrderLineOut] = []
     payments: list[PaymentOut] = []
     status_history: list[OrderStatusHistoryOut] = []

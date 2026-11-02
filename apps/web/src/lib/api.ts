@@ -308,7 +308,10 @@ export type OrderLine = {
   unit_price: number;
   discount_rate?: number;
   discount_amount?: number;
+  /** KDV hariç satır neti */
   line_total?: number;
+  tax_rate?: number;
+  tax_amount?: number;
   line_note?: string | null;
 };
 
@@ -336,7 +339,13 @@ export type OrderListItem = {
 };
 
 export type OrderDetail = OrderListItem & {
+  /** Hesaplanan genel indirim (₺) */
   discount_amount: number;
+  discount_type?: "amount" | "percent" | null;
+  discount_value?: number | null;
+  /** Satır netleri toplamı (KDV hariç, genel indirim öncesi) */
+  subtotal?: number | null;
+  tax_amount?: number | null;
   lines: OrderLine[];
   payments: {
     id: number;

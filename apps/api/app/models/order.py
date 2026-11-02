@@ -95,7 +95,21 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(50), default=DEFAULT_ORDER_STATUS, index=True)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     deposit_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    # Genel (fatura altı) indirim tutarı — KDV öncesi, satırlara oranla dağıtılır
     discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    # Fatura mantığı: tür "amount" (₺) | "percent" (%), girilen değer, Σ satır neti, Σ KDV
+    discount_type: Mapped[str] = mapped_column(
+        String(10), default="amount", nullable=False, server_default="amount"
+    )
+    discount_value: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
+    subtotal: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
+    tax_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
     due_date: Mapped[date | None] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text)
     channel: Mapped[str] = mapped_column(String(50), default="mağaza", index=True)
@@ -137,8 +151,16 @@ class OrderLine(Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     discount_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
     discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
+    # KDV hariç satır neti (miktar × birim − satır indirimi)
     line_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     line_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # KDV oranı (%) ve satırın KDV tutarı (genel indirim payı düşülmüş matrah üzerinden)
+    tax_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
+    tax_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), default=Decimal("0"), nullable=False, server_default="0"
+    )
 
     order: Mapped[Order] = relationship(back_populates="lines")
 

@@ -364,6 +364,11 @@ def convert_to_order(
         )
     lines_sum = sum((_d(l.line_total) for l in order.lines), Decimal("0"))
     order.total_amount = max(lines_sum - _d(order.discount_amount), Decimal("0"))
+    # Fatura alanları (teklifte KDV yok): ₺ genel indirim + ara toplam
+    order.discount_type = "amount"
+    order.discount_value = _d(order.discount_amount)
+    order.subtotal = lines_sum
+    order.tax_amount = Decimal("0")
     db.add(
         OrderStatusHistory(
             order_id=order.id,
