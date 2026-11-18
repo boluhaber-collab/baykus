@@ -156,7 +156,7 @@ export default function DashboardPage() {
     Kasım: "Kasım'da",
     Aralık: "Aralık'ta",
   };
-  const monthSalesLabel = `${MONTH_LOCATIVE[monthName] || (monthName ? `${monthName}'de` : "Bu ay")} yapılan satışlar`;
+  const monthCollectionsLabel = `${MONTH_LOCATIVE[monthName] || (monthName ? `${monthName}'de` : "Bu ay")} yapılan tahsilatlar`;
   const monthExpensesLabel = monthName ? `${monthName} ayı masrafları` : "Ay masrafları";
   const fmtUsd = (n: number) =>
     n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -319,15 +319,23 @@ export default function DashboardPage() {
         <div className="bk-kpi-strip bk-kpi-strip--dash" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
           <Link href={`/reports/sales?start=${localToday().slice(0, 8)}01&end=${localToday()}`} className="bk-dash-kpi" style={{ backgroundColor: "#7c3aed" }}>
             <div className="amt">{formatMoney(Number(data.orders_month_revenue))}</div>
-            <div className="lbl">{monthName} Cirosu</div>
+            <div className="lbl">
+              {monthName} Cirosu · {data.orders_month_count ?? 0} satış
+            </div>
           </Link>
           <Link href="/finance/expenses" className="bk-dash-kpi" style={{ backgroundColor: "#dc2626" }}>
             <div className="amt">{formatMoney(Number(data.month_expenses ?? 0))}</div>
             <div className="lbl">{monthExpensesLabel}</div>
           </Link>
-          <Link href="/sales" className="bk-dash-kpi" style={{ backgroundColor: "#15803d" }}>
-            <div className="amt">{formatMoney(Number(data.month_sales ?? data.orders_month_revenue ?? 0))}</div>
-            <div className="lbl">{monthSalesLabel}</div>
+          {/* Ciro = satış (KDV dahil fatura toplamı); bu kart gerçek para girişi (kasa/banka/POS) */}
+          <Link
+            href="/finance/cash"
+            className="bk-dash-kpi"
+            style={{ backgroundColor: "#15803d" }}
+            title="Kasa tahsilatı + banka/POS girişleri (virman, alış iadesi, kredi kartı/ortak hesap girişleri hariç)"
+          >
+            <div className="amt">{formatMoney(Number(data.month_collections ?? 0))}</div>
+            <div className="lbl">{monthCollectionsLabel}</div>
           </Link>
           <Link href="/finance/cash" className="bk-dash-kpi" style={{ backgroundColor: "#f59e0b" }}>
             <div className="amt">{formatMoney(Number(data.cash_balance))}</div>

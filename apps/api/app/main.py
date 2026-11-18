@@ -140,6 +140,18 @@ def _ensure_lookup_indexes() -> None:
     except Exception as _exc:
         print(f"[baykus] startup movement link repair error: {_exc}", flush=True)
 
+    # Çift stok hareketi onarımı (sistem çift kaydı) + çift satış/tahsilat raporu (finans silinmez)
+    try:
+        from app.services.dupfix_repair import run_startup_repair as _dup_repair
+
+        _dpr = _dup_repair()
+        if _dpr.get("stock_duplicates") or not _dpr.get("ok") or any(
+            _dpr.get(k) for k in ("duplicate_orders", "double_tahsilat", "duplicate_payments")
+        ):
+            print(f"[baykus] startup dupfix repair: {_dpr}", flush=True)
+    except Exception as _exc:
+        print(f"[baykus] startup dupfix repair error: {_exc}", flush=True)
+
     # Virman: transfer bacakları tahsilat/ödeme olarak etiketlenmişse düzelt
     try:
         from app.services.transfer_labels import run_startup_migrate as _tr_migrate

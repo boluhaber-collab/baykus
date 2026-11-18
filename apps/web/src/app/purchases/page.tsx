@@ -88,7 +88,7 @@ export default function PurchasesPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Numara, tedarikçi…"
+            placeholder="Numara, fatura no, tedarikçi…"
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm w-56"
           />
         </div>
@@ -120,6 +120,7 @@ export default function PurchasesPage() {
           <thead>
             <tr>
               <th>No</th>
+              <th>Fatura No</th>
               <th>Tedarikçi</th>
               <th className="bk-th-sortable"><SortableDateHeader dir={dateDir} onChange={setDateDir} /></th>
               <th>Durum</th>
@@ -134,6 +135,9 @@ export default function PurchasesPage() {
                   <Link href={`/purchases/${p.id}`} className="text-baykus-700 hover:underline">
                     {p.purchase_number}
                   </Link>
+                </td>
+                <td className="px-4 py-3 font-mono text-xs" title={p.invoice_date ? `Fatura tarihi: ${formatTrDate(p.invoice_date)}` : undefined}>
+                  {p.invoice_no || <span className="text-slate-400">—</span>}
                 </td>
                 <td className="px-4 py-3">
                   <Link href={`/suppliers/${p.supplier_id}`} className="hover:underline">
@@ -166,7 +170,7 @@ export default function PurchasesPage() {
             ))}
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                   Satın alma yok
                 </td>
               </tr>

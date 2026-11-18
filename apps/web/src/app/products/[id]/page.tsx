@@ -12,7 +12,8 @@ import {
   stockBadgeClass,
   ProductPriceListRef,
 } from "@/lib/api";
-import { formatTrDateTime } from "@/lib/dates";
+import { formatTrDate, formatTrDateTime } from "@/lib/dates";
+import { stockReasonLabel } from "@/lib/stockReasons";
 import StatusFooter from "@/components/StatusFooter";
 import { parseProductDescription } from "@/lib/productMeta";
 import { displaySku } from "@/lib/productLabel";
@@ -51,6 +52,8 @@ type PriceRow = {
 type ProductHistoryLite = {
   satislar: PriceRow[];
   alislar: PriceRow[];
+  /** Ekstrede gizlenen (birbirini götüren düzenleme/iptal) hareket id'leri */
+  supersededIds: number[];
 };
 
 function variantLabel(name?: string | null, sku?: string | null): string {
@@ -93,10 +96,15 @@ export default function ProductDetailPage() {
         setWarehouseStocks([]);
       }
       try {
-        const hist = await apiFetch<ProductHistoryLite>(`/api/products/${id}/history`);
+        const hist = await apiFetch<{
+          satislar?: PriceRow[];
+          alislar?: PriceRow[];
+          stock_movements?: { id: number; superseded?: boolean }[];
+        }>(`/api/products/${id}/history`);
         setHistoryLite({
           satislar: hist.satislar || [],
           alislar: hist.alislar || [],
+          supersededIds: (hist.stock_movements || []).filter((m) => m.superseded).map((m) => m.id),
         });
       } catch {
         setHistoryLite(null);
@@ -134,7 +142,8 @@ export default function ProductDetailPage() {
     : 0;
   const stockValue = unitCost * Number(total || 0);
   const humanSku = product ? displaySku(product.sku) : null;
-  const movements: StockMovement[] = product?.recent_movements || [];
+  const supersededIds = new Set(historyLite?.supersededIds || []);
+  const movements: StockMovement[] = (product?.recent_movements || []).filter((m) => !supersededIds.has(m.id));
 
   const variantFacets = useMemo(() => {
     const fromVariants = collectFacetOptions(product?.variants || []);
@@ -230,7 +239,7 @@ export default function ProductDetailPage() {
           <tbody>
             {slice.map((r, i) => (
               <tr key={`${r.belge_no}-${i}`}>
-                <td className="whitespace-nowrap">{r.tarih || "—"}</td>
+                <td className="whitespace-nowrap">{r.tarih ? formatTrDate(r.tarih) : "—"}</td>
                 <td>{r.cari || "—"}</td>
                 <td className="text-slate-500">{r.varyant || "—"}</td>
                 <td className="text-right tabular-nums">{r.miktar ?? "—"}</td>
@@ -706,7 +715,7 @@ export default function ProductDetailPage() {
                       {m.qty_before} → {m.qty_after}
                     </span>
                     {m.variant_name && <span className="text-slate-500">({m.variant_name})</span>}
-                    {m.reason && <span>— {m.reason}</span>}
+                    {m.reason && <span>— {stockReasonLabel(m.reason)}</span>}
                     {(() => { const n = sanitizeDisplayNote(m.note); return n ? <span className="text-slate-400">{n}</span> : null; })()}
                   </li>
                 ))}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, formatMoney } from "@/lib/api";
+import { formatTrDate } from "@/lib/dates";
 
 type PriceRow = {
   tarih?: string | null;
@@ -77,7 +78,7 @@ export default function PreviousPricesModal({
           <tbody>
             {rows.map((r, i) => (
               <tr key={`${r.belge_no}-${i}`}>
-                <td className="whitespace-nowrap">{r.tarih || "—"}</td>
+                <td className="whitespace-nowrap">{r.tarih ? formatTrDate(r.tarih) : "—"}</td>
                 <td>{r.cari || "—"}</td>
                 <td>{r.varyant || "—"}</td>
                 <td className="text-right tabular-nums">{r.miktar ?? ""}</td>

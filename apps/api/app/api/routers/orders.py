@@ -475,8 +475,94 @@ def _purge_order_ledger(db: Session, order: Order, user: User, *, restore_stock:
         db.delete(p)
 
 
+def _stock_effect_map(db: Session, order: Order) -> dict[tuple[int, int | None], int]:
+    """Satırların stok etkisi: (ürün, varyant|None) → adet. _apply_sale_side_effects ile aynı kurallar."""
+    from app.models.product import Product, ProductVariant
+
+    out: dict[tuple[int, int | None], int] = {}
+    for line in order.lines or []:
+        if not line.product_id:
+            continue
+        product = db.get(Product, line.product_id)
+        if not product:
+            continue
+        if (getattr(product, "product_type", None) or "stoklu") == "hizmet":
+            continue
+        qty = int(line.quantity or 0)
+        if qty <= 0:
+            continue
+        vid = None
+        if line.variant_id:
+            variant = db.get(ProductVariant, line.variant_id)
+            if not variant or variant.product_id != product.id:
+                continue
+            vid = variant.id
+        key = (product.id, vid)
+        out[key] = out.get(key, 0) + qty
+    return out
+
+
+def _apply_stock_delta(
+    db: Session,
+    order: Order,
+    user: User,
+    old_map: dict[tuple[int, int | None], int],
+    new_map: dict[tuple[int, int | None], int],
+    *,
+    mov_date: date | None = None,
+    reason: str = "sale_edit",
+) -> int:
+    """Satış düzenlemesinde stok farkını tek hareketle yazar.
+
+    Eskiden düzenleme her seferinde 'İptal iade' + yeni 'Satış' hareketi üretiyordu; ürün
+    stok geçmişinde satışlar çift görünüyordu. Artık değişmeyen satır için hareket yok,
+    adet/varyant değiştiyse yalnızca fark yazılır."""
+    from app.models.product import Product, ProductVariant, StockMovement
+
+    written = 0
+    stamp = datetime.combine(mov_date, datetime.utcnow().time()) if mov_date else datetime.utcnow()
+    label = "Satış iptali" if reason == "sale_cancel" else "Satış düzenleme"
+    for key in sorted(set(old_map) | set(new_map), key=lambda k: (k[0], k[1] or 0)):
+        delta = int(new_map.get(key, 0)) - int(old_map.get(key, 0))  # >0 → daha çok satıldı → stok↓
+        if delta == 0:
+            continue
+        pid, vid = key
+        product = db.get(Product, pid)
+        if not product:
+            continue
+        variant = db.get(ProductVariant, vid) if vid else None
+        target = variant if variant is not None else product
+        before = int(target.stock_qty or 0)
+        after = before - delta
+        target.stock_qty = after
+        db.add(
+            StockMovement(
+                product_id=pid,
+                variant_id=variant.id if variant else None,
+                direction="decrease" if delta > 0 else "increase",
+                quantity=abs(delta),
+                qty_before=before,
+                qty_after=after,
+                reason=reason,
+                note=f"{label} {order.order_number}",
+                warehouse=getattr(product, "warehouse", None) or "Ana Depo",
+                created_by_user_id=user.id,
+                created_at=stamp,
+            )
+        )
+        written += 1
+        try:
+            from app.api.routers.products import _sync_product_stock
+
+            _sync_product_stock(product)
+        except Exception:
+            if product.variants:
+                product.stock_qty = sum(int(v.stock_qty or 0) for v in product.variants)
+    return written
+
+
 def _apply_sale_side_effects(
-    db: Session, order: Order, user: User, mov_date: date | None = None
+    db: Session, order: Order, user: User, mov_date: date | None = None, *, stock: bool = True
 ) -> None:
     """Stok düşümü (stoklu varyant/ürün) + cari satış hareketi."""
     from datetime import date as date_cls
@@ -486,7 +572,7 @@ def _apply_sale_side_effects(
     mov_date = mov_date or date_cls.today()
 
     # 1) Stok
-    for line in order.lines:
+    for line in (order.lines if stock else []):
         if not line.product_id:
             continue
         product = db.get(Product, line.product_id)
@@ -806,7 +892,13 @@ def _snapshot_order_payments(db: Session, order: Order) -> list[dict]:
     from app.models.finance import BankMovement, CashMovement
 
     snaps: list[dict] = []
+    used_cash: set[int] = set()
+    used_bank: set[int] = set()
+    onum = (order.order_number or "").strip()
     for p in list(order.payments or []):
+        if getattr(p, "cari_movement_id", None) is not None:
+            # Müşteri tahsilatı eşleştirmesi — kendi kasa/cari hareketi yok; ayrıca geri yazılır
+            continue
         cash_id = None
         bank_id = None
         amt = _dec(p.amount)
@@ -838,6 +930,32 @@ def _snapshot_order_payments(db: Session, order: Order) -> list[dict]:
                 if bank:
                     bank_id = bank.bank_account_id
                 if cash_id or bank_id:
+                    break
+        if not cash_id and not bank_id and onum and amt > 0:
+            # Müşterisiz (perakende) satış: kasa/banka hareketi not ile bağlı — hesabı koru
+            # (eskiden düzenleme EFT/POS tahsilatını kasaya taşıyordu).
+            for cm in (
+                db.query(CashMovement)
+                .filter(CashMovement.note.ilike(f"%{onum}%"), CashMovement.movement_type == "tahsilat")
+                .order_by(CashMovement.id.asc())
+                .all()
+            ):
+                if cm.id in used_cash or abs(_dec(cm.amount) - amt) > Decimal("0.02"):
+                    continue
+                used_cash.add(cm.id)
+                cash_id = cm.cash_register_id
+                break
+            if not cash_id:
+                for bm in (
+                    db.query(BankMovement)
+                    .filter(BankMovement.note.ilike(f"%{onum}%"), BankMovement.movement_type == "deposit")
+                    .order_by(BankMovement.id.asc())
+                    .all()
+                ):
+                    if bm.id in used_bank or abs(_dec(bm.amount) - amt) > Decimal("0.02"):
+                        continue
+                    used_bank.add(bm.id)
+                    bank_id = bm.bank_account_id
                     break
         snaps.append(
             {
@@ -980,9 +1098,24 @@ def update_order(
         or "deposit_amount" in data
     )
 
+    orig_customer_id = order.customer_id
     payment_snaps: list[dict] = []
+    alloc_snaps: list[dict] = []
+    old_stock: dict[tuple[int, int | None], int] = {}
     if needs_cascade:
         payment_snaps = _snapshot_order_payments(db, order)
+        alloc_snaps = [
+            {
+                "amount": _dec(p.amount),
+                "method": p.method,
+                "notes": p.notes,
+                "paid_at": p.paid_at,
+                "cari_movement_id": p.cari_movement_id,
+            }
+            for p in (order.payments or [])
+            if getattr(p, "cari_movement_id", None) is not None
+        ]
+        old_stock = _stock_effect_map(db, order)
         # If deposit_amount explicitly set and no payment rows, keep deposit intent
         if not payment_snaps and "deposit_amount" in data and _dec(data.get("deposit_amount")) > 0:
             payment_snaps = [
@@ -995,7 +1128,8 @@ def update_order(
                     "bank_account_id": None,
                 }
             ]
-        _purge_order_ledger(db, order, user, restore_stock=True)
+        # Stok iade/yeniden düşüm yerine fark yazılır (aşağıda) → geçmişte çift satış görünmez
+        _purge_order_ledger(db, order, user, restore_stock=False)
         db.flush()
 
     for key, value in data.items():
@@ -1023,14 +1157,25 @@ def update_order(
         order.status = new_status
         _record_status(db, order, old, new_status, user, note="Sipariş güncelleme")
 
+    if needs_cascade and order.status == "Sipariş İptali":
+        # Düzenleme ile iptal: satılan stok geri gelir
+        db.flush()
+        _apply_stock_delta(db, order, user, old_stock, {}, reason="sale_cancel")
     if needs_cascade and order.status != "Sipariş İptali":
         mov_date = (
             order.delivery_date
             or order.due_date
             or (order.created_at.date() if order.created_at else date.today())
         )
-        _apply_sale_side_effects(db, order, user, mov_date=mov_date)
+        db.flush()
+        db.refresh(order)
+        _apply_stock_delta(db, order, user, old_stock, _stock_effect_map(db, order))
+        _apply_sale_side_effects(db, order, user, mov_date=mov_date, stock=False)
         _repost_order_payments(db, order, user, payment_snaps, mov_date=mov_date)
+        if alloc_snaps and order.customer_id and order.customer_id == orig_customer_id:
+            from app.services.payment_allocation import reapply_allocations
+
+            reapply_allocations(db, order, alloc_snaps)
         # Invoice-direct / paid → keep Teslim Edildi
         ch = (order.channel or "").strip()
         paid = _dec(order.deposit_amount) > 0 or bool(order.payments)

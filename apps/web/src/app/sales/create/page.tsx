@@ -131,6 +131,8 @@ function CreateSaleInner() {
   const productsRef = useRef(products);
   productsRef.current = products;
   const [customerId, setCustomerId] = useState("");
+  const createdCustomerRef = useRef<{ id: number; name: string } | null>(null);
+  const submittingRef = useRef(false);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newCompany, setNewCompany] = useState("");
@@ -351,6 +353,10 @@ function CreateSaleInner() {
     if (saleType === "perakende") return customerId ? Number(customerId) : null;
     if (saleType === "yeni") {
       if (!newName.trim()) throw new Error("Yeni müşteri adı gerekli");
+      // Satış kaydı hata verip tekrar denenirse aynı müşteri ikinci kez açılmasın
+      if (createdCustomerRef.current && createdCustomerRef.current.name === newName.trim()) {
+        return createdCustomerRef.current.id;
+      }
       const created = await apiFetch<{ id: number }>("/api/customers", {
         method: "POST",
         body: JSON.stringify({
@@ -361,6 +367,7 @@ function CreateSaleInner() {
           opening_balance: 0,
         }),
       });
+      createdCustomerRef.current = { id: created.id, name: newName.trim() };
       return created.id;
     }
     if (saleType === "kayitli") {
@@ -404,6 +411,9 @@ function CreateSaleInner() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    // Çift tıklama / Enter tekrarında ikinci satış oluşmasın
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError("");
     setMsg("");
     setBusy(true);
@@ -445,7 +455,10 @@ function CreateSaleInner() {
         saleType === "internet"
           ? channel || "internet"
           : saleType === "perakende"
-            ? "perakende"
+            ? // Perakendede cari seçildiyse satış o müşterinin faturasıdır (perakende değil)
+              cid
+              ? "kayıtlı müşteri"
+              : "perakende"
             : saleType === "yeni"
               ? "yeni müşteri"
               : saleType === "kayitli"
@@ -479,12 +492,13 @@ function CreateSaleInner() {
         unpaidInvoice || veresiye
           ? "Satış faturası · Teslim Edildi · cari borç + stok↓ · kasa/banka yok (tahsilat sonra)"
           : paidNow
-            ? "Satış faturası · Teslim Edildi · stok↓ · cari + kasa/banka işlendi"
+            ? "Satış faturası · Teslim Edildi · stok↓ · tahsilat bu satışla kasa/banka + cariye işlendi (ayrıca Tahsilat Al girmeyin)"
             : "Sipariş kaydedildi · Sipariş Alındı · açık iş akışı (henüz teslim değil)",
       );
       router.push(delivered && cid ? `/customers/${cid}` : `/orders/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kayıt hatası");
+      submittingRef.current = false;
     } finally {
       setBusy(false);
     }
@@ -907,7 +921,7 @@ function CreateSaleInner() {
                       : "Kapora > 0 → kasa/banka tahsilat + Teslim Edildi"
                   : veresiye || payAmountNum <= 0
                     ? "Satış faturası · Teslim Edildi · ödeme yok → cari borç + stok↓ · kasa/banka yok (tahsilatı sonra girin)"
-                    : "Satış faturası · Teslim Edildi · kapora → kasa/banka tahsilat + cari"}
+                    : "Satış faturası · Teslim Edildi · girilen tutar tahsilat olarak kasa/banka + cariye işlenir — cari kartta ayrıca Tahsilat Al girmeyin"}
               </div>
             </div>
           </fieldset>

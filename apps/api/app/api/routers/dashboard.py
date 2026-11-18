@@ -359,41 +359,49 @@ def _loan_dues(db: Session, within_days: int = 7) -> list[LoanDueBrief]:
     return items
 
 
-def _collections_today(db: Session, today_start: datetime, tomorrow: datetime) -> float:
-    from datetime import date as date_cls
+def _collections_between(db: Session, d_from, d_to) -> tuple[float, int]:
+    """Gerçek para girişi (tahsilat): kasa 'tahsilat' + Banka/POS 'deposit'.
 
-    today = today_start.date()
-    cash = (
-        db.query(func.coalesce(func.sum(CashMovement.amount), 0))
-        .filter(
-            # Virman (transfer_in) tahsilat değildir
-            CashMovement.movement_type == "tahsilat",
-            CashMovement.movement_date == today,
-        )
-        .scalar()
+    Hariç: virman bacakları (transfer_group / karşı hesap / kategori Virman), tedarikçi
+    iadeleri (supplier_id), kredi kartı ve şirket ortağı hesaplarına girişler. Satış tutarı
+    veya cari hareketten türetilmez — Ana Sayfa'da satış ile tahsilat ayrı rakamlardır.
+    """
+    from sqlalchemy import or_
+
+    cash_q = db.query(
+        func.coalesce(func.sum(CashMovement.amount), 0), func.count(CashMovement.id)
+    ).filter(
+        CashMovement.movement_type == "tahsilat",
+        CashMovement.movement_date >= d_from,
+        CashMovement.movement_date <= d_to,
+        CashMovement.transfer_group_id.is_(None),
+        CashMovement.bank_account_id.is_(None),
+        CashMovement.supplier_id.is_(None),
+        or_(CashMovement.category.is_(None), CashMovement.category != "Virman"),
     )
-    bank = (
-        db.query(func.coalesce(func.sum(BankMovement.amount), 0))
+    cash_sum, cash_cnt = cash_q.one()
+    bank_q = (
+        db.query(func.coalesce(func.sum(BankMovement.amount), 0), func.count(BankMovement.id))
+        .join(BankAccount, BankAccount.id == BankMovement.bank_account_id)
         .filter(
             BankMovement.movement_type == "deposit",
-            BankMovement.movement_date == today,
+            BankMovement.movement_date >= d_from,
+            BankMovement.movement_date <= d_to,
+            BankMovement.transfer_group_id.is_(None),
+            BankMovement.cash_register_id.is_(None),
+            BankMovement.counterpart_bank_account_id.is_(None),
+            BankMovement.supplier_id.is_(None),
+            or_(BankMovement.category.is_(None), BankMovement.category != "Virman"),
+            ~func.coalesce(BankAccount.account_type, "Banka").in_(("Kredi Kartı", "Şirket Ortağı")),
         )
-        .scalar()
     )
-    # also cari payments credited today
-    cari = (
-        db.query(func.coalesce(func.sum(CariMovement.credit), 0))
-        .filter(
-            CariMovement.movement_type.in_(("payment", "deposit")),
-            CariMovement.movement_date == today,
-        )
-        .scalar()
-    )
-    # Prefer cash+bank; if zero fall back to cari (avoid double count when both linked)
-    total = _dec(cash) + _dec(bank)
-    if total == 0:
-        total = _dec(cari)
-    return _f(total)
+    bank_sum, bank_cnt = bank_q.one()
+    return _f(_dec(cash_sum) + _dec(bank_sum)), int(cash_cnt or 0) + int(bank_cnt or 0)
+
+
+def _collections_today(db: Session, today_start: datetime, tomorrow: datetime) -> float:
+    today = today_start.date()
+    return _collections_between(db, today, today)[0]
 
 
 
@@ -650,6 +658,7 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
     due_today, due_soon, overdue = _delivery_counts(db)
     loan_items = _loan_dues(db, within_days=7)
     collections = _collections_today(db, today_start, tomorrow)
+    month_coll, month_coll_cnt = _collections_between(db, month_start.date(), date.today())
     month_profit = _month_net_profit(db, month_start)
     month_expenses = _month_expenses(db, month_start)
     month_sales = _f(month_row[1])  # local Baykuş satışları (BH overlay ayrı)
@@ -739,6 +748,8 @@ def get_summary(user: CurrentUser, db: Session = Depends(get_db)) -> DashboardSu
         open_orders=int(open_orders),
         status_counts=status_counts,
         collections_today=collections,
+        month_collections=month_coll,
+        month_collections_count=month_coll_cnt,
         internet_sales_today_revenue=_f(net_row[1]),
         internet_sales_today_count=int(net_row[0] or 0),
         month_net_profit=month_profit,

@@ -101,6 +101,8 @@ def _purchase_list_item(p: Purchase) -> PurchaseListItem:
         supplier_id=p.supplier_id,
         supplier_name=p.supplier.name if p.supplier else "",
         purchase_date=p.purchase_date,
+        invoice_no=getattr(p, "invoice_no", None),
+        invoice_date=getattr(p, "invoice_date", None),
         status=p.status,
         subtotal=p.subtotal or Decimal("0"),
         tax_amount=p.tax_amount or Decimal("0"),
@@ -372,6 +374,20 @@ def _purge_purchase_ledger(db: Session, purchase: Purchase) -> None:
         db.delete(mov)
 
 
+def _clean_invoice_no(v: str | None) -> str | None:
+    v = (v or "").strip()
+    return v[:50] or None
+
+
+def _purchase_movement_note(purchase: Purchase) -> str:
+    """Tedarikçi cari ekstre açıklaması: 'Satın alma SA-… · Fatura No …'."""
+    note = f"Satın alma {purchase.purchase_number}"
+    inv = (getattr(purchase, "invoice_no", None) or "").strip()
+    if inv:
+        note += f" · Fatura No {inv}"
+    return note
+
+
 def _sync_purchase_supplier_debit(db: Session, purchase: Purchase) -> None:
     """Ensure a single purchase-type debit matches total_amount (payments untouched)."""
     purchase_movs = (
@@ -393,7 +409,7 @@ def _sync_purchase_supplier_debit(db: Session, purchase: Purchase) -> None:
                     credit=Decimal("0"),
                     movement_date=purchase.purchase_date,
                     purchase_id=purchase.id,
-                    note=f"Satın alma {purchase.purchase_number}",
+                    note=_purchase_movement_note(purchase),
                 )
             )
         return
@@ -406,7 +422,7 @@ def _sync_purchase_supplier_debit(db: Session, purchase: Purchase) -> None:
         primary.credit = Decimal("0")
         primary.movement_date = purchase.purchase_date
         primary.supplier_id = purchase.supplier_id
-        primary.note = f"Satın alma {purchase.purchase_number}"
+        primary.note = _purchase_movement_note(purchase)
     else:
         db.delete(primary)
 
@@ -431,7 +447,7 @@ def _confirm_purchase(db: Session, purchase: Purchase, user_id: int | None) -> N
                 credit=Decimal("0"),
                 movement_date=purchase.purchase_date,
                 purchase_id=purchase.id,
-                note=f"Satın alma {purchase.purchase_number}",
+                note=_purchase_movement_note(purchase),
             )
         )
 
@@ -470,6 +486,7 @@ def list_purchases(
             or_(
                 Purchase.purchase_number.ilike(like),
                 Purchase.notes.ilike(like),
+                Purchase.invoice_no.ilike(like),
                 Supplier.name.ilike(like),
             )
         )
@@ -507,6 +524,8 @@ def create_purchase(
         purchase_date=payload.purchase_date or date.today(),
         status="draft",
         notes=payload.notes,
+        invoice_no=_clean_invoice_no(payload.invoice_no),
+        invoice_date=payload.invoice_date,
         discount_type=payload.discount_type or "amount",
         discount_value=Decimal(str(payload.discount_value or 0)),
         created_by_user_id=user.id,
@@ -626,6 +645,10 @@ def update_purchase(
         purchase.purchase_date = data["purchase_date"]
     if "notes" in data:
         purchase.notes = data["notes"]
+    if "invoice_no" in data:
+        purchase.invoice_no = _clean_invoice_no(data["invoice_no"])
+    if "invoice_date" in data:
+        purchase.invoice_date = data["invoice_date"]
     legacy_tax = purchase.tax_amount or Decimal("0")
     if "tax_amount" in data and data["tax_amount"] is not None:
         legacy_tax = Decimal(str(data["tax_amount"]))

@@ -175,6 +175,9 @@ class Payment(Base):
     status: Mapped[str] = mapped_column(String(50), default="tamamlandi")
     paid_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     notes: Mapped[str | None] = mapped_column(Text)
+    # Dolu ise: müşteri kartı tahsilatının (cari_movements.id) bu satışa eşleştirmesi;
+    # kendi kasa/banka/cari hareketi yoktur. 0 = eski sürüm eşleştirmesi (kaynak bilinmiyor).
+    cari_movement_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     order: Mapped[Order] = relationship(back_populates="payments")
 

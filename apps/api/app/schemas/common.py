@@ -109,6 +109,9 @@ class DashboardSummary(BaseModel):
 
     # Top strip extras
     collections_today: float = 0.0
+    # Bu ay gerçek para girişi (kasa/banka/POS tahsilatı; virman/alış iadesi hariç)
+    month_collections: float = 0.0
+    month_collections_count: int = 0
     internet_sales_today_revenue: float = 0.0
     internet_sales_today_count: int = 0
     month_net_profit: float = 0.0

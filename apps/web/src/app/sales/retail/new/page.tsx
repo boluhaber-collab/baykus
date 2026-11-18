@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Product,
   ProductDetail,
@@ -71,6 +71,7 @@ export default function PerakendeSatisGirPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const savingRef = useRef(false);
   const [variantPick, setVariantPick] = useState<{
     product: Product;
     detail: ProductDetail;
@@ -192,6 +193,8 @@ export default function PerakendeSatisGirPage() {
   }
 
   async function saveSale() {
+    // Çift tıklama / F-tuşu tekrarında ikinci perakende satış oluşmasın
+    if (savingRef.current) return;
     setError("");
     if (cart.length === 0) {
       setError("Satışa en az bir ürün eklenmelidir.");
@@ -229,6 +232,7 @@ export default function PerakendeSatisGirPage() {
       setError("Ödeme satırları toplamı tutarsız.");
       return;
     }
+    savingRef.current = true;
     setBusy(true);
     try {
       // Perakende direkt satış = satış faturası; asla Sipariş Alındı bırakılmaz.
@@ -275,6 +279,7 @@ export default function PerakendeSatisGirPage() {
       router.push("/sales");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Kayıt hatası");
+      savingRef.current = false;
     } finally {
       setBusy(false);
     }

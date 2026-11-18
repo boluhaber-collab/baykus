@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, formatMoney } from "@/lib/api";
 import { sanitizeDisplayNote } from "@/lib/bhNote";
 import { displaySku } from "@/lib/productLabel";
-import { formatTrDateTime } from "@/lib/dates";
+import { formatTrDate, formatTrDateTime } from "@/lib/dates";
+import { stockReasonLabel } from "@/lib/stockReasons";
 
 type PriceRow = {
   tarih?: string | null;
@@ -29,6 +30,10 @@ type StockMov = {
   note?: string | null;
   warehouse?: string | null;
   created_at?: string | null;
+  variant_name?: string | null;
+  /** Birbirini götüren düzenleme/iptal çifti (silinmedi; varsayılan gizli) */
+  superseded?: boolean;
+  superseded_kind?: "duzenleme" | "iptal" | null;
 };
 
 type History = {
@@ -49,6 +54,7 @@ export default function ProductHistoryPage() {
   const [data, setData] = useState<History | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("stok");
+  const [showSuperseded, setShowSuperseded] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
@@ -63,8 +69,15 @@ export default function ProductHistoryPage() {
     if (Number.isFinite(id)) void load();
   }, [id, load]);
 
+  const allMovs = useMemo(() => data?.stock_movements || [], [data]);
+  const hiddenCount = useMemo(() => allMovs.filter((m) => m.superseded).length, [allMovs]);
+  const visibleMovs = useMemo(
+    () => (showSuperseded ? allMovs : allMovs.filter((m) => !m.superseded)),
+    [allMovs, showSuperseded],
+  );
+
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "stok", label: "Stok Ekstresi", count: data?.stock_movements?.length || 0 },
+    { key: "stok", label: "Stok Ekstresi", count: visibleMovs.length },
     { key: "satislar", label: "Önceki Satışlar", count: data?.satislar?.length || 0 },
     { key: "alislar", label: "Önceki Alışlar", count: data?.alislar?.length || 0 },
     { key: "teklifler", label: "Teklifler", count: data?.teklifler?.length || 0 },
@@ -91,7 +104,7 @@ export default function ProductHistoryPage() {
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
-                <td className="whitespace-nowrap">{r.tarih || "—"}</td>
+                <td className="whitespace-nowrap">{r.tarih ? formatTrDate(r.tarih) : "—"}</td>
                 <td>{r.cari || "—"}</td>
                 <td className="text-xs text-slate-500">{r.varyant || "—"}</td>
                 <td className="text-right tabular-nums">{r.miktar ?? "—"}</td>
@@ -157,6 +170,13 @@ export default function ProductHistoryPage() {
         ))}
       </div>
 
+      {tab === "stok" && hiddenCount > 0 && (
+        <label className="flex items-center gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={showSuperseded} onChange={(e) => setShowSuperseded(e.target.checked)} />
+          Birbirini götüren düzenleme / iptal hareketlerini göster ({hiddenCount})
+          <span className="text-slate-400">— stok miktarını değiştirmezler; satış düzenlenince eski sürüm bu çiftleri yazıyordu</span>
+        </label>
+      )}
       {tab === "stok" && (
         <div className="bk-table-wrap">
           <table className="bk-table text-sm">
@@ -172,8 +192,8 @@ export default function ProductHistoryPage() {
               </tr>
             </thead>
             <tbody>
-              {(data?.stock_movements || []).map((m) => (
-                <tr key={m.id}>
+              {visibleMovs.map((m) => (
+                <tr key={m.id} className={m.superseded ? "opacity-50 italic" : undefined}>
                   <td className="whitespace-nowrap text-xs">{formatTrDateTime(m.created_at)}</td>
                   <td>
                     <span
@@ -189,11 +209,18 @@ export default function ProductHistoryPage() {
                   <td className="text-right tabular-nums font-medium">{m.qty_after}</td>
                   <td className="text-xs">{m.warehouse || "—"}</td>
                   <td className="text-xs text-slate-500">
-                    {[m.reason, sanitizeDisplayNote(m.note)].filter(Boolean).join(" · ") || "—"}
+                    {[
+                      stockReasonLabel(m.reason),
+                      m.variant_name ? `(${m.variant_name})` : null,
+                      sanitizeDisplayNote(m.note),
+                      m.superseded ? (m.superseded_kind === "iptal" ? "iptal çifti" : "düzenleme çifti") : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "—"}
                   </td>
                 </tr>
               ))}
-              {(data?.stock_movements || []).length === 0 && (
+              {visibleMovs.length === 0 && (
                 <tr>
                   <td colSpan={7} className="text-center text-slate-400 py-8">
                     Stok hareketi yok

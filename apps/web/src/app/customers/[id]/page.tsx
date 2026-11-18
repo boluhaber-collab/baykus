@@ -1276,6 +1276,7 @@ export default function CustomerDetailPage() {
         customerId={id}
         customerName={customer.name}
         defaultAmount={ozet.acik > 0 ? ozet.acik : 0}
+        openBalance={Number(ozet.acik || 0)}
         open={showTahsilat}
         onClose={() => setShowTahsilat(false)}
         onSaved={(msg) => {

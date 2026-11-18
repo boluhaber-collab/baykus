@@ -13,6 +13,8 @@ type Props = {
   customerId: number;
   customerName: string;
   defaultAmount?: number;
+  /** Cari açık bakiye (borç > 0). Verilirse fazla tahsilatta uyarı gösterilir. */
+  openBalance?: number;
   open: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
@@ -22,6 +24,7 @@ export default function CustomerTahsilatModal({
   customerId,
   customerName,
   defaultAmount = 0,
+  openBalance,
   open,
   onClose,
   onSaved,
@@ -55,6 +58,20 @@ export default function CustomerTahsilatModal({
       const payments = rowsToPayload(payRows);
       if (!payments.length) {
         throw new Error("En az bir kasa/hesap satırı girin.");
+      }
+      if (typeof openBalance === "number" && total > Math.max(0, openBalance) + 0.01) {
+        const borc = Math.max(0, openBalance);
+        const ok = window.confirm(
+          (borc <= 0
+            ? `${customerName} carisinin açık borcu yok.`
+            : `${customerName} carisinin açık borcu ${formatMoney(borc)}.`) +
+            ` Girilen ${formatMoney(total)} tahsilatın ${formatMoney(total - borc)} kısmı müşteri alacağı (avans) olarak yazılacak.\n\n` +
+            "Satış ekranında tahsilat girdiyseniz bu tutar zaten kasaya/bankaya işlendi — tekrar girmeyin.\n\nYine de kaydedilsin mi?",
+        );
+        if (!ok) {
+          setBusy(false);
+          return;
+        }
       }
       const res = await apiFetch<{ message: string }>(`/api/customers/${customerId}/tahsilat`, {
         method: "POST",
@@ -100,6 +117,9 @@ export default function CustomerTahsilatModal({
             </div>
             <div className="text-xs text-slate-500 self-end pb-2">
               {defaultAmount > 0 && <>Açık bakiye: <strong>{formatMoney(defaultAmount)}</strong></>}
+              {defaultAmount <= 0 && typeof openBalance === "number" && (
+                <span className="text-amber-700 font-medium">Açık borç yok — tahsilat avans olarak yazılır.</span>
+              )}
               {total > 0 && (
                 <>
                   {defaultAmount > 0 ? " · " : ""}

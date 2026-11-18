@@ -243,6 +243,8 @@ export type DashboardSummary = {
   open_orders: number;
   status_counts: DashboardStatusCount[];
   collections_today?: number;
+  month_collections?: number;
+  month_collections_count?: number;
   internet_sales_today_revenue?: number;
   internet_sales_today_count?: number;
   month_net_profit?: number;
@@ -819,6 +821,9 @@ export type PurchaseListItem = {
   supplier_id: number;
   supplier_name: string;
   purchase_date: string;
+  /** Tedarikçi fatura no / tarihi */
+  invoice_no?: string | null;
+  invoice_date?: string | null;
   status: string;
   subtotal: number;
   tax_amount: number;

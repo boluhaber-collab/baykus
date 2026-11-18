@@ -365,6 +365,12 @@ export default function PurchaseDetailPage() {
             </Link>
             {" · "}
             {formatTrDate(purchase.purchase_date)}
+            {purchase.invoice_no ? (
+              <>
+                {" · "}
+                <span className="font-medium text-slate-700">Fatura No: {purchase.invoice_no}</span>
+              </>
+            ) : null}
             {" · "}
             <span
               className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -716,6 +722,14 @@ export default function PurchaseDetailPage() {
             </div>
             <div>
               <span className="text-slate-500">Belge tarihi:</span> {formatTrDate(purchase.purchase_date)}
+            </div>
+            <div>
+              <span className="text-slate-500">Fatura No:</span>{" "}
+              <span className="font-mono">{purchase.invoice_no || "—"}</span>
+            </div>
+            <div>
+              <span className="text-slate-500">Fatura Tarihi:</span>{" "}
+              {purchase.invoice_date ? formatTrDate(purchase.invoice_date) : "—"}
             </div>
             <div>
               <span className="text-slate-500">Oluşturma:</span>{" "}

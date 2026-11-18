@@ -865,10 +865,32 @@ def update_movement(
         if "note" in data:
             m.note = merge_bh_preserved_note(m.note, data.get("note"))
 
+    # Bağımsız tahsilatın satış eşleştirmeleri yeni tutara göre yeniden dağıtılır
+    if (
+        not movement.order_id
+        and movement.movement_type in ("payment", "deposit")
+        and amount is not None
+    ):
+        from app.services.payment_allocation import allocate_tahsilat, release_allocations
+
+        if release_allocations(db, movement.id):
+            db.flush()
+            allocate_tahsilat(
+                db,
+                customer_id,
+                amount,
+                cari_movement_id=movement.id,
+                method="nakit",
+                note=movement.note,
+                mov_date=movement.movement_date,
+            )
+
     # Matching Payment on order
     if movement.order_id and movement.movement_type in ("payment", "deposit") and amount is not None:
         pays = db.query(Payment).filter(Payment.order_id == movement.order_id).all()
         for p in pays:
+            if getattr(p, "cari_movement_id", None) is not None:
+                continue
             if abs(Decimal(str(p.amount or 0)) - Decimal(str(old_amt or 0))) < Decimal("0.02") or (
                 old_note and (p.notes or "") == old_note
             ):
@@ -955,6 +977,11 @@ def delete_movement(
     ):
         db.delete(m)
 
+    # Bu tahsilatın satışlara eşleştirmeleri (kasa/cari üretmeyen Payment) kalkar
+    from app.services.payment_allocation import release_allocations
+
+    release_allocations(db, movement.id)
+
     # Matching Payment row on order (kapora)
     if movement.order_id and movement.movement_type in ("payment", "deposit"):
         amt = movement.credit or Decimal("0")
@@ -964,6 +991,8 @@ def delete_movement(
             .all()
         )
         for p in pays:
+            if getattr(p, "cari_movement_id", None) is not None:
+                continue
             if abs(Decimal(str(p.amount or 0)) - amt) < Decimal("0.02"):
                 db.delete(p)
                 break
@@ -1173,45 +1202,21 @@ def _apply_tahsilat_to_open_orders(
     method: str,
     note: str,
     mov_date: date,
+    cari_movement_id: int = 0,
 ) -> Decimal:
-    """Desktop musteri_tahsilatini_acik_siparislere_isle — FIFO open remaining."""
-    remaining = amount
-    applied = Decimal("0")
-    if remaining <= 0:
-        return applied
-    orders = (
-        db.query(Order)
-        .options(joinedload(Order.payments))
-        .filter(
-            Order.customer_id == customer_id,
-            ~Order.status.in_(tuple(CLOSED_STATUSES)),
-        )
-        .order_by(Order.created_at.asc(), Order.id.asc())
-        .all()
+    """Tahsilatı müşterinin kalanı olan satışlarına FIFO eşleştirir (Teslim Edildi
+    satış faturaları dahil). Eşleştirme Payment'ı kasa/cari üretmez — bkz. payment_allocation."""
+    from app.services.payment_allocation import allocate_tahsilat
+
+    return allocate_tahsilat(
+        db,
+        customer_id,
+        amount,
+        cari_movement_id=cari_movement_id,
+        method=method,
+        note=note,
+        mov_date=mov_date,
     )
-    for order in orders:
-        if remaining <= 0:
-            break
-        paid = _paid_for_order(order)
-        deposit = order.deposit_amount or Decimal("0")
-        effective = paid if paid > 0 else deposit
-        due = (order.total_amount or Decimal("0")) - effective
-        if due <= 0:
-            continue
-        take = min(remaining, due)
-        db.add(
-            Payment(
-                order_id=order.id,
-                amount=take,
-                method=method,
-                status="tamamlandi",
-                paid_at=datetime.combine(mov_date, datetime.min.time()),
-                notes=note or f"Müşteri tahsilatı → {order.order_number}",
-            )
-        )
-        remaining -= take
-        applied += take
-    return applied
 
 
 @router.post("/{customer_id}/tahsilat", response_model=CustomerTahsilatOut, status_code=status.HTTP_201_CREATED)
@@ -1267,6 +1272,7 @@ def customer_tahsilat(
 
     from app.services.split_payments import post_finance_lines
 
+    line_moves: list[tuple[int, Decimal, str]] = []
     for idx, line in enumerate(lines, start=1):
         amt = Decimal(str(line["amount"]))
         total += amt
@@ -1287,6 +1293,7 @@ def customer_tahsilat(
         db.add(movement)
         db.flush()
         movement_ids.append(movement.id)
+        line_moves.append((movement.id, amt, method_label))
         fin_line = [
             {
                 "amount": amt,
@@ -1318,15 +1325,17 @@ def customer_tahsilat(
 
     applied = Decimal("0")
     if payload.apply_to_open_orders and total > 0:
-        primary_method = (payload.payment_type or "Nakit").lower()
-        applied = _apply_tahsilat_to_open_orders(
-            db,
-            customer_id,
-            total,
-            method=primary_method,
-            note=base_note,
-            mov_date=mov_date,
-        )
+        # Her tahsilat satırı kendi cari hareketine bağlı eşleştirilir (silinince geri alınır)
+        for mid, amt, method_label in line_moves:
+            applied += _apply_tahsilat_to_open_orders(
+                db,
+                customer_id,
+                amt,
+                method=(method_label or "Nakit").lower(),
+                note=base_note,
+                mov_date=mov_date,
+                cari_movement_id=mid,
+            )
 
     db.commit()
     write_audit(

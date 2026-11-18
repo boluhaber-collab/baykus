@@ -77,6 +77,8 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
   const [saat, setSaat] = useState(nowTime());
   const [stokaGirdi, setStokaGirdi] = useState(true);
   const [aciklama, setAciklama] = useState("");
+  const [faturaNo, setFaturaNo] = useState("");
+  const [faturaTarihi, setFaturaTarihi] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [payRows, setPayRows] = useState<SplitPaymentRow[]>([]);
@@ -108,6 +110,8 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
         setExisting(p);
         setSupplierId(String(p.supplier_id));
         setTarih(String(p.purchase_date).slice(0, 10));
+        setFaturaNo(p.invoice_no || "");
+        setFaturaTarihi(p.invoice_date ? String(p.invoice_date).slice(0, 10) : "");
         const notes = p.notes || "";
         const m = notes.match(/Saat (\d{2}:\d{2})/);
         if (m) setSaat(m[1]!);
@@ -305,6 +309,8 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
       if (existing) {
         const body: Record<string, unknown> = {
           purchase_date: tarih,
+          invoice_no: faturaNo.trim() || null,
+          invoice_date: faturaTarihi || null,
           notes,
           tax_amount: tax,
           ...discountPayload,
@@ -324,6 +330,8 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
           body: JSON.stringify({
             supplier_id: Number(supplierId),
             purchase_date: tarih,
+            invoice_no: faturaNo.trim() || null,
+            invoice_date: faturaTarihi || null,
             notes,
             tax_amount: tax,
             ...discountPayload,
@@ -413,6 +421,30 @@ export default function PurchaseEntryForm({ presetSupplier = "", editId = null }
               <input type="date" className="bk-input" value={tarih} onChange={(e) => setTarih(e.target.value)} />
               <input type="time" className="bk-input" value={saat} onChange={(e) => setSaat(e.target.value)} />
             </div>
+          </div>
+
+          <div className="bk-entry-row">
+            <label className="text-xs font-medium" htmlFor="pe-fatura-no">Fatura No</label>
+            <input
+              id="pe-fatura-no"
+              className="bk-input"
+              value={faturaNo}
+              maxLength={50}
+              placeholder="Tedarikçi fatura no (örn. ABC2026000000123)"
+              onChange={(e) => setFaturaNo(e.target.value)}
+            />
+          </div>
+
+          <div className="bk-entry-row">
+            <label className="text-xs font-medium" htmlFor="pe-fatura-tarihi">Fatura Tarihi</label>
+            <input
+              id="pe-fatura-tarihi"
+              type="date"
+              className="bk-input"
+              value={faturaTarihi}
+              onChange={(e) => setFaturaTarihi(e.target.value)}
+              title="Boş bırakılırsa alış tarihi kullanılır"
+            />
           </div>
 
           <div className="bk-entry-row">

@@ -416,15 +416,20 @@ def _sales_data(
         else:
             st = "Satış"
 
-        perakende = _is_perakende_customer(cust) or bool(
-            order and "perakende" in (order.channel or "").lower()
-        )
+        # Perakende = müşterisiz/perakende carisi ya da perakende kanalı. Müşteriye yapılan
+        # satış ödenmiş olsa bile perakende sayılmaz (eskiden "kalan 0" → Perakende etiketi
+        # yeni müşteri satışını perakende gibi gösteriyordu).
+        if order is not None:
+            ch = (order.channel or "").strip().lower()
+            perakende = ch == "perakende" or _is_perakende_customer(cust)
+        else:
+            perakende = _is_perakende_customer(cust)
         if m is None:
             tip = "Perakende" if perakende else "Sipariş"
         elif order is None:
             tip = "Perakende" if perakende else "Cari satış"
         else:
-            tip = "Perakende" if (perakende or rem <= 0) else "Veresiye"
+            tip = "Perakende" if perakende else ("Veresiye" if rem > 0 else "Cari satış")
         if sale_type and tip != sale_type:
             continue
 

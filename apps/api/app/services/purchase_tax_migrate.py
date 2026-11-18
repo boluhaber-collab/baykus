@@ -13,6 +13,9 @@ _HEAD_COLS = {
     "discount_type": "VARCHAR(10) NOT NULL DEFAULT 'amount'",
     "discount_value": "NUMERIC(12, 2) NOT NULL DEFAULT 0",
     "discount_amount": "NUMERIC(12, 2) NOT NULL DEFAULT 0",
+    # Alış faturası no / tarihi
+    "invoice_no": "VARCHAR(50)",
+    "invoice_date": "DATE",
 }
 
 

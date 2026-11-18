@@ -42,6 +42,8 @@ class PurchaseCreate(BaseModel):
     supplier_id: int
     purchase_date: date | None = None
     purchase_number: str | None = None
+    invoice_no: str | None = Field(default=None, max_length=50)
+    invoice_date: date | None = None
     notes: str | None = None
     tax_amount: Decimal = Decimal("0")
     discount_type: Literal["amount", "percent"] = "amount"
@@ -53,6 +55,8 @@ class PurchaseCreate(BaseModel):
 class PurchaseUpdate(BaseModel):
     supplier_id: int | None = None
     purchase_date: date | None = None
+    invoice_no: str | None = Field(default=None, max_length=50)
+    invoice_date: date | None = None
     notes: str | None = None
     tax_amount: Decimal | None = None
     discount_type: Literal["amount", "percent"] | None = None
@@ -66,6 +70,8 @@ class PurchaseListItem(BaseModel):
     supplier_id: int
     supplier_name: str
     purchase_date: date
+    invoice_no: str | None = None
+    invoice_date: date | None = None
     status: str
     subtotal: Decimal
     tax_amount: Decimal

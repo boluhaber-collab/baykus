@@ -2013,11 +2013,16 @@ def product_history(
         .all()
     )
 
+    from app.services.stock_history import mark_superseded
+
+    superseded = mark_superseded(db, movements)
+
+    # İptal edilen satışlar "Önceki Satışlar"da gösterilmez (iptal + yeniden giriş çift görünüyordu)
     sale_rows = (
         db.query(OrderLine, Order)
         .join(Order, Order.id == OrderLine.order_id)
         .options(joinedload(Order.customer))
-        .filter(OrderLine.product_id == product_id)
+        .filter(OrderLine.product_id == product_id, Order.status != "Sipariş İptali")
         .order_by(Order.created_at.desc())
         .limit(limit)
         .all()
@@ -2106,6 +2111,14 @@ def product_history(
                 "warehouse": m.warehouse,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
                 "variant_id": m.variant_id,
+                "variant_name": (
+                    (m.variant.name or _variant_label(m.variant.color, m.variant.size, m.variant.print_type))
+                    if getattr(m, "variant", None)
+                    else None
+                ),
+                # Birbirini götüren düzenleme/iptal çifti (silinmez; arayüz varsayılan gizler)
+                "superseded": m.id in superseded,
+                "superseded_kind": superseded.get(m.id),
             }
             for m in movements
         ],

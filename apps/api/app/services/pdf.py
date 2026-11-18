@@ -1162,11 +1162,13 @@ def build_purchase_pdf(purchase: Any, settings: dict[str, str] | None = None) ->
         ("Belge No", _s(getattr(purchase, "purchase_number", None), "—")),
         ("Tarih", _date_tr(getattr(purchase, "purchase_date", None))),
         ("Tedarikçi", _s(supplier_name)),
+        ("Fatura No", _s(getattr(purchase, "invoice_no", None), "—")),
+        ("Fatura Tarihi", _date_tr(getattr(purchase, "invoice_date", None)) if getattr(purchase, "invoice_date", None) else "—"),
         ("Durum", _s(getattr(purchase, "status", None), "—")),
         ("Ara toplam", _money(getattr(purchase, "subtotal", 0))),
         ("KDV / vergi", _money(getattr(purchase, "tax_amount", 0))),
     ]
-    y = _info_boxes_two_col(c, y, bilgiler, per_col=3)
+    y = _info_boxes_two_col(c, y, bilgiler, per_col=4)
 
     pdf_modern_kutu(
         c,
